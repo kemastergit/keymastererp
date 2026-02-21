@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { font-size: 14px; scroll-behavior: smooth; }
+  body {
+    background: #0a0a0a;
+    color: #e5e5e5;
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0a0a0a; }
+  ::-webkit-scrollbar-thumb { background: #991b1b; border-radius: 2px; }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+}
+
+@layer components {
+  .inp {
+    @apply w-full bg-g3 border border-borde text-white px-3 py-2 rounded-md font-raj text-sm transition-colors outline-none placeholder-muted;
+  }
+  .inp:focus { @apply border-rojo; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1 px-4 py-2 rounded-md font-raj font-bold text-xs tracking-wide uppercase transition-all active:scale-95 cursor-pointer border-none;
+  }
+  .btn-r  { @apply bg-rojo text-white hover:bg-rojo-dark; }
+  .btn-g  { @apply bg-green-700 text-white hover:bg-green-800; }
+  .btn-gr { @apply bg-g3 text-white border border-borde hover:bg-g4; }
+  .btn-y  { @apply bg-amber-600 text-black hover:bg-amber-700; }
+  .btn-b  { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  .btn-full { @apply w-full py-2.5 text-sm; }
+  .btn-sm { @apply px-2 py-1 text-xs; }
+
+  .panel {
+    @apply bg-g2 border border-borde rounded-lg p-3 mb-3;
+  }
+  .panel-title {
+    @apply font-bebas text-base tracking-widest text-rojo-bright border-b border-borde pb-1.5 mb-2.5;
+  }
+  .field { @apply mb-2; }
+  .field label {
+    @apply block text-xs text-muted tracking-widest uppercase mb-1;
+  }
+
+  .tabla-wrap { @apply overflow-x-auto border border-borde rounded-md; }
+  .tabla-scroll { @apply max-h-64 overflow-y-auto; }
+  table { @apply w-full border-collapse text-xs; min-width: 400px; }
+  thead th {
+    @apply bg-g3 text-rojo-bright px-2 py-1.5 text-left font-mono2 text-xs tracking-wide whitespace-nowrap border-b border-borde sticky top-0;
+  }
+  tbody tr { @apply border-b border-g3 transition-colors; }
+  tbody tr:hover { @apply bg-red-950/10; }
+  tbody td { @apply px-2 py-1.5 align-middle; }
+
+  .badge { @apply inline-block px-2 py-0.5 rounded text-xs font-bold tracking-wide; }
+  .badge-g { @apply bg-green-900/50 text-green-400 border border-green-800; }
+  .badge-r { @apply bg-red-900/50 text-red-400 border border-red-800; }
+  .badge-y { @apply bg-amber-900/50 text-amber-400 border border-amber-800; }
+  .badge-b { @apply bg-blue-900/50 text-blue-400 border border-blue-800; }
+}
+  .tabla-scroll { overflow-x: auto; }
+  .sticky-col { position: sticky; left: 0; background: #111; z-index: 10; }
+  .sticky-col-2 { position: sticky; left: 80px; background: #111; z-index: 10; }
+  table { border-collapse: separate; border-spacing: 0; min-width: 1200px; }
+  th, td { border-bottom: 1px solid #333; }
