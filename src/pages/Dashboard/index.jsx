@@ -9,16 +9,16 @@ import {
 } from 'recharts'
 
 const COLORS = {
-    rojo: '#dc2626',
-    rojoDark: '#991b1b',
-    rojoBright: '#ef4444',
+    rojo: '#d97706',
+    rojoDark: '#92400e',
+    rojoBright: '#fbbf24',
     bg: '#0a0a0a',
     g1: '#111111',
     g2: '#1a1a1a',
-    g3: '#222222',
-    borde: '#333333',
-    muted: '#777777',
-    white: '#e5e5e5'
+    g3: '#1f1f1f',
+    borde: '#92400e44',
+    muted: '#92400e88',
+    white: '#fef3c7'
 }
 
 const CustomTooltip = ({ active, payload, label }) => {

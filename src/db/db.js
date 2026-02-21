@@ -3,8 +3,8 @@ import { seedArticulos } from './seed_data'
 
 export const db = new Dexie('Guaicaipuro_Retail')
 
-db.version(3).stores({
-  articulos: '++id, codigo, referencia, descripcion, marca, departamento, stock, precio, costo, proveedor',
+db.version(4).stores({
+  articulos: '++id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad',
   clientes: '++id, rif, nombre',
   proveedores: '++id, rif, nombre',
   ventas: '++id, nro, fecha, cliente_id, tipo_pago, estado',
