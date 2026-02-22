@@ -4,18 +4,33 @@ export default {
   theme: {
     extend: {
       colors: {
-        rojo: { DEFAULT: '#d97706', dark: '#92400e', bright: '#fbbf24' },
-        negro: '#0a0a0a',
-        g1: '#111111', g2: '#1a1a1a', g3: '#1f1f1f', g4: '#2a2a2a',
-        borde: '#92400e44',
-        muted: '#92400e88',
-        accent: '#fef3c7',
+        primary: {
+          DEFAULT: '#f59e0b',
+          dark: '#b45309',
+        },
+        'background-light': '#f8fafc',
+        'background-dark': '#0f172a',
+        'card-light': '#ffffff',
+        'card-dark': '#1e293b',
+        rojo: {
+          DEFAULT: '#f59e0b',
+          dark: '#b45309',
+          bright: '#f59e0b'
+        },
+        borde: '#e2e8f0', // slate-200
+        'borde-dark': '#1e293b', // slate-800
       },
       fontFamily: {
-        bebas: ['"Bebas Neue"', 'sans-serif'],
-        raj: ['Rajdhani', 'sans-serif'],
-        mono2: ['"Share Tech Mono"', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        bebas: ['Inter', 'sans-serif'], // Remapping for fast swap
+        mono2: ['JetBrains Mono', 'monospace'],
+        raj: ['Inter', 'sans-serif'],
       },
+      borderRadius: {
+        'xl': '0.75rem',
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+      }
     },
   },
   plugins: [],

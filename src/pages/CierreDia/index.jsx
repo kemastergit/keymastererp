@@ -47,73 +47,85 @@ export default function CierreDia() {
     toast('✅ Cierre del día registrado')
   }
 
-  const Card = ({ label, value, color = 'text-white' }) => (
-    <div className="bg-g3 border border-borde rounded-lg p-3">
-      <div className="text-xs text-muted tracking-widest uppercase mb-1">{label}</div>
-      <div className={`font-bebas text-2xl ${color}`}>{fmtUSD(value)}</div>
+  const Card = ({ label, value, color = 'text-slate-800' }) => (
+    <div className="panel border-l-4 flex flex-col justify-center" style={{ borderColor: label.includes('Ventas') ? 'var(--primary)' : '#e2e8f0' }}>
+      <div className="text-[10px] text-slate-400 tracking-widest uppercase mb-1 font-bold">{label}</div>
+      <div className={`font-mono font-bold text-2xl ${color}`}>{fmtUSD(value)}</div>
     </div>
   )
 
   return (
-    <div>
-      <div className="panel mb-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="panel-title flex-1" style={{margin:0,paddingBottom:0,border:'none'}}>
-            CIERRE DE DÍA
+    <div className="space-y-4">
+      <div className="panel p-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex-1">
+            <div className="panel-title !m-0 !p-0">Cierre de Día</div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Resumen contable diario</p>
           </div>
-          <div className="field" style={{margin:0}}>
-            <input type="date" className="inp" value={fecha} onChange={e => setFecha(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <div className="field !m-0">
+              <input type="date" className="inp !py-2 !px-3" value={fecha} onChange={e => setFecha(e.target.value)} />
+            </div>
+            <button className="btn btn-r" onClick={cerrarDia}>
+              <span className="material-icons-round text-base">fact_check</span>
+              <span>Procesar Cierre</span>
+            </button>
           </div>
-          <button className="btn btn-r" onClick={cerrarDia}>📅 CERRAR DÍA</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
-        <Card label="Total Ventas" value={totalVentas} color="text-rojo-bright" />
-        <Card label="Ventas Contado" value={ventasContado} color="text-green-400" />
-        <Card label="Ventas Crédito" value={ventasCredito} color="text-amber-400" />
-        <Card label="Cobros del Día" value={totalCobros} color="text-blue-400" />
-        <Card label="Ingresos Caja" value={ingresosCaja} color="text-green-400" />
-        <Card label="Egresos Caja" value={egresosCaja} color="text-red-400" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <Card label="Total Ventas" value={totalVentas} color="text-primary" />
+        <Card label="Ventas Contado" value={ventasContado} color="text-green-600" />
+        <Card label="Ventas Crédito" value={ventasCredito} color="text-amber-600" />
+        <Card label="Cobros del Día" value={totalCobros} color="text-primary-dark" />
+        <Card label="Ingresos Caja" value={ingresosCaja} color="text-green-600" />
+        <Card label="Egresos Caja" value={egresosCaja} color="text-red-500" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="panel">
-          <div className="panel-title">VENTAS DEL DÍA ({ventas.length})</div>
-          <div className="tabla-wrap tabla-scroll">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="panel p-0 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <div className="panel-title !m-0">Ventas del Día</div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{ventas.length} notas</span>
+          </div>
+          <div className="overflow-x-auto">
             <table>
-              <thead><tr><th>N° NOTA</th><th>CLIENTE</th><th>TIPO PAGO</th><th>TOTAL $</th></tr></thead>
+              <thead><tr><th>N° Nota</th><th>Cliente</th><th>Tipo Pago</th><th className="text-right">Total</th></tr></thead>
               <tbody>
                 {ventas.map(v => (
                   <tr key={v.id}>
-                    <td className="font-mono2 text-rojo-bright">#{v.nro}</td>
-                    <td className="font-semibold">{v.cliente}</td>
+                    <td className="font-mono text-primary font-bold">#{v.nro}</td>
+                    <td className="font-bold text-slate-700">{v.cliente}</td>
                     <td><span className={`badge ${v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>{v.tipo_pago}</span></td>
-                    <td className="font-mono2">{fmtUSD(v.total)}</td>
+                    <td className="font-mono text-right font-bold text-slate-800">{fmtUSD(v.total)}</td>
                   </tr>
                 ))}
                 {ventas.length === 0 && (
-                  <tr><td colSpan={4} className="text-center text-muted py-4">SIN VENTAS</td></tr>
+                  <tr><td colSpan={4} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin ventas registradas</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-title">COBROS RECIBIDOS ({cobros.length})</div>
-          <div className="tabla-wrap tabla-scroll">
+        <div className="panel p-0 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <div className="panel-title !m-0">Cobros Recibidos</div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cobros.length} recibos</span>
+          </div>
+          <div className="overflow-x-auto">
             <table>
-              <thead><tr><th>CLIENTE</th><th>MONTO $</th></tr></thead>
+              <thead><tr><th>Cliente</th><th className="text-right">Monto</th></tr></thead>
               <tbody>
                 {cobros.map(c => (
                   <tr key={c.id}>
-                    <td className="font-semibold">{c.cliente}</td>
-                    <td className="font-mono2 text-green-400">{fmtUSD(c.monto_cobrado || c.monto)}</td>
+                    <td className="font-bold text-slate-700">{c.cliente}</td>
+                    <td className="font-mono text-green-600 text-right font-bold">{fmtUSD(c.monto_cobrado || c.monto)}</td>
                   </tr>
                 ))}
                 {cobros.length === 0 && (
-                  <tr><td colSpan={2} className="text-center text-muted py-4">SIN COBROS</td></tr>
+                  <tr><td colSpan={2} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin cobros recibidos</td></tr>
                 )}
               </tbody>
             </table>

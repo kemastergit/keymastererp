@@ -2,47 +2,101 @@ import { useEffect } from 'react'
 import useStore from '../../store/useStore'
 
 export default function Header() {
-  const { tasa, setTasa, loadTasa } = useStore()
+  const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout } = useStore()
 
-  useEffect(() => { loadTasa() }, [])
+  useEffect(() => { loadTasa(); loadSession() }, [])
+
+  const handleLogout = () => {
+    if (confirm('¿Cerrar sesión de KeClick POS?')) logout()
+  }
 
   return (
-    <header className="sticky top-0 z-[200] flex items-center justify-between px-3 h-14
-      bg-gradient-to-r from-negro via-red-950/30 to-negro border-b-2 border-rojo
-      shadow-[0_4px_20px_rgba(220,38,38,0.25)]">
+    <header className="bg-slate-950 text-white shadow-2xl transition-all duration-300 relative overflow-hidden">
+      {/* Red Accent Top */}
+      <div className="h-[2px] bg-red-600 w-full" />
 
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <div className="w-9 h-9 flex-shrink-0 bg-rojo flex items-center justify-center text-lg
-          [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]">
-          🔧
+      <div className="px-4 py-4 flex items-center justify-between gap-4 max-w-[1600px] mx-auto">
+        <div className="flex items-center gap-6 min-w-0">
+          <div className="flex items-center gap-3 group cursor-pointer">
+            <div className="w-12 h-12 flex-shrink-0 bg-white p-1 flex items-center justify-center rounded-2xl shadow-lg border border-slate-800 transition-transform group-hover:scale-105">
+              <img src="/logoguaicaipuro.jpeg" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bebas text-2xl tracking-[0.15em] text-white leading-tight">
+                AUTOMOTORES GUAICAIPURO
+              </h1>
+              <p className="text-[10px] text-red-500 font-black uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
+                SISTEMA KEMASTER VER 01
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+            {activeSession ? (
+              <>
+                <div className="relative">
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping absolute inset-0 opacity-75"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 relative"></div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Estado de Caja</span>
+                  <span className="text-[10px] font-bold text-green-400 uppercase tracking-tighter">
+                    {activeSession.usuario} &bull; CONECTADO
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-600"></div>
+                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">CAJA CERRADA</span>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="min-w-0">
-          <h1 className="font-bebas text-[clamp(0.95rem,3.5vw,1.4rem)] tracking-[2px] text-white
-            whitespace-nowrap overflow-hidden text-ellipsis leading-none">
-            AUTOMOTORES GUAICAIPURO
-          </h1>
-          <span className="hidden sm:block font-mono2 text-[0.55rem] text-rojo-bright tracking-[1.5px]">
-            SISTEMA DE GESTIÓN v1.0 — REACT
-          </span>
+
+        <div className="flex items-center gap-4">
+          {/* Tasa BCV */}
+          <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-2xl group cursor-pointer hover:bg-white/10 transition-all"
+            onClick={() => {
+              const edit = () => {
+                const val = prompt('Nueva Tasa BCV:', tasa)
+                if (val) setTasa(val)
+              }
+              if (currentUser?.rol === 'ADMIN') edit()
+              else askAdmin(edit)
+            }}>
+            <div className="text-right">
+              <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Tasa BCV</div>
+              <div className="font-mono text-lg font-black text-white leading-none">
+                {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
+              </div>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/20">
+              <span className="material-icons-round text-sm">currency_exchange</span>
+            </div>
+          </div>
+
+          {/* Usuario Info */}
+          <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+            <div className="text-right hidden sm:block">
+              <div className="text-white font-black text-[11px] uppercase tracking-tighter leading-none">{currentUser?.nombre}</div>
+              <div className={`text-[8px] font-black uppercase tracking-widest mt-1 px-2 py-0.5 rounded bg-white/5 inline-block
+                ${currentUser?.rol === 'ADMIN' ? 'text-red-500 border border-red-900/50' : 'text-amber-500 border border-amber-900/50'}`}>
+                {currentUser?.rol}
+              </div>
+            </div>
+
+            <button onClick={handleLogout}
+              className="w-11 h-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-red-600 transition-all shadow-inner group">
+              <span className="material-icons-round text-xl group-hover:rotate-12 transition-transform">power_settings_new</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 bg-red-900/20 border border-rojo-dark
-        rounded px-2 py-1 flex-shrink-0">
-        <label className="hidden sm:block font-mono2 text-[0.6rem] text-muted whitespace-nowrap">
-          TASA BCV Bs/$
-        </label>
-        <input
-          type="number"
-          value={tasa || ''}
-          onChange={e => setTasa(e.target.value)}
-          placeholder="0.00"
-          step="0.01"
-          inputMode="decimal"
-          className="bg-transparent border-none text-rojo-bright font-bebas text-lg
-            w-[70px] text-center outline-none placeholder-muted"
-        />
-      </div>
+      {/* Red Accent Bottom */}
+      <div className="h-[1px] bg-white/5 w-full" />
     </header>
   )
 }

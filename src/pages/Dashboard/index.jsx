@@ -9,27 +9,30 @@ import {
 } from 'recharts'
 
 const COLORS = {
-    rojo: '#d97706',
-    rojoDark: '#92400e',
-    rojoBright: '#fbbf24',
-    bg: '#0a0a0a',
-    g1: '#111111',
-    g2: '#1a1a1a',
-    g3: '#1f1f1f',
-    borde: '#92400e44',
-    muted: '#92400e88',
-    white: '#fef3c7'
+    primary: '#f59e0b', // Amber
+    primaryDark: '#b45309',
+    primaryLight: '#fbbf24',
+    bg: '#f8fafc',
+    g1: '#ffffff',
+    g2: '#f8fafc',
+    g3: '#f1f5f9',
+    borde: '#e2e8f0',
+    muted: '#000000',
+    text: '#000000',
+    green: '#10bccb', // Teal for balance
+    amber: '#f59e0b',
+    red: '#ef4444'
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
     return (
-        <div className="bg-g3 border border-borde p-3 rounded-lg shadow-2xl">
+        <div className="bg-white border border-borde p-3 rounded-lg shadow-2xl">
             <p className="text-muted text-[10px] uppercase tracking-widest mb-1 font-bold">{label}</p>
             {payload.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
-                    <p className="text-white font-mono2 text-xs">
+                    <p style={{ color: COLORS.text }} className="font-mono2 text-xs">
                         <span className="opacity-60">{p.name}:</span> {typeof p.value === 'number' && (p.name.includes('$') || p.name.includes('Venta')) ? fmtUSD(p.value) : p.value}
                     </p>
                 </div>
@@ -38,7 +41,10 @@ const CustomTooltip = ({ active, payload, label }) => {
     )
 }
 
+import { useNavigate } from 'react-router-dom'
+
 export default function Dashboard() {
+    const navigate = useNavigate()
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
@@ -67,9 +73,9 @@ export default function Dashboard() {
 
         // 2. Composición de Ingresos
         const radialData = [
-            { name: 'CONTADO', value: ventas.filter(v => v.tipo_pago === 'CONTADO').reduce((s, v) => s + v.total, 0), fill: COLORS.rojoBright },
-            { name: 'CRÉDITO', value: ventas.filter(v => v.tipo_pago === 'CREDITO').reduce((s, v) => s + v.total, 0), fill: COLORS.rojo },
-            { name: 'TRANSF.', value: ventas.filter(v => v.tipo_pago === 'TRANSF.').reduce((s, v) => s + v.total, 0), fill: COLORS.rojoDark }
+            { name: 'CONTADO', value: ventas.filter(v => v.tipo_pago === 'CONTADO').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryLight },
+            { name: 'CRÉDITO', value: ventas.filter(v => v.tipo_pago === 'CREDITO').reduce((s, v) => s + v.total, 0), fill: COLORS.primary },
+            { name: 'TRANSF.', value: ventas.filter(v => v.tipo_pago === 'TRANSF.').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryDark }
         ].filter(d => d.value > 0).sort((a, b) => b.value - a.value)
 
         // 3. Top Marcas
@@ -96,13 +102,15 @@ export default function Dashboard() {
         }
     }, [])
 
-    if (!data) return <div className="h-screen flex items-center justify-center bg-negro font-bebas text-rojo-bright text-3xl animate-pulse tracking-widest">CARGANDO...</div>
+    if (!data) return <div className="h-screen flex items-center justify-center bg-white font-bebas text-primary text-3xl animate-pulse tracking-widest">CARGANDO...</div>
 
-    const KPI = ({ label, value, color, icon }) => (
-        <div className="panel flex items-center justify-between border-l-2" style={{ borderColor: color }}>
+    const KPI = ({ label, value, color, icon, onClick }) => (
+        <div className={`panel flex items-center justify-between border-l-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''}`}
+            style={{ borderColor: color }}
+            onClick={onClick}>
             <div>
-                <div className="text-[10px] text-muted uppercase tracking-widest mb-1 font-bold">{label}</div>
-                <div className="font-bebas text-2xl text-white tracking-wider">{value}</div>
+                <div className="text-[10px] text-black uppercase tracking-widest mb-1 font-bold">{label}</div>
+                <div className="font-bebas text-2xl tracking-wider" style={{ color: COLORS.text }}>{value}</div>
             </div>
             <div className="text-2xl opacity-10">{icon}</div>
         </div>
@@ -112,10 +120,10 @@ export default function Dashboard() {
         <div className="space-y-4 pb-10">
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                <KPI label="Total Ventas" value={fmtUSD(data.totalVentas)} color={COLORS.rojoBright} icon="💰" />
-                <KPI label="Por Cobrar" value={fmtUSD(data.totalCobrar)} color={COLORS.rojo} icon="⏳" />
-                <KPI label="Stock Total" value={data.stockTotal} color={COLORS.rojoDark} icon="📦" />
-                <KPI label="Agotados" value={data.agotados} color={COLORS.rojo} icon="🚫" />
+                <KPI label="Total Ventas" value={fmtUSD(data.totalVentas)} color={COLORS.primaryLight} icon="💰" onClick={() => navigate('/reportes')} />
+                <KPI label="Por Cobrar" value={fmtUSD(data.totalCobrar)} color={COLORS.primary} icon="⏳" onClick={() => navigate('/cobrar')} />
+                <KPI label="Stock Total" value={data.stockTotal} color={COLORS.primaryDark} icon="📦" onClick={() => navigate('/inventario')} />
+                <KPI label="Agotados" value={data.agotados} color={COLORS.primary} icon="🚫" onClick={() => navigate('/inventario?filter=agotados')} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
@@ -124,35 +132,35 @@ export default function Dashboard() {
                     <div className="panel-title text-sm uppercase flex justify-between">
                         <span>Rendimiento (15 Días)</span>
                         <div className="flex gap-3 text-[9px] font-bold">
-                            <span className="text-rojo-bright">● VENTAS $</span>
-                            <span className="text-white opacity-40">● UNIDADES</span>
+                            <span style={{ color: COLORS.primary }}>● VENTAS $</span>
+                            <span style={{ color: COLORS.text }} className="opacity-40">● UNIDADES</span>
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height={250}>
                         <ComposedChart data={data.ventasHist}>
                             <defs>
                                 <linearGradient id="gradRojo" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={COLORS.rojo} stopOpacity={0.2} />
-                                    <stop offset="95%" stopColor={COLORS.rojo} stopOpacity={0} />
+                                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
                                 </linearGradient>
                             </defs>
                             <XAxis dataKey="name" fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <YAxis fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Area type="monotone" dataKey="total" name="Venta $" stroke={COLORS.rojoBright} fill="url(#gradRojo)" strokeWidth={2} />
-                            <Line type="monotone" dataKey="qty" name="Unidades" stroke={COLORS.white} strokeWidth={1} dot={{ r: 3, fill: COLORS.white }} opacity={0.3} />
+                            <Area type="monotone" dataKey="total" name="Venta $" stroke={COLORS.primaryLight} fill="url(#gradRojo)" strokeWidth={2} />
+                            <Line type="monotone" dataKey="qty" name="Unidades" stroke={COLORS.text} strokeWidth={1} dot={{ r: 3, fill: COLORS.text }} opacity={0.3} />
                         </ComposedChart>
                     </ResponsiveContainer>
                 </div>
 
                 {/* MIX DE PAGOS */}
                 <div className="lg:col-span-4 panel min-h-[300px]">
-                    <div className="panel-title text-sm uppercase text-center">Mezcla de Ingresos</div>
+                    <div className="panel-title text-sm uppercase text-center justify-center">Mezcla de Ingresos</div>
                     <ResponsiveContainer width="100%" height={250}>
                         <RadialBarChart innerRadius="30%" outerRadius="100%" data={data.radialData} startAngle={180} endAngle={0}>
                             <RadialBar background={{ fill: COLORS.g3 }} clockWise dataKey="value" />
                             <Tooltip content={<CustomTooltip />} />
-                            <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase' }} />
+                            <Legend iconSize={8} wrapperStyle={{ fontSize: '10px', textTransform: 'uppercase', paddingTop: '20px' }} />
                         </RadialBarChart>
                     </ResponsiveContainer>
                 </div>
@@ -165,8 +173,8 @@ export default function Dashboard() {
                             <XAxis dataKey="name" fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <YAxis fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="ingresos" name="Entradas" fill={COLORS.rojoBright} radius={[2, 2, 0, 0]} barSize={15} />
-                            <Bar dataKey="egresos" name="Salidas" fill={COLORS.muted} radius={[2, 2, 0, 0]} barSize={15} />
+                            <Bar dataKey="ingresos" name="Entradas" fill={COLORS.green} radius={[4, 4, 0, 0]} barSize={15} />
+                            <Bar dataKey="egresos" name="Salidas" fill={COLORS.muted} radius={[4, 4, 0, 0]} barSize={15} opacity={0.3} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -180,11 +188,11 @@ export default function Dashboard() {
                             return (
                                 <div key={i}>
                                     <div className="flex justify-between text-[10px] mb-1">
-                                        <span className="font-bold text-muted uppercase">{m.name}</span>
-                                        <span className="font-mono2 text-white">{m.value} UND</span>
+                                        <span className="font-bold text-slate-500 uppercase">{m.name}</span>
+                                        <span className="font-mono" style={{ color: COLORS.text }}>{m.value} UND</span>
                                     </div>
-                                    <div className="h-1 w-full bg-g3 rounded-full overflow-hidden">
-                                        <div className="h-full bg-rojo transition-all duration-1000" style={{ width: `${percent}%` }} />
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary transition-all duration-1000 rounded-full" style={{ width: `${percent}%` }} />
                                     </div>
                                 </div>
                             )
@@ -195,12 +203,12 @@ export default function Dashboard() {
                 {/* RANKING FINAL */}
                 <div className="lg:col-span-12 panel">
                     <div className="panel-title text-sm uppercase">Ranking de Productos (Más Vendidos)</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 py-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-2">
                         {data.topVendidos.map((p, i) => (
-                            <div key={i} className="bg-g3/30 border border-borde p-3 rounded-lg text-center">
-                                <div className="text-rojo-bright font-bebas text-2xl mb-1">#{i + 1}</div>
-                                <div className="text-[10px] font-bold text-white uppercase truncate mb-1">{p.name}</div>
-                                <div className="font-mono2 text-xs text-muted">{p.value} VENDIDOS</div>
+                            <div key={i} className="bg-slate-50 border border-slate-100 p-4 rounded-2xl text-center group hover:border-primary/30 transition-colors">
+                                <div className="text-primary font-bold text-2xl mb-1 opacity-20 group-hover:opacity-100 transition-opacity">0{i + 1}</div>
+                                <div className="text-[11px] font-bold uppercase truncate mb-1 text-slate-700">{p.name}</div>
+                                <div className="font-mono text-[10px] text-slate-400 font-bold">{p.value} VENDIDOS</div>
                             </div>
                         ))}
                     </div>

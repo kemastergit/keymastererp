@@ -16,9 +16,12 @@ const extra = [
   { to: '/proveedores', ico: '🏭', label: 'Proveedores' },
   { to: '/pagar', ico: '🏦', label: 'Ctas.Pagar' },
   { to: '/devoluciones', ico: '🔄', label: 'Devoluciones' },
-  { to: '/caja', ico: '💰', label: 'Caja Chica' },
+  { to: '/caja', ico: '🏧', label: 'Caja' },
+  { to: '/caja-chica', ico: '💰', label: 'Caja Chica' },
   { to: '/cierre', ico: '📅', label: 'Cierre' },
-  { to: '/admin', ico: '🔐', label: 'Admin', admin: true },
+  { to: '/etiquetas', ico: '🏷️', label: 'Etiquetas' },
+  { to: '/config', ico: '🏢', label: 'Empresa', admin: true },
+  { to: '/admin', ico: '🔐', label: 'Seguridad', admin: true },
   { to: '/planes', ico: '💎', label: 'Planes' },
 ]
 
@@ -40,18 +43,21 @@ export default function NavBottom() {
     <>
       {/* Overlay */}
       {open && (
-        <div className="fixed inset-0 bg-black/60 z-[185] md:hidden" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 bg-black/30 z-[185] md:hidden" onClick={() => setOpen(false)} />
       )}
 
       {/* Drawer */}
-      <div className={`fixed bottom-[60px] left-0 right-0 bg-g2 border-t border-rojo-dark z-[190]
-        md:hidden transition-transform duration-300 p-3 grid grid-cols-3 gap-2 shadow-2xl
-        ${open ? 'translate-y-0' : 'translate-y-full'}`}>
+      <div className={`fixed bottom-[60px] left-0 right-0 bg-white border-t border-borde z-[190]
+        md:hidden transition-transform duration-300 p-3 grid grid-cols-3 gap-2
+        ${open ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{ boxShadow: '0 -4px 20px rgba(0,0,0,0.1)' }}>
         {extra.map(item => (
           <button key={item.to} onClick={() => handleExtra(item)}
             className="bg-g3 border border-borde rounded-lg py-3 px-2 flex flex-col items-center gap-1
-              font-raj text-[0.65rem] font-bold tracking-wide text-white/80
-              hover:bg-red-950/20 hover:border-rojo-dark transition-all">
+              font-raj text-[0.65rem] font-bold tracking-wide transition-all"
+            style={{ color: '#323130' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#deecf9'; e.currentTarget.style.borderColor = '#0078d4' }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.borderColor = '' }}>
             <span className="text-2xl leading-none">{item.ico}</span>
             {item.label}
           </button>
@@ -59,16 +65,21 @@ export default function NavBottom() {
       </div>
 
       {/* Bottom bar */}
-      <nav className="fixed bottom-0 left-0 right-0 h-[60px] bg-g1 border-t border-borde
-        flex z-[200] shadow-[0_-4px_20px_rgba(0,0,0,0.5)] md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 h-[60px] bg-white border-t border-borde
+        flex z-[200] md:hidden"
+        style={{ boxShadow: '0 -2px 8px rgba(0,0,0,0.08)' }}>
         {main.map(l => (
           <NavLink key={l.to} to={l.to} end={l.to === '/'}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center justify-center gap-0.5
               font-raj text-[0.5rem] font-bold tracking-wide uppercase
               border-t-2 transition-all
-              ${isActive ? 'text-rojo-bright border-rojo bg-red-950/10' : 'text-muted border-transparent'}`
-            }>
+              ${isActive ? 'border-rojo' : 'border-transparent'}`
+            }
+            style={({ isActive }) => ({
+              color: isActive ? '#0078d4' : '#605e5c',
+              background: isActive ? '#deecf9' : 'transparent',
+            })}>
             {({ isActive }) => (
               <>
                 <span className="text-xl leading-none">{l.ico}</span>
@@ -78,10 +89,14 @@ export default function NavBottom() {
           </NavLink>
         ))}
         <button onClick={() => setOpen(!open)}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5
+          className="flex-1 flex flex-col items-center justify-center gap-0.5
             font-raj text-[0.5rem] font-bold tracking-wide uppercase
-            border-t-2 transition-all text-muted
-            ${open ? 'border-rojo text-rojo-bright bg-red-950/10' : 'border-transparent'}`}>
+            border-t-2 transition-all"
+          style={{
+            color: open ? '#0078d4' : '#605e5c',
+            borderColor: open ? '#0078d4' : 'transparent',
+            background: open ? '#deecf9' : 'transparent',
+          }}>
           <span className="text-xl leading-none">{open ? '✕' : '☰'}</span>
           {open ? 'CERRAR' : 'MÁS'}
         </button>

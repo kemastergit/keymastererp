@@ -9,19 +9,19 @@ export default function Admin() {
 
   const exportDB = async () => {
     const data = {
-      articulos:    await db.articulos.toArray(),
-      clientes:     await db.clientes.toArray(),
-      proveedores:  await db.proveedores.toArray(),
-      ventas:       await db.ventas.toArray(),
-      venta_items:  await db.venta_items.toArray(),
+      articulos: await db.articulos.toArray(),
+      clientes: await db.clientes.toArray(),
+      proveedores: await db.proveedores.toArray(),
+      ventas: await db.ventas.toArray(),
+      venta_items: await db.venta_items.toArray(),
       cotizaciones: await db.cotizaciones.toArray(),
-      cot_items:    await db.cot_items.toArray(),
-      ctas_cobrar:  await db.ctas_cobrar.toArray(),
-      ctas_pagar:   await db.ctas_pagar.toArray(),
+      cot_items: await db.cot_items.toArray(),
+      ctas_cobrar: await db.ctas_cobrar.toArray(),
+      ctas_pagar: await db.ctas_pagar.toArray(),
       devoluciones: await db.devoluciones.toArray(),
-      caja_chica:   await db.caja_chica.toArray(),
-      cierre_dia:   await db.cierre_dia.toArray(),
-      exported_at:  new Date().toISOString(),
+      caja_chica: await db.caja_chica.toArray(),
+      cierre_dia: await db.cierre_dia.toArray(),
+      exported_at: new Date().toISOString(),
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -41,21 +41,21 @@ export default function Admin() {
         // Limpiar y restaurar
         await db.transaction('rw',
           [db.articulos, db.clientes, db.proveedores, db.ventas, db.venta_items,
-           db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
-           db.devoluciones, db.caja_chica, db.cierre_dia],
+          db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
+          db.devoluciones, db.caja_chica, db.cierre_dia],
           async () => {
-            await db.articulos.clear();    if (data.articulos)   await db.articulos.bulkAdd(data.articulos)
-            await db.clientes.clear();     if (data.clientes)    await db.clientes.bulkAdd(data.clientes)
-            await db.proveedores.clear();  if (data.proveedores) await db.proveedores.bulkAdd(data.proveedores)
-            await db.ventas.clear();       if (data.ventas)      await db.ventas.bulkAdd(data.ventas)
-            await db.venta_items.clear();  if (data.venta_items) await db.venta_items.bulkAdd(data.venta_items)
+            await db.articulos.clear(); if (data.articulos) await db.articulos.bulkAdd(data.articulos)
+            await db.clientes.clear(); if (data.clientes) await db.clientes.bulkAdd(data.clientes)
+            await db.proveedores.clear(); if (data.proveedores) await db.proveedores.bulkAdd(data.proveedores)
+            await db.ventas.clear(); if (data.ventas) await db.ventas.bulkAdd(data.ventas)
+            await db.venta_items.clear(); if (data.venta_items) await db.venta_items.bulkAdd(data.venta_items)
             await db.cotizaciones.clear(); if (data.cotizaciones) await db.cotizaciones.bulkAdd(data.cotizaciones)
-            await db.cot_items.clear();    if (data.cot_items)   await db.cot_items.bulkAdd(data.cot_items)
-            await db.ctas_cobrar.clear();  if (data.ctas_cobrar) await db.ctas_cobrar.bulkAdd(data.ctas_cobrar)
-            await db.ctas_pagar.clear();   if (data.ctas_pagar)  await db.ctas_pagar.bulkAdd(data.ctas_pagar)
+            await db.cot_items.clear(); if (data.cot_items) await db.cot_items.bulkAdd(data.cot_items)
+            await db.ctas_cobrar.clear(); if (data.ctas_cobrar) await db.ctas_cobrar.bulkAdd(data.ctas_cobrar)
+            await db.ctas_pagar.clear(); if (data.ctas_pagar) await db.ctas_pagar.bulkAdd(data.ctas_pagar)
             await db.devoluciones.clear(); if (data.devoluciones) await db.devoluciones.bulkAdd(data.devoluciones)
-            await db.caja_chica.clear();   if (data.caja_chica)  await db.caja_chica.bulkAdd(data.caja_chica)
-            await db.cierre_dia.clear();   if (data.cierre_dia)  await db.cierre_dia.bulkAdd(data.cierre_dia)
+            await db.caja_chica.clear(); if (data.caja_chica) await db.caja_chica.bulkAdd(data.caja_chica)
+            await db.cierre_dia.clear(); if (data.cierre_dia) await db.cierre_dia.bulkAdd(data.cierre_dia)
           }
         )
         toast('✅ Backup restaurado correctamente')
@@ -72,8 +72,8 @@ export default function Admin() {
     if (!confirm2) { setConfirm2(true); toast('⚠ Presiona de nuevo para confirmar', 'warn'); return }
     await db.transaction('rw',
       [db.articulos, db.clientes, db.proveedores, db.ventas, db.venta_items,
-       db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
-       db.devoluciones, db.caja_chica, db.cierre_dia],
+      db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
+      db.devoluciones, db.caja_chica, db.cierre_dia],
       async () => {
         await Promise.all([
           db.articulos.clear(), db.clientes.clear(), db.proveedores.clear(),
@@ -103,54 +103,193 @@ export default function Admin() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-amber-900/20 border border-amber-700 rounded-lg px-4 py-3 mb-4 text-amber-400 text-sm">
-        ⚠ Área de administración — Úsala con precaución
+    <div className="max-w-2xl mx-auto space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
+        <span className="material-icons-round text-amber-500 text-2xl">security</span>
+        <div>
+          <p className="font-black text-amber-800 uppercase text-[10px] tracking-widest">Panel de Control Maestro</p>
+          <p className="text-sm font-medium text-amber-700">Área restringida. Todas las acciones aquí afectan la integridad de los datos.</p>
+        </div>
       </div>
 
-      <Card title="💾 BACKUP — BASE DE DATOS">
-        <p className="text-sm text-muted mb-3">
-          Exporta todos los datos a un archivo JSON para respaldo o importa uno previo.
+      <Card title="💾 Respaldo de Seguridad">
+        <p className="text-xs text-slate-500 mb-4 font-medium">
+          Exporta todos los datos (artículos, ventas, clientes) a un archivo JSON o restaura un backup previo de este sistema.
         </p>
-        <div className="flex gap-2 flex-wrap">
-          <button className="btn btn-g" onClick={exportDB}>📥 EXPORTAR BACKUP</button>
-          <button className="btn btn-b" onClick={importDB}>📤 IMPORTAR BACKUP</button>
+        <div className="flex gap-3 flex-wrap">
+          <button className="btn btn-g shadow-md" onClick={exportDB}>
+            <span className="material-icons-round text-base">cloud_download</span>
+            <span>Descargar Backup</span>
+          </button>
+          <button className="btn btn-b shadow-md" onClick={importDB}>
+            <span className="material-icons-round text-base">cloud_upload</span>
+            <span>Subir Backup</span>
+          </button>
         </div>
       </Card>
 
-      <Card title="🔐 CAMBIAR CLAVE DE ADMINISTRADOR">
+      <Card title="🔐 Seguridad de Acceso">
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3">Cambiar contraseña de administrador</p>
         <div className="flex gap-2">
-          <input className="inp flex-1" type="password" value={newClave}
+          <input className="inp flex-1 font-mono !py-2.5" type="password" value={newClave}
             onChange={e => setNewClave(e.target.value)}
-            placeholder="Nueva clave (mín. 3 caracteres)"
+            placeholder="Nueva clave secreta..."
             onKeyDown={e => e.key === 'Enter' && changeClave()} />
-          <button className="btn btn-y" onClick={changeClave}>CAMBIAR</button>
+          <button className="btn btn-y font-bold" onClick={changeClave}>
+            <span className="material-icons-round text-base">vpn_key</span>
+            <span>Actualizar</span>
+          </button>
         </div>
       </Card>
 
-      <Card title="🗑 LIMPIAR BASE DE DATOS">
-        <p className="text-sm text-muted mb-3">
-          Elimina <strong className="text-red-400">TODOS</strong> los datos del sistema.
-          Esta acción no se puede deshacer. Haz un backup primero.
+      <Card title="📊 Carga Masiva de Artículos">
+        <p className="text-xs text-slate-500 mb-4 font-medium">
+          Importa una lista completa de inventario desde archivos <strong>Excel (.xlsx, .xls)</strong>, <strong>CSV</strong> o <strong>JSON</strong>.
+          Asegúrate de que las columnas tengan nombres como: <em>codigo, descripcion, precio, stock, costo, marca, depto</em>.
         </p>
-        <button
-          className={`btn ${confirm2 ? 'btn-r' : 'btn-gr'}`}
-          onClick={clearAll}>
-          {confirm2 ? '⚠ CONFIRMAR — BORRAR TODO' : '🗑 LIMPIAR TODO'}
-        </button>
-        {confirm2 && (
-          <button className="btn btn-gr ml-2" onClick={() => setConfirm2(false)}>Cancelar</button>
-        )}
-      </Card>
+        <div className="flex gap-3 flex-wrap">
+          <input
+            type="file"
+            id="bulk-import"
+            className="hidden"
+            accept=".xlsx,.xls,.csv,.json"
+            onChange={async (e) => {
+              const file = e.target.files[0]
+              if (!file) return
 
-      <Card title="ℹ INFORMACIÓN DEL SISTEMA">
-        <div className="text-sm text-muted space-y-1">
-          <div><span className="text-white">Sistema:</span> Automotores Guaicaipuro C.A.</div>
-          <div><span className="text-white">Versión:</span> 1.0.0 React</div>
-          <div><span className="text-white">Base de datos:</span> IndexedDB (Dexie.js)</div>
-          <div><span className="text-white">Almacenamiento:</span> Local — 100% offline</div>
+              const reader = new FileReader()
+              reader.onload = async (evt) => {
+                try {
+                  let articles = []
+                  const ext = file.name.split('.').pop().toLowerCase()
+
+                  if (ext === 'json') {
+                    articles = JSON.parse(evt.target.result)
+                  } else if (ext === 'csv') {
+                    const text = evt.target.result
+                    const lines = text.split('\n')
+                    const headers = lines[0].split(',')
+                    articles = lines.slice(1).map(line => {
+                      const values = line.split(',')
+                      const obj = {}
+                      headers.forEach((h, i) => obj[h.trim()] = values[i]?.trim())
+                      return obj
+                    })
+                  } else {
+                    // Excel
+                    const { read, utils } = await import('xlsx')
+                    const data = new Uint8Array(evt.target.result)
+                    const workbook = read(data, { type: 'array' })
+                    const sheetName = workbook.SheetNames[0]
+                    articles = utils.sheet_to_json(workbook.Sheets[sheetName])
+                  }
+
+                  if (!Array.isArray(articles)) throw new Error('Formato inválido')
+
+                  // Clean and format items
+                  const formatted = articles.map(a => ({
+                    codigo: String(a.codigo || a.cod || a.id || ''),
+                    referencia: String(a.referencia || a.ref || ''),
+                    descripcion: String(a.descripcion || a.nombre || a.desc || ''),
+                    marca: String(a.marca || ''),
+                    departamento: String(a.departamento || a.depto || ''),
+                    sub_depto: String(a.sub_depto || ''),
+                    proveedor: String(a.proveedor || ''),
+                    unidad: String(a.unidad || 'UNI'),
+                    stock: parseFloat(a.stock || a.existencia || 0) || 0,
+                    precio: parseFloat(a.precio || a.venta || 0) || 0,
+                    costo: parseFloat(a.costo || 0) || 0
+                  })).filter(a => a.codigo && a.descripcion)
+
+                  await db.articulos.bulkPut(formatted)
+                  toast(`✅ ¡Éxito! Se cargaron ${formatted.length} artículos al inventario.`)
+                  e.target.value = '' // Clear input
+                } catch (err) {
+                  toast('❌ Error al procesar el archivo. Revisa el formato.', 'error')
+                  console.error(err)
+                }
+              }
+
+              if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                reader.readAsArrayBuffer(file)
+              } else {
+                reader.readAsText(file)
+              }
+            }}
+          />
+          <button className="btn btn-r shadow-md w-full sm:w-auto" onClick={() => document.getElementById('bulk-import').click()}>
+            <span className="material-icons-round text-base">file_upload</span>
+            <span>Subir Excel / CSV / JSON</span>
+          </button>
+
+          <div className="w-full flex justify-center mt-2">
+            <a href="#" className="text-[10px] text-blue-500 hover:underline font-bold uppercase tracking-widest"
+              onClick={(e) => {
+                e.preventDefault()
+                const template = [
+                  { codigo: '001', descripcion: 'PRODUCTO EJEMPLO', precio: 10, stock: 100, costo: 5, marca: 'GENERICA', departamento: 'GENERAL' }
+                ]
+                const json = JSON.stringify(template, null, 2)
+                const blob = new Blob([json], { type: 'application/json' })
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(blob)
+                a.download = 'formato_importacion.json'
+                a.click()
+              }}>
+              DESCARGAR FORMATO DE EJEMPLO
+            </a>
+          </div>
         </div>
       </Card>
+
+      <Card title="🗑 Mantenimiento Crítico">
+        <div className="bg-red-50 border border-red-100 p-4 rounded-xl mb-4">
+          <p className="text-[10px] text-red-600 font-black uppercase tracking-widest mb-1">Zona de Peligro</p>
+          <p className="text-xs text-red-500 font-medium">
+            Elimina <strong className="font-black underline">TODOS</strong> los datos del sistema de forma permanente.
+            Esta acción limpiará tablas de inventario, ventas y registros contables. No hay marcha atrás.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            className={`btn flex-1 justify-center font-black ${confirm2 ? 'btn-r scale-105' : 'btn-gr opacity-60 hover:opacity-100'}`}
+            onClick={clearAll}>
+            <span className="material-icons-round text-base">{confirm2 ? 'report_problem' : 'delete_forever'}</span>
+            <span>{confirm2 ? 'SÍ, BORRAR TODO DEFINITIVAMENTE' : 'LIMPIAR BASE DE DATOS'}</span>
+          </button>
+          {confirm2 && (
+            <button className="btn btn-gr flex-1 justify-center" onClick={() => setConfirm2(false)}>CANCELAR</button>
+          )}
+        </div>
+      </Card>
+
+      <div className="panel p-4 bg-slate-100/50 border-dashed border-2 border-slate-200">
+        <div className="flex items-center gap-2 mb-3 text-slate-400">
+          <span className="material-icons-round text-sm">info</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Información Técnica</span>
+        </div>
+        <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-slate-400 uppercase">Sistema</span>
+            <span className="text-xs font-bold text-slate-700">KeClick POS / Guaicaipuro</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-slate-400 uppercase">Versión</span>
+            <span className="text-xs font-bold text-slate-700">2.4.0 Amber Edition</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-slate-400 uppercase">Motor DB</span>
+            <span className="text-xs font-bold text-slate-700">IndexedDB v2.1 (Dexie)</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-black text-slate-400 uppercase">Estado</span>
+            <span className="text-xs font-bold text-green-600 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              Operativo (Local Only)
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -67,37 +67,45 @@ export default function Devoluciones() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div>
-        <div className="panel">
-          <div className="panel-title">BUSCAR NOTA DE ENTREGA</div>
-          <input className="inp mb-2" placeholder="🔍 Buscar por N° nota o cliente..."
-            value={busqVenta} onChange={e => setBusqVenta(e.target.value)} />
-          <div className="tabla-wrap tabla-scroll">
+        <div className="panel p-0 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="panel-title mb-0 uppercase tracking-tighter">Buscar Nota de Entrega</div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Seleccione la factura original</p>
+          </div>
+          <div className="p-4">
+            <div className="field !m-0">
+              <input className="inp !py-2 !px-4 !bg-slate-50" placeholder="🔍 Buscar por N° nota o cliente..."
+                value={busqVenta} onChange={e => setBusqVenta(e.target.value)} />
+            </div>
+          </div>
+          <div className="overflow-x-auto min-h-[300px]">
             <table>
-              <thead><tr><th>N° NOTA</th><th>CLIENTE</th><th>FECHA</th><th>TOTAL $</th><th></th></tr></thead>
+              <thead><tr><th>Nota</th><th>Cliente</th><th>Fecha</th><th className="text-right">Total</th><th></th></tr></thead>
               <tbody>
                 {ventas.map(v => (
                   <tr key={v.id}>
-                    <td className="font-mono2 text-rojo-bright">#{v.nro}</td>
-                    <td className="font-semibold">{v.cliente}</td>
-                    <td className="text-muted">{fmtDate(v.fecha)}</td>
-                    <td className="font-mono2">{fmtUSD(v.total)}</td>
-                    <td>
+                    <td className="font-mono text-primary font-bold">#{v.nro}</td>
+                    <td className="font-bold text-slate-700">{v.cliente}</td>
+                    <td className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{fmtDate(v.fecha)}</td>
+                    <td className="font-mono text-right font-bold text-slate-800">{fmtUSD(v.total)}</td>
+                    <td className="text-right">
                       {v.estado === 'DEVUELTA' ? (
-                        <span className="text-[10px] font-bold text-muted bg-g3 px-2 py-1 rounded inline-block">
-                          YA DEVUELTA ↩️
+                        <span className="text-[8px] font-black tracking-widest text-slate-300 bg-slate-100 px-2 py-0.5 rounded-full uppercase">
+                          YA DEVUELTA
                         </span>
                       ) : (
-                        <button className="btn btn-y btn-sm" onClick={() => selVenta(v)}>
-                          DEVOLVER
+                        <button className="btn btn-y !py-1 !px-3 !text-[9px]" onClick={() => selVenta(v)}>
+                          <span className="material-icons-round text-sm">assignment_return</span>
+                          <span>DEVOLVER</span>
                         </button>
                       )}
                     </td>
                   </tr>
                 ))}
                 {ventas.length === 0 && (
-                  <tr><td colSpan={5} className="text-center text-muted py-4">SIN NOTAS</td></tr>
+                  <tr><td colSpan={5} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">No se encontraron notas</td></tr>
                 )}
               </tbody>
             </table>
@@ -106,23 +114,25 @@ export default function Devoluciones() {
       </div>
 
       <div>
-        <div className="panel">
-          <div className="panel-title">HISTORIAL DE DEVOLUCIONES</div>
-          <div className="tabla-wrap tabla-scroll">
+        <div className="panel p-0 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="panel-title mb-0 uppercase tracking-tighter">Historial Reciente</div>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Últimas devoluciones procesadas</p>
+          </div>
+          <div className="overflow-x-auto min-h-[300px]">
             <table>
-              <thead><tr><th>NOTA REF.</th><th>CLIENTE</th><th>MOTIVO</th><th>FECHA</th><th>TOTAL $</th></tr></thead>
+              <thead><tr><th>Ref</th><th>Cliente</th><th>Motivo</th><th className="text-right">Monto</th></tr></thead>
               <tbody>
                 {historial.map(d => (
                   <tr key={d.id}>
-                    <td className="font-mono2 text-rojo-bright">#{d.nro_venta}</td>
-                    <td className="font-semibold">{d.cliente}</td>
-                    <td className="text-muted">{d.motivo}</td>
-                    <td className="text-muted">{fmtDate(d.fecha)}</td>
-                    <td className="font-mono2 text-red-400">-{fmtUSD(d.total)}</td>
+                    <td className="font-mono text-slate-400 font-bold text-[11px]">#{d.nro_venta}</td>
+                    <td className="font-bold text-slate-700">{d.cliente}</td>
+                    <td className="text-[10px] text-slate-500 font-bold uppercase truncate max-w-[120px]">{d.motivo}</td>
+                    <td className="font-mono text-red-500 text-right font-black">-{fmtUSD(d.total)}</td>
                   </tr>
                 ))}
                 {historial.length === 0 && (
-                  <tr><td colSpan={5} className="text-center text-muted py-4">SIN DEVOLUCIONES</td></tr>
+                  <tr><td colSpan={4} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin historial de devoluciones</td></tr>
                 )}
               </tbody>
             </table>
@@ -130,46 +140,69 @@ export default function Devoluciones() {
         </div>
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="PROCESAR DEVOLUCIÓN" wide>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Procesar Devolución" wide>
         {ventaSel && (
-          <>
-            <p className="text-sm mb-3">
-              <span className="text-muted">Nota #</span><span className="text-white font-bold ml-1">{ventaSel.nro}</span>
-              <span className="text-muted ml-3">Cliente:</span><span className="text-white font-bold ml-1">{ventaSel.cliente}</span>
-            </p>
-            <div className="mb-3">
-              <p className="text-xs text-muted mb-1 tracking-widest uppercase">Seleccionar productos a devolver:</p>
-              {ventaItems.map(i => (
-                <label key={i.id} className="flex items-center gap-3 py-2 border-b border-borde cursor-pointer hover:bg-g3/50">
-                  <input type="checkbox" checked={!!selItems[i.id]} onChange={() => toggleItem(i.id)}
-                    className="w-4 h-4 accent-red-600" />
-                  <span className="font-mono2 text-rojo-bright text-xs">{i.codigo}</span>
-                  <span className="flex-1 text-sm">{i.descripcion}</span>
-                  <span className="text-muted text-xs">x{i.qty}</span>
-                  <span className="font-mono2 text-sm">{fmtUSD(i.precio * i.qty)}</span>
-                </label>
-              ))}
+          <div className="space-y-6">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Nota Ref / Cliente</p>
+                <p className="text-slate-800 font-bold">#{ventaSel.nro} — {ventaSel.cliente}</p>
+              </div>
+              <div className="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Original: {fmtUSD(ventaSel.total)}
+              </div>
             </div>
-            <div className="bg-g3 p-3 rounded-lg border border-borde mb-3">
-              <label className="flex items-center gap-3 cursor-pointer">
+
+            <div>
+              <p className="text-[10px] text-slate-400 mb-3 tracking-widest uppercase font-bold">Seleccionar productos a devolver:</p>
+              <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scroll">
+                {ventaItems.map(i => (
+                  <label key={i.id} className={`flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer
+                    ${selItems[i.id] ? 'bg-primary/10 border-primary/20' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
+                    <input type="checkbox" checked={!!selItems[i.id]} onChange={() => toggleItem(i.id)}
+                      className="w-5 h-5 rounded-lg border-slate-300 text-primary focus:ring-primary/20 accent-primary" />
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-slate-800">{i.descripcion}</div>
+                      <div className="text-[10px] font-mono text-primary font-bold">{i.codigo}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-black text-slate-700">Cant: {i.qty}</div>
+                      <div className="text-[10px] font-mono text-slate-400">{fmtUSD(i.precio * i.qty)}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-2xl border transition-all ${reingresarStock ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+              <label className="flex items-center gap-4 cursor-pointer">
                 <input type="checkbox" checked={reingresarStock} onChange={e => setReingresarStock(e.target.checked)}
-                  className="w-5 h-5 accent-green-600" />
+                  className={`w-6 h-6 rounded-full transition-all accent-current ${reingresarStock ? 'text-green-600' : 'text-amber-600'}`} />
                 <div>
-                  <div className="text-sm font-bold text-white uppercase tracking-tighter">¿Regresar productos al inventario?</div>
-                  <div className="text-[10px] text-muted capitalize">Desmarca esto si el producto está dañado (Merma)</div>
+                  <div className={`text-sm font-black uppercase tracking-tight ${reingresarStock ? 'text-green-800' : 'text-amber-800'}`}>
+                    {reingresarStock ? 'Reingresar al Inventario' : 'Registrar como Merma'}
+                  </div>
+                  <div className={`text-[10px] font-medium opacity-70 ${reingresarStock ? 'text-green-700' : 'text-amber-700'}`}>
+                    {reingresarStock ? 'El stock de los productos aumentará automáticamente' : 'El producto está dañado, el stock no se verá afectado'}
+                  </div>
                 </div>
               </label>
             </div>
+
             <div className="field">
               <label>Motivo de devolución *</label>
-              <input className="inp" value={motivo} onChange={e => setMotivo(e.target.value)}
-                placeholder="Producto defectuoso, error en pedido..." />
+              <input className="inp !py-3 !px-4" value={motivo} onChange={e => setMotivo(e.target.value)}
+                placeholder="Ej. Producto defectuoso, error en pedido..." />
             </div>
-            <div className="flex gap-2 mt-3">
-              <button className="btn btn-gr flex-1" onClick={() => setShowModal(false)}>Cancelar</button>
-              <button className="btn btn-r flex-1" onClick={procesarDevolucion}>✅ PROCESAR DEVOLUCIÓN</button>
+
+            <div className="flex gap-3 pt-2">
+              <button className="btn btn-gr flex-1 justify-center" onClick={() => setShowModal(false)}>Cancelar</button>
+              <button className="btn btn-r flex-1 justify-center font-bold" onClick={procesarDevolucion}>
+                <span className="material-icons-round text-base">assignment_return</span>
+                <span>Procesar Devolución</span>
+              </button>
             </div>
-          </>
+          </div>
         )}
       </Modal>
     </div>

@@ -1,178 +1,297 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+.font-bebas {
+  font-family: 'Bebas Neue', cursive;
+}
+
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+:root {
+  --primary: #f59e0b;
+  --primary-dark: #b45309;
+}
+
 @layer base {
-  * {
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html {
-    font-size: 14px;
-    scroll-behavior: smooth;
-  }
-
   body {
-    background: #0a0a0a;
-    color: #fef3c7;
-    font-family: 'Rajdhani', sans-serif;
+    @apply text-slate-900 font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    background-color: #f8fafc;
+    background-image: linear-gradient(rgba(248, 250, 252, 0.5), rgba(248, 250, 252, 0.6)), url('/Gemini_Generated_Image_taflkntaflkntafl.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
     min-height: 100vh;
-    overflow-x: hidden;
   }
 
+  /* Custom Scrollbar */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0a0a0a;
+    @apply bg-transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #92400e;
-    border-radius: 2px;
-  }
-
-  input[type=number]::-webkit-inner-spin-button,
-  input[type=number]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
+    @apply bg-slate-200 rounded-full;
   }
 }
 
 @layer components {
-  .inp {
-    @apply w-full bg-g3 border border-borde text-white px-3 py-2 rounded-md font-raj text-sm transition-colors outline-none placeholder-muted;
-  }
-
-  .inp:focus {
-    @apply border-rojo;
-  }
-
-  .btn {
-    @apply inline-flex items-center justify-center gap-1 px-4 py-2 rounded-md font-raj font-bold text-xs tracking-wide uppercase transition-all active:scale-95 cursor-pointer border-none;
-  }
-
-  .btn-r {
-    @apply bg-rojo text-white hover:bg-rojo-dark;
-  }
-
-  .btn-g {
-    @apply bg-green-700 text-white hover:bg-green-800;
-  }
-
-  .btn-gr {
-    @apply bg-g3 text-white border border-borde hover:bg-g4;
-  }
-
-  .btn-y {
-    @apply bg-amber-600 text-black hover:bg-amber-700;
-  }
-
-  .btn-b {
-    @apply bg-blue-600 text-white hover:bg-blue-700;
-  }
-
-  .btn-full {
-    @apply w-full py-2.5 text-sm;
-  }
-
-  .btn-sm {
-    @apply px-2 py-1 text-xs;
-  }
-
   .panel {
-    @apply bg-g2 border border-borde rounded-lg p-3 mb-3;
+    @apply bg-white/95 border border-slate-200/60 rounded-2xl p-4 shadow-2xl transition-all;
   }
 
   .panel-title {
-    @apply font-bebas text-base tracking-widest text-rojo-bright border-b border-borde pb-1.5 mb-2.5;
+    @apply font-bold text-[11px] uppercase tracking-widest mb-4 px-1 flex items-center justify-between;
+    color: var(--primary);
   }
 
   .field {
-    @apply mb-2;
+    @apply mb-4;
   }
 
   .field label {
-    @apply block text-xs text-muted tracking-widest uppercase mb-1;
+    @apply block text-[10px] font-bold text-slate-950 uppercase tracking-wider mb-2 ml-1;
   }
 
-  .tabla-wrap {
-    @apply overflow-x-auto border border-borde rounded-md;
+  .inp {
+    @apply w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none transition-all placeholder:text-slate-400 text-slate-800 font-medium shadow-sm;
   }
 
-  .tabla-scroll {
-    @apply max-h-64 overflow-y-auto;
+  .btn {
+    @apply font-bold text-[11px] uppercase tracking-widest py-3 px-6 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50;
   }
 
-  table {
-    @apply w-full border-collapse text-xs;
-    min-width: 400px;
+  .btn-r {
+    @apply text-white shadow-lg shadow-amber-500/20;
+    background-color: var(--primary);
   }
 
-  thead th {
-    @apply bg-g3 text-rojo-bright px-2 py-1.5 text-left font-mono2 text-xs tracking-wide whitespace-nowrap border-b border-borde sticky top-0;
+  .btn-r:hover {
+    background-color: var(--primary-dark);
   }
 
-  tbody tr {
-    @apply border-b border-g3 transition-colors;
+  .btn-g {
+    @apply bg-green-500 text-white shadow-lg shadow-green-500/20 hover:bg-green-600;
   }
 
-  tbody tr:hover {
-    @apply bg-amber-950/20;
+  .btn-b {
+    @apply bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700;
   }
 
-  tbody td {
-    @apply px-2 py-1.5 align-middle;
+  .btn-y {
+    @apply bg-amber-500 text-white shadow-lg shadow-amber-500/20 hover:bg-amber-600;
+  }
+
+  .btn-gr {
+    @apply bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200;
+  }
+
+  .btn-sm {
+    @apply py-2 px-3 text-[10px];
+  }
+
+  .btn-full {
+    @apply w-full;
   }
 
   .badge {
-    @apply inline-block px-2 py-0.5 rounded text-xs font-bold tracking-wide;
+    @apply px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap;
   }
 
   .badge-g {
-    @apply bg-green-900/50 text-green-400 border border-green-800;
-  }
-
-  .badge-r {
-    @apply bg-red-900/50 text-red-400 border border-red-800;
+    @apply bg-green-50 text-green-600 border-green-100;
   }
 
   .badge-y {
-    @apply bg-amber-900/50 text-amber-400 border border-amber-800;
+    @apply bg-amber-50 text-amber-600 border-amber-100;
   }
 
-  .badge-b {
-    @apply bg-blue-900/50 text-blue-400 border border-blue-800;
+  .badge-r {
+    @apply bg-red-50 text-red-600 border-red-100;
+  }
+
+  .tabla-wrap {
+    @apply bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm;
+  }
+
+  .tabla-scroll {
+    max-height: calc(100vh - 300px);
+    @apply overflow-y-auto;
+  }
+
+  table {
+    @apply w-full text-left border-collapse;
+  }
+
+  thead {
+    @apply bg-slate-50 border-b border-slate-200;
+  }
+
+  th {
+    @apply px-4 py-3 text-[10px] font-bold text-slate-950 uppercase tracking-widest;
+  }
+
+  td {
+    @apply px-4 py-3 text-sm border-b border-slate-50 text-slate-700 font-medium;
+  }
+
+  tr:last-child td {
+    @apply border-b-0;
+  }
+
+  tr:hover td {
+    @apply bg-slate-50/50;
+  }
+
+  .sticky-col {
+    @apply sticky left-0 bg-white z-10 border-r border-slate-100;
+  }
+
+  .sticky-col-2 {
+    @apply sticky left-[100px] bg-white z-10 border-r border-slate-100;
+  }
+
+  .ios-blur {
+    @apply bg-white/90;
   }
 }
 
-.tabla-scroll {
-  overflow-x: auto;
+.font-mono2 {
+  @apply font-mono;
 }
 
-.sticky-col {
-  position: sticky;
-  left: 0;
-  background: #111;
-  z-index: 10;
+.font-raj {
+  @apply font-sans;
 }
 
-.sticky-col-2 {
-  position: sticky;
-  left: 80px;
-  background: #111;
-  z-index: 10;
+.text-muted {
+  @apply text-slate-950;
 }
 
-table {
-  border-collapse: separate;
-  border-spacing: 0;
-  min-width: 1200px;
+.text-rojo-bright {
+  color: var(--primary);
 }
 
-th,
-td {
-  border-bottom: 1px solid #333;
+.bg-g3 {
+  @apply bg-slate-50;
+}
+
+.border-borde {
+  @apply border-slate-200;
+}
+
+@keyframes titilar {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-titilar {
+  animation: titilar 1.5s ease-in-out infinite;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.band-top {
+  @apply h-1.5 w-full bg-gradient-to-r from-slate-900 via-red-600 to-slate-900;
+}
+
+.band-accent {
+  @apply h-0.5 w-full bg-red-600;
+}
+
+.panel-premium {
+  @apply bg-white border-l-4 border-red-600 rounded-r-2xl shadow-lg p-5;
+}
+
+/* ===== PRINT STYLES FOR LABELS (Etiquetas) ===== */
+@media print {
+
+  /* Hide everything except the print area */
+  body>*:not(.print-area),
+  nav,
+  header,
+  .no-print,
+  button,
+  input,
+  [class*="bg-[#0f0f0f]"],
+  [class*="animate-"] {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    background-image: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* The print area */
+  .print-area {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: white !important;
+  }
+
+  .print-area * {
+    visibility: visible !important;
+    color: black !important;
+  }
+
+  /* Label containers - proper sizing for print */
+  .label-price-container {
+    border: 1px solid #999 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: white !important;
+  }
+
+  .label-dispatch-container {
+    border: 2px solid black !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: white !important;
+  }
+
+  /* Ensure SVG barcodes are visible */
+  svg {
+    visibility: visible !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  @page {
+    margin: 5mm;
+  }
 }

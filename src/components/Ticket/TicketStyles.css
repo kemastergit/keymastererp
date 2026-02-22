@@ -1,0 +1,128 @@
+/* Estilos para impresión térmica 80mm */
+@media screen {
+    .ticket-container {
+        background: #fff;
+        color: #000;
+        padding: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        margin: 20px auto;
+    }
+}
+
+.ticket-container {
+    width: 280px;
+    /* ~72mm real printable area */
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    line-height: 1.2;
+    color: #000;
+    background: white;
+    padding: 5px;
+    margin: 0 auto;
+}
+
+.ticket-header {
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.ticket-title {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.ticket-divider {
+    border-top: 1px dashed #000;
+    margin: 5px 0;
+}
+
+.ticket-info {
+    margin-bottom: 5px;
+}
+
+.ticket-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.ticket-items-header {
+    font-weight: bold;
+    border-bottom: 1px solid #000;
+    margin-bottom: 3px;
+    padding-bottom: 2px;
+}
+
+.ticket-item {
+    margin-bottom: 5px;
+}
+
+.ticket-item-main {
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+}
+
+.ticket-item-sub {
+    display: flex;
+    justify-content: space-between;
+    padding-left: 5px;
+    font-size: 10px;
+}
+
+.ticket-totals {
+    margin-top: 5px;
+}
+
+.ticket-total-bs {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 3px;
+    border-top: 1px solid #000;
+    padding-top: 3px;
+}
+
+.ticket-footer {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 10px;
+}
+
+.watermark-copia {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 60px;
+    color: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 0;
+    white-space: nowrap;
+}
+
+@media print {
+    body.ticket-print-mode * {
+        visibility: hidden;
+    }
+
+    body.ticket-print-mode .ticket-container,
+    body.ticket-print-mode .ticket-container * {
+        visibility: visible;
+    }
+
+    body.ticket-print-mode .ticket-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    body.ticket-print-mode {
+        @page {
+            margin: 0;
+            size: 80mm auto;
+        }
+    }
+}
