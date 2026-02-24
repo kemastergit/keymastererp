@@ -62,14 +62,22 @@ export default function Dashboard() {
             d.setDate(d.getDate() - (14 - i))
             return d.toISOString().split('T')[0]
         })
-        const ventasHist = last15Days.map(date => ({
-            name: date.split('-')[2],
-            total: ventas.filter(v => new Date(v.fecha).toISOString().split('T')[0] === date).reduce((s, v) => s + v.total, 0),
-            qty: ventaItems.filter(i => {
-                const v = ventas.find(vx => vx.id === i.venta_id)
-                return v && new Date(v.fecha).toISOString().split('T')[0] === date
-            }).reduce((s, it) => s + (it.qty || 0), 0)
-        }))
+        const ventasHist = last15Days.map(date => {
+            const dayVentas = ventas.filter(v => new Date(v.fecha).toISOString().split('T')[0] === date && v.estado !== 'ANULADA')
+            const totalVenta = dayVentas.reduce((s, v) => s + v.total, 0)
+
+            // Calc daily profit based on items sold that day
+            const dailyVentaIds = dayVentas.map(v => v.id)
+            const dayItems = ventaItems.filter(i => dailyVentaIds.includes(i.venta_id))
+            const totalCosto = dayItems.reduce((s, i) => s + ((i.costo || 0) * (i.qty || 0)), 0)
+
+            return {
+                name: date.split('-')[2],
+                total: totalVenta,
+                profit: totalVenta - totalCosto,
+                qty: dayItems.reduce((s, it) => s + (it.qty || 0), 0)
+            }
+        })
 
         // 2. Composición de Ingresos
         const radialData = [
@@ -91,9 +99,14 @@ export default function Dashboard() {
             return { name: date.split('-')[2], ingresos: ing + vts, egresos: egr }
         })
 
+        const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
+        const totalCosto = ventaItems.reduce((s, i) => s + ((i.costo || 0) * (i.qty || 0)), 0)
+        const totalUtilidad = totalVentas - totalCosto
+
         return {
             ventasHist, radialData, stockMarcas, flujoData,
-            totalVentas: ventas.reduce((s, v) => s + v.total, 0),
+            totalVentas,
+            totalUtilidad,
             totalCobrar: cobrar.reduce((s, c) => s + c.monto, 0),
             stockTotal: articulos.reduce((s, a) => s + (a.stock || 0), 0),
             agotados: articulos.filter(a => (a.stock || 0) === 0).length,
@@ -117,9 +130,10 @@ export default function Dashboard() {
     )
 
     return (
-        <div className="space-y-4 pb-10">
+        <div className="space-y-4 pb-6 h-full overflow-y-auto custom-scroll pr-2 relative min-h-0">
             {/* KPIs */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                <KPI label="Utilidad Estimada" value={fmtUSD(data.totalUtilidad)} color={COLORS.green} icon="📈" />
                 <KPI label="Total Ventas" value={fmtUSD(data.totalVentas)} color={COLORS.primaryLight} icon="💰" onClick={() => navigate('/reportes')} />
                 <KPI label="Por Cobrar" value={fmtUSD(data.totalCobrar)} color={COLORS.primary} icon="⏳" onClick={() => navigate('/cobrar')} />
                 <KPI label="Stock Total" value={data.stockTotal} color={COLORS.primaryDark} icon="📦" onClick={() => navigate('/inventario')} />
@@ -132,6 +146,7 @@ export default function Dashboard() {
                     <div className="panel-title text-sm uppercase flex justify-between">
                         <span>Rendimiento (15 Días)</span>
                         <div className="flex gap-3 text-[9px] font-bold">
+                            <span style={{ color: COLORS.green }}>● GANANCIA $</span>
                             <span style={{ color: COLORS.primary }}>● VENTAS $</span>
                             <span style={{ color: COLORS.text }} className="opacity-40">● UNIDADES</span>
                         </div>
@@ -143,11 +158,16 @@ export default function Dashboard() {
                                     <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.2} />
                                     <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
                                 </linearGradient>
+                                <linearGradient id="gradVerde" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={COLORS.green} stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor={COLORS.green} stopOpacity={0} />
+                                </linearGradient>
                             </defs>
                             <XAxis dataKey="name" fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <YAxis fontSize={10} stroke={COLORS.muted} axisLine={false} tickLine={false} />
                             <Tooltip content={<CustomTooltip />} />
                             <Area type="monotone" dataKey="total" name="Venta $" stroke={COLORS.primaryLight} fill="url(#gradRojo)" strokeWidth={2} />
+                            <Area type="monotone" dataKey="profit" name="Ganancia $" stroke={COLORS.green} fill="url(#gradVerde)" strokeWidth={2} />
                             <Line type="monotone" dataKey="qty" name="Unidades" stroke={COLORS.text} strokeWidth={1} dot={{ r: 3, fill: COLORS.text }} opacity={0.3} />
                         </ComposedChart>
                     </ResponsiveContainer>

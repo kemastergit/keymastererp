@@ -16,10 +16,12 @@ import Admin from './pages/Admin'
 import Dashboard from './pages/Dashboard'
 import Planes from './pages/Planes'
 import Usuarios from './pages/Usuarios'
+import Auditoria from './pages/Auditoria'
 import Login from './pages/Login'
 import Protected from './components/Protected'
 import Config from './pages/Config'
 import Etiquetas from './pages/Etiquetas'
+import Ayuda from './pages/Ayuda'
 
 export const router = createBrowserRouter([
   {
@@ -44,10 +46,12 @@ export const router = createBrowserRouter([
       { path: 'cierre', element: <CierreDia /> },
       { path: 'reportes', element: <Reportes /> },
       { path: 'usuarios', element: <Usuarios /> },
+      { path: 'auditoria', element: <Auditoria /> },
       { path: 'admin', element: <Admin /> },
       { path: 'planes', element: <Planes /> },
       { path: 'config', element: <Config /> },
       { path: 'etiquetas', element: <Etiquetas /> },
+      { path: 'ayuda', element: <Ayuda /> },
     ]
   },
   {

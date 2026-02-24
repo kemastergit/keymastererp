@@ -5,7 +5,7 @@ import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
 
-const empty = { rif:'', nombre:'', direccion:'', ciudad:'', telefono:'', email:'', limite_credito:0, observaciones:'' }
+const empty = { rif: '', nombre: '', direccion: '', ciudad: '', telefono: '', email: '', limite_credito: 0, observaciones: '' }
 
 export default function Clientes() {
   const toast = useStore(s => s.toast)
@@ -18,9 +18,9 @@ export default function Clientes() {
   const clientes = useLiveQuery(
     () => busq.trim()
       ? db.clientes.filter(c =>
-          c.rif?.toLowerCase().includes(busq.toLowerCase()) ||
-          c.nombre?.toLowerCase().includes(busq.toLowerCase())
-        ).toArray()
+        c.rif?.toLowerCase().includes(busq.toLowerCase()) ||
+        c.nombre?.toLowerCase().includes(busq.toLowerCase())
+      ).toArray()
       : db.clientes.orderBy('nombre').toArray(),
     [busq], []
   )
@@ -32,10 +32,10 @@ export default function Clientes() {
   const save = async () => {
     if (!form.nombre.trim()) { toast('El nombre es requerido', 'warn'); return }
     if (editing) {
-      await db.clientes.update(editing, { ...form, limite_credito: parseFloat(form.limite_credito)||0 })
+      await db.clientes.update(editing, { ...form, limite_credito: parseFloat(form.limite_credito) || 0 })
       toast('Cliente actualizado')
     } else {
-      await db.clientes.add({ ...form, limite_credito: parseFloat(form.limite_credito)||0 })
+      await db.clientes.add({ ...form, limite_credito: parseFloat(form.limite_credito) || 0 })
       toast('Cliente agregado')
     }
     setShowModal(false)
@@ -48,14 +48,14 @@ export default function Clientes() {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 space-y-4">
       <div className="panel">
         <div className="flex items-center gap-2 mb-2">
-          <span className="panel-title flex-1" style={{margin:0,paddingBottom:0,border:'none'}}>FICHA DE CLIENTES</span>
+          <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>FICHA DE CLIENTES</span>
           <button className="btn btn-r btn-sm" onClick={openNew}>+ NUEVO</button>
         </div>
         <input className="inp mb-2" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
-        <div className="tabla-wrap tabla-scroll" style={{maxHeight:'60vh'}}>
+        <div className="tabla-wrap tabla-scroll">
           <table>
             <thead><tr>
               <th>RIF</th><th>NOMBRE</th><th>CIUDAD</th><th>TELÉFONO</th><th>EMAIL</th><th>LÍM. CRÉDITO $</th><th></th>

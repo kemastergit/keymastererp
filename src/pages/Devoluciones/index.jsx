@@ -4,6 +4,7 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD, fmtDate } from '../../utils/format'
 import Modal from '../../components/UI/Modal'
+import { logAction } from '../../utils/audit'
 
 export default function Devoluciones() {
   const toast = useStore(s => s.toast)
@@ -43,11 +44,20 @@ export default function Devoluciones() {
     if (devItems.length === 0) { toast('Selecciona al menos un producto', 'warn'); return }
     if (!motivo.trim()) { toast('Ingresa el motivo', 'warn'); return }
 
+    const currentUser = useStore.getState().currentUser
     const devId = await db.devoluciones.add({
       venta_id: ventaSel.id, nro_venta: ventaSel.nro,
       cliente: ventaSel.cliente, motivo, fecha: new Date(),
       total: devItems.reduce((s, i) => s + i.precio * i.qty, 0),
-      reingreso_stock: reingresarStock
+      reingreso_stock: reingresarStock,
+      usuario_id: currentUser?.id
+    })
+
+    logAction(currentUser, 'DEVOLUCION_PROCESADA', {
+      nota: ventaSel.nro,
+      cliente: ventaSel.cliente,
+      items: devItems.length,
+      reingreso: reingresarStock
     })
 
     for (const item of devItems) {
@@ -56,7 +66,16 @@ export default function Devoluciones() {
       // Devolver al stock solo si se seleccionó reingresar
       if (reingresarStock) {
         const art = await db.articulos.get(item.articulo_id)
-        if (art) await db.articulos.update(art.id, { stock: (art.stock || 0) + item.qty })
+        if (art) {
+          const oldStock = art.stock || 0
+          await db.articulos.update(art.id, { stock: oldStock + item.qty })
+          logAction(currentUser, 'REINGRESO_STOCK_DEVOLUCION', {
+            codigo: art.codigo,
+            cant: item.qty,
+            antes: oldStock,
+            despues: oldStock + item.qty
+          })
+        }
       }
     }
 
@@ -67,7 +86,7 @@ export default function Devoluciones() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div>
         <div className="panel p-0 overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-slate-50/50">

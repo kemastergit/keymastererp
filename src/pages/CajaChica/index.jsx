@@ -6,7 +6,7 @@ import { fmtUSD, fmtDate, today } from '../../utils/format'
 
 export default function CajaChica() {
   const toast = useStore(s => s.toast)
-  const [form, setForm] = useState({ concepto:'', tipo:'EGRESO', monto:'', fecha: today() })
+  const [form, setForm] = useState({ concepto: '', tipo: 'EGRESO', monto: '', fecha: today() })
   const [filtroFecha, setFiltroFecha] = useState(today())
 
   const movimientos = useLiveQuery(
@@ -14,15 +14,15 @@ export default function CajaChica() {
     [filtroFecha], []
   )
 
-  const ingresos = movimientos.filter(m => m.tipo === 'INGRESO').reduce((s,m) => s + m.monto, 0)
-  const egresos = movimientos.filter(m => m.tipo === 'EGRESO').reduce((s,m) => s + m.monto, 0)
+  const ingresos = movimientos.filter(m => m.tipo === 'INGRESO').reduce((s, m) => s + m.monto, 0)
+  const egresos = movimientos.filter(m => m.tipo === 'EGRESO').reduce((s, m) => s + m.monto, 0)
   const saldo = ingresos - egresos
 
   const save = async () => {
     if (!form.concepto.trim() || !form.monto) { toast('Completa todos los campos', 'warn'); return }
-    await db.caja_chica.add({ ...form, monto: parseFloat(form.monto)||0 })
+    await db.caja_chica.add({ ...form, monto: parseFloat(form.monto) || 0, created_at: new Date() })
     toast(`${form.tipo === 'INGRESO' ? '📥' : '📤'} Movimiento registrado`)
-    setForm(p => ({ ...p, concepto:'', monto:'' }))
+    setForm(p => ({ ...p, concepto: '', monto: '' }))
   }
 
   const del = async (id) => {
@@ -33,7 +33,7 @@ export default function CajaChica() {
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-3">
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-3">
 
       {/* Formulario */}
       <div>
@@ -46,7 +46,7 @@ export default function CajaChica() {
           <div className="field">
             <label>Tipo</label>
             <div className="flex gap-2">
-              {['INGRESO','EGRESO'].map(t => (
+              {['INGRESO', 'EGRESO'].map(t => (
                 <button key={t} onClick={() => f('tipo', t)}
                   className={`btn flex-1 ${form.tipo === t ? (t === 'INGRESO' ? 'btn-g' : 'btn-r') : 'btn-gr'}`}>
                   {t === 'INGRESO' ? '📥' : '📤'} {t}
@@ -89,12 +89,12 @@ export default function CajaChica() {
       <div>
         <div className="panel">
           <div className="flex items-center gap-2 mb-3">
-            <span className="panel-title flex-1" style={{margin:0,paddingBottom:0,border:'none'}}>MOVIMIENTOS</span>
-            <div className="field" style={{margin:0}}>
+            <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>MOVIMIENTOS</span>
+            <div className="field" style={{ margin: 0 }}>
               <input type="date" className="inp" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
             </div>
           </div>
-          <div className="tabla-wrap tabla-scroll" style={{maxHeight:'65vh'}}>
+          <div className="tabla-wrap tabla-scroll">
             <table>
               <thead><tr><th>TIPO</th><th>CONCEPTO</th><th>MONTO $</th><th></th></tr></thead>
               <tbody>

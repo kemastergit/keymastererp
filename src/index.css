@@ -18,6 +18,22 @@
 }
 
 @layer base {
+
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  #root {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   body {
     @apply text-slate-900 font-sans antialiased;
     -webkit-tap-highlight-color: transparent;
@@ -28,20 +44,20 @@
     background-attachment: fixed;
     min-height: 100vh;
   }
+}
 
-  /* Custom Scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
 
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-200 rounded-full;
-  }
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full;
 }
 
 @layer components {
@@ -229,8 +245,8 @@
 /* ===== PRINT STYLES FOR LABELS (Etiquetas) ===== */
 @media print {
 
-  /* Hide everything except the print area */
-  body>*:not(.print-area),
+  /* Hide everything except the print area and ticket */
+  body>*:not(.print-area):not(.ticket-container),
   nav,
   header,
   .no-print,

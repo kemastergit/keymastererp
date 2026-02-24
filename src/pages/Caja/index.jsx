@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { fmtUSD, fmtBS, fmtDate, today } from '../../utils/format'
 import useStore from '../../store/useStore'
+import { logAction } from '../../utils/audit'
 import { useReactToPrint } from 'react-to-print'
 import TicketCierre from '../../components/Ticket/TicketCierre'
 import { useRef } from 'react'
@@ -39,11 +40,18 @@ export default function Caja() {
 
     const abonos = useLiveQuery(async () => {
         if (!activeSession) return []
-        // Get abonos related to notes in this session or created during session time
         return await db.abonos.filter(a =>
             (activeSession.notas_del_dia || []).includes(a.cuenta_id) ||
             (new Date(a.fecha) >= new Date(activeSession.fecha_apertura))
         ).toArray()
+    }, [activeSession], [])
+
+    const cajaMovs = useLiveQuery(async () => {
+        if (!activeSession) return []
+        return await db.caja_chica.filter(m => {
+            const date = m.created_at ? new Date(m.created_at) : new Date(m.fecha + 'T00:00:00')
+            return date >= new Date(activeSession.fecha_apertura)
+        }).toArray()
     }, [activeSession], [])
 
     const handleAbrir = async () => {
@@ -59,6 +67,7 @@ export default function Caja() {
             estado: 'ABIERTA',
             notas_del_dia: []
         })
+        logAction(currentUser, 'APERTURA_CAJA', { id, inicial_usd: aperturaForm.usd })
         await loadSession()
         setShowApertura(false)
         toast('✅ Caja abierta correctamente')
@@ -86,6 +95,13 @@ export default function Caja() {
                 cierre_z: stats
             })
 
+            logAction(currentUser, 'CIERRE_CAJA_Z', {
+                id: activeSession.id,
+                esperado: stats.esperadoUsd,
+                fisico: cierreForm.usdFisico,
+                diferencia: diffUsd
+            })
+
             await loadSession()
             setIsZPrinting(true)
             setTimeout(() => handlePrint(), 500)
@@ -97,33 +113,37 @@ export default function Caja() {
     const getCorteStats = () => {
         if (!activeSession) return null
         const res = {
-            efectivoUsd: 0,
-            efectivoBs: 0,
-            pagoMovil: 0,
-            punto: 0,
-            zelle: 0,
-            otros: 0,
-            credito: 0,
+            efectivoUsd: 0, efectivoBs: 0, pagoMovil: 0, punto: 0, zelle: 0, otros: 0,
+            credito: 0, igtf: 0, egresosCC: 0, ingresosCC: 0,
+            cobranzaUsd: 0,
             totalNotas: notes.length,
             inicialUsd: activeSession.monto_inicial_usd,
             inicialBs: activeSession.monto_inicial_bs
         }
 
-        // Sumar abonos registrados en la sesión
-        abonos.forEach(a => {
+        res.igtf = notes.filter(n => n.estado !== 'ANULADA').reduce((s, n) => s + (n.igtf || 0), 0)
+
+        abonos.filter(a => a.estado !== 'ANULADA').forEach(a => {
             const m = a.monto
             if (a.metodo === 'EFECTIVO_USD') res.efectivoUsd += m
-            else if (a.metodo === 'EFECTIVO_BS') res.efectivoBs += (m * tasa) // if saved in USD
+            else if (a.metodo === 'EFECTIVO_BS') res.efectivoBs += (m * tasa)
             else if (a.metodo === 'PAGO_MOVIL') res.pagoMovil += (m * tasa)
             else if (a.metodo === 'PUNTO_VENTA') res.punto += (m * tasa)
             else if (a.metodo === 'ZELLE') res.zelle += m
             else res.otros += m
+
+            if (a.tipo_cuenta === 'COBRAR') {
+                res.cobranzaUsd += m
+            }
         })
 
-        // Créditos pendientes de esta sesión
-        res.credito = notes.filter(n => n.tipo_pago === 'CREDITO').reduce((s, n) => s + n.total, 0)
+        cajaMovs.forEach(m => {
+            if (m.tipo === 'EGRESO') res.egresosCC += m.monto
+            else res.ingresosCC += m.monto
+        })
 
-        res.esperadoUsd = res.inicialUsd + res.efectivoUsd + res.zelle + res.otros
+        res.credito = notes.filter(n => n.tipo_pago === 'CREDITO' && n.estado !== 'ANULADA').reduce((s, n) => s + n.total, 0)
+        res.esperadoUsd = res.inicialUsd + res.efectivoUsd + res.zelle + res.otros + res.ingresosCC - res.egresosCC
         res.esperadoBs = res.inicialBs + res.efectivoBs + res.pagoMovil + res.punto
 
         return res
@@ -133,7 +153,6 @@ export default function Caja() {
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
-            {/* Header Caja */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Gestión de Caja</h1>
@@ -173,7 +192,6 @@ export default function Caja() {
 
             {activeSession && stats && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 print:block">
-                    {/* Info Sesión */}
                     <div className="lg:col-span-4 space-y-4">
                         <div className="panel bg-primary text-white border-none shadow-amber-200/50 shadow-lg">
                             <div className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-4">Sesión en Curso</div>
@@ -213,7 +231,6 @@ export default function Caja() {
                         </div>
                     </div>
 
-                    {/* Resumen Ventas */}
                     <div className="lg:col-span-8 space-y-6">
                         <div className="panel">
                             <div className="flex justify-between items-center mb-6">
@@ -228,6 +245,10 @@ export default function Caja() {
                                 <MethodStat label="Punto de Venta" val={stats.punto} type="bs" />
                                 <MethodStat label="Zelle" val={stats.zelle} type="usd" />
                                 <MethodStat label="Ventas a Crédito" val={stats.credito} type="usd" color="text-amber-500" />
+                                <MethodStat label="Cobranzas de Cartera" val={stats.cobranzaUsd} type="usd" color="text-blue-500" />
+                                <MethodStat label="Recaudación IGTF (3%)" val={stats.igtf} type="usd" color="text-emerald-500" />
+                                <MethodStat label="Ingresos Extra (C.C.)" val={stats.ingresosCC} type="usd" color="text-green-500" />
+                                <MethodStat label="Egresos / Gastos (C.C.)" val={stats.egresosCC} type="usd" color="text-red-500" />
                             </div>
 
                             <div className="mt-10 pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -241,11 +262,50 @@ export default function Caja() {
                                 </div>
                             </div>
                         </div>
+
+                        <div className="panel">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="panel-title !m-0">Cobranzas de Cartera (Abonos)</h3>
+                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                    {abonos.filter(a => a.tipo_cuenta === 'COBRAR').length} registros
+                                </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-100">
+                                            <th className="py-2">Hora</th>
+                                            <th className="py-2">Método</th>
+                                            <th className="py-2 text-right">Monto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {abonos.filter(a => a.tipo_cuenta === 'COBRAR').map((a, idx) => (
+                                            <tr key={idx} className="text-[11px]">
+                                                <td className="py-2 text-slate-500 font-mono">
+                                                    {new Date(a.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </td>
+                                                <td className="py-2">
+                                                    <span className="badge badge-g !text-[8px] !px-1.5">{a.metodo}</span>
+                                                </td>
+                                                <td className="py-2 text-right font-bold text-slate-700">{fmtUSD(a.monto)}</td>
+                                            </tr>
+                                        ))}
+                                        {abonos.filter(a => a.tipo_cuenta === 'COBRAR').length === 0 && (
+                                            <tr>
+                                                <td colSpan="3" className="py-6 text-center text-slate-400 text-[10px] font-bold uppercase">
+                                                    No hay cobranzas registradas hoy
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* MODAL APERTURA */}
             {showApertura && (
                 <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95">
@@ -253,10 +313,6 @@ export default function Caja() {
                             <span className="material-icons-round text-amber-600 text-3xl">meeting_room</span>
                         </div>
                         <h2 className="text-xl font-black text-slate-800 mb-2 uppercase text-center tracking-tighter">Apertura de Caja</h2>
-                        <p className="text-slate-500 text-[11px] text-center mb-6 leading-relaxed">
-                            Registre el monto inicial y el cajero responsable para habilitar el sistema.
-                        </p>
-
                         <div className="space-y-4">
                             <div className="field">
                                 <label>Nombre del Cajero</label>
@@ -284,27 +340,24 @@ export default function Caja() {
                 </div>
             )}
 
-            {/* MODAL CORTE Z */}
             {showCorteZ && (
                 <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white p-6 rounded-3xl max-w-sm w-full shadow-2xl animate-in zoom-in-95">
                         <h2 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Corte Z — Cierre Definitivo</h2>
-                        <p className="text-slate-500 text-[11px] mb-6">
-                            Ingrese el monto físico contado en caja para calcular diferencias y cerrar la sesión.
-                        </p>
-
                         <div className="space-y-4">
                             <div className="field">
                                 <label>Monto Físico Contado ($)</label>
                                 <input type="number" className="inp !py-3 font-mono text-lg font-bold"
+                                    autoFocus
+                                    placeholder="0.00"
                                     value={cierreForm.usdFisico} onChange={e => setCierreForm({ ...cierreForm, usdFisico: e.target.value })} />
                             </div>
                             <div className="field">
                                 <label>Monto Físico Contado (Bs)</label>
                                 <input type="number" className="inp !py-3 font-mono text-lg font-bold"
+                                    placeholder="0.00"
                                     value={cierreForm.bsFisico} onChange={e => setCierreForm({ ...cierreForm, bsFisico: e.target.value })} />
                             </div>
-
                             <div className="flex gap-3 pt-4">
                                 <button className="btn btn-gr flex-1" onClick={() => setShowCorteZ(false)}>Cancelar</button>
                                 <button className="btn btn-r flex-1 font-black" onClick={handleCerrarZ}>CERRAR CAJA</button>
@@ -314,7 +367,6 @@ export default function Caja() {
                 </div>
             )}
 
-            {/* Ticket oculto para impresión */}
             <div style={{ display: 'none' }}>
                 <TicketCierre
                     ref={ticketRef}

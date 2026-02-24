@@ -4,6 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import TecladoPin from '../../components/TecladoPin'
+import { hashPin } from '../../utils/security'
+import { logAction } from '../../utils/audit'
 
 export default function Login() {
     const [selectedUser, setSelectedUser] = useState(null)
@@ -12,14 +14,30 @@ export default function Login() {
 
     const usuarios = useLiveQuery(() => db.usuarios.toArray())
 
-    const handleComplete = (pin) => {
-        if (selectedUser.pin === pin) {
+    const handleComplete = async (pin) => {
+        const hashedInput = await hashPin(pin)
+
+        // 1. Intentar comparar con Hash
+        if (selectedUser.pin === hashedInput) {
             toast(`✅ Bienvenido, ${selectedUser.nombre}`)
+            logAction(selectedUser, 'LOGIN_EXITOSO')
             login(selectedUser)
             window.location.assign('/')
-        } else {
-            toast('❌ PIN Incorrecto', 'error')
+            return
         }
+
+        // 2. Transición: Intentar comparar con texto plano (para usuarios existentes)
+        if (selectedUser.pin === pin) {
+            toast(`✅ Bienvenido, ${selectedUser.nombre}`)
+            logAction(selectedUser, 'LOGIN_EXITOSO_MIGRACION_HASH')
+            // Migrar PIN a Hash inmediatamente
+            await db.usuarios.update(selectedUser.id, { pin: hashedInput })
+            login({ ...selectedUser, pin: hashedInput })
+            window.location.assign('/')
+            return
+        }
+
+        toast('❌ PIN Incorrecto', 'error')
     }
 
     return (

@@ -9,6 +9,7 @@ import TicketTermico from '../../components/Ticket/TicketTermico'
 import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
+import { logAction } from '../../utils/audit'
 
 
 const primerDiaMes = () => {
@@ -35,8 +36,16 @@ export default function Reportes() {
   }
   const [selectedVenta, setSelectedVenta] = useState(null)
   const [showReimprimirModal, setShowReimprimirModal] = useState(false)
+  const [selectedCierre, setSelectedCierre] = useState(null)
+  const [showCierreModal, setShowCierreModal] = useState(false)
 
-  const { configEmpresa, loadConfigEmpresa, currentUser, btStatus, setBtStatus } = useStore()
+  // Estados Anulación
+  const [showAnularModal, setShowAnularModal] = useState(false)
+  const [ventaParaAnular, setVentaParaAnular] = useState(null)
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
+  const [pinAnulacion, setPinAnulacion] = useState('')
+
+  const { configEmpresa, loadConfigEmpresa, currentUser, btStatus, setBtStatus, toast } = useStore()
   const ticketRef = useRef()
 
   useEffect(() => {
@@ -46,11 +55,15 @@ export default function Reportes() {
   const handlePrintTicket = useReactToPrint({
     contentRef: ticketRef,
     documentTitle: `Reimpresion_${selectedVenta?.nro}`,
+    onAfterPrint: () => {
+      logAction(currentUser, 'REIMPRIMIR_TICKET', { nro: selectedVenta?.nro, metodo: 'RED/CABLE' })
+      setShowReimprimirModal(false)
+    }
   })
 
   const reimprimirVenta = async (venta) => {
     const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
-    const u = await db.usuarios.get(venta.usuario_id)
+    const u = venta.usuario_id ? await db.usuarios.get(venta.usuario_id) : null
 
     setSelectedVenta({
       ...venta,
@@ -60,13 +73,7 @@ export default function Reportes() {
     })
 
     setShowReimprimirModal(true)
-
-    // Auditoría
-    await db.auditoria.add({
-      fecha: new Date(),
-      usuario_id: currentUser?.id,
-      accion: `SOLICITUD REIMPRESIÓN TICKET #${venta.nro}`
-    })
+    logAction(currentUser, 'SOLICITUD_REIMPRESION', { nro: venta.nro })
   }
 
   const handlePrintBT = async () => {
@@ -80,11 +87,31 @@ export default function Reportes() {
       }
       toast('⏳ Enviando ticket...', 'info')
       await btPrinter.printVenta(selectedVenta, configEmpresa)
+      logAction(currentUser, 'REIMPRIMIR_TICKET', { nro: selectedVenta?.nro, metodo: 'BLUETOOTH' })
       toast('✅ Ticket enviado con éxito!', 'ok')
       setShowReimprimirModal(false)
     } catch (error) {
       setBtStatus('DISCONNECTED')
       toast('❌ Error: ' + (error.message || 'Fallo conexión'), 'error')
+    }
+  }
+
+  const handleAnular = async () => {
+    if (!motivoAnulacion.trim()) return toast('Debe ingresar un motivo', 'warn')
+    if (!pinAnulacion) return toast('Debe ingresar su PIN', 'warn')
+
+    const sup = await db.usuarios.where('pin').equals(pinAnulacion).first()
+    if (!sup || !['ADMIN', 'SUPERVISOR'].includes(sup.rol)) {
+      return toast('PIN de supervisor inválido', 'error')
+    }
+
+    const { anularVenta } = useStore.getState()
+    const ok = await anularVenta(ventaParaAnular.id, motivoAnulacion, sup)
+    if (ok) {
+      setShowAnularModal(false)
+      setVentaParaAnular(null)
+      setMotivoAnulacion('')
+      setPinAnulacion('')
     }
   }
 
@@ -102,7 +129,7 @@ export default function Reportes() {
   const abonos = useLiveQuery(() => db.abonos.toArray(), [], [])
   const cierres = useLiveQuery(() => db.sesiones_caja.where('estado').equals('CERRADA').toArray().then(arr => [...arr].reverse()), [], [])
 
-  const totalVentas = ventas.reduce((s, v) => s + (v.total || 0), 0)
+  const totalVentas = ventas.filter(v => v.estado !== 'ANULADA').reduce((s, v) => s + (v.total || 0), 0)
 
   const porCobrarTotal = ctas_cobrar.reduce((s, c) => {
     const pagos = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'COBRAR').reduce((sum, a) => sum + a.monto, 0)
@@ -114,7 +141,7 @@ export default function Reportes() {
     return s + (c.monto - pagos)
   }, 0)
 
-  const porTipo = ventas.reduce((acc, v) => {
+  const porTipo = ventas.filter(v => v.estado !== 'ANULADA').reduce((acc, v) => {
     acc[v.tipo_pago] = (acc[v.tipo_pago] || 0) + v.total
     return acc
   }, {})
@@ -145,6 +172,35 @@ export default function Reportes() {
     }
   }
 
+  const exportLibroVentas = () => {
+    const data = ventas.filter(v => v.estado !== 'ANULADA').map(v => {
+      const base = v.subtotal || (v.total / 1.16)
+      const iva = v.iva || (v.total - base)
+      return [
+        fmtDate(v.fecha),
+        `#${v.nro}`,
+        v.cliente || 'CONTADO',
+        'J-00000000-0', // Default RIF
+        fmtUSD(base),
+        fmtUSD(iva),
+        fmtUSD(v.igtf || 0),
+        fmtUSD(v.total)
+      ]
+    })
+    printReporte(`Libro de Ventas (${desde} a ${hasta})`,
+      ['FECHA', 'NOTA', 'CLIENTE', 'RIF', 'BASE', 'IVA (16%)', 'IGTF (3%)', 'TOTAL'],
+      data,
+      { 'TOTAL VENTAS $': fmtUSD(totalVentas) }
+    )
+  }
+
+  const sendWhatsappStatement = (c) => {
+    const pagos = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'COBRAR').reduce((sum, a) => sum + a.monto, 0)
+    const pendiente = c.monto - pagos
+    const text = encodeURIComponent(`*ESTADO DE CUENTA - KEMASTER*\n\nHola ${c.cliente}, le saludamos de Automotores Guaicaipuro.\n\nLe informamos que mantiene una deuda pendiente por un valor de *${fmtUSD(pendiente)}*.\n\nVencimiento: ${fmtDate(c.vencimiento)}\n\nPor favor, contacte con nosotros para coordinar su pago. ¡Gracias!`)
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
   const Stat = ({ label, value, sub, color = 'text-primary' }) => (
     <div className="panel flex flex-col justify-center border-l-4" style={{ borderColor: 'var(--primary)' }}>
       <div className="text-[10px] text-slate-400 tracking-widest uppercase mb-1 font-bold">{label}</div>
@@ -154,7 +210,7 @@ export default function Reportes() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 h-full overflow-y-auto custom-scroll pr-2 pb-6">
       {/* Filtros fecha */}
       <div className="panel flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap gap-3 items-end">
@@ -167,10 +223,18 @@ export default function Reportes() {
             <input type="date" className="inp !py-2 !px-3 w-40" value={hasta} onChange={e => setHasta(e.target.value)} />
           </div>
         </div>
-        <button onClick={handlePrint} className="btn btn-r w-full sm:w-auto">
-          <span className="material-icons-round text-base">print</span>
-          <span>Imprimir Reporte</span>
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          {tab === 'ventas' && (
+            <button onClick={exportLibroVentas} className="btn bg-blue-600 text-white w-full sm:w-auto">
+              <span className="material-icons-round text-base">file_download</span>
+              <span>Libro de Ventas</span>
+            </button>
+          )}
+          <button onClick={handlePrint} className="btn btn-r w-full sm:w-auto">
+            <span className="material-icons-round text-base">print</span>
+            <span>Imprimir Reporte</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats globales */}
@@ -215,7 +279,9 @@ export default function Reportes() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-mono text-primary font-bold text-sm">#{v.nro}</span>
-                        <span className={`badge ${v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>{v.tipo_pago}</span>
+                        <span className={`badge ${v.estado === 'ANULADA' ? 'badge-r' : v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>
+                          {v.estado === 'ANULADA' ? 'ANULADA' : v.tipo_pago}
+                        </span>
                       </div>
                       <p className="font-bold text-slate-700 text-sm">{v.cliente}</p>
                       <p className="text-[10px] text-slate-400">{fmtDate(v.fecha)}</p>
@@ -239,10 +305,17 @@ export default function Reportes() {
                       <td className="font-mono text-primary font-bold">#{v.nro}</td>
                       <td className="text-[11px] text-slate-500">{fmtDate(v.fecha)}</td>
                       <td className="font-bold text-slate-700">{v.cliente}</td>
-                      <td><span className={`badge ${v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>{v.tipo_pago}</span></td>
+                      <td>
+                        <span className={`badge ${v.estado === 'ANULADA' ? 'badge-r' : v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>
+                          {v.estado === 'ANULADA' ? 'ANULADA' : v.tipo_pago}
+                        </span>
+                      </td>
                       <td className="font-mono text-slate-800 text-right font-bold">{fmtUSD(v.total)}</td>
-                      <td className="text-right">
+                      <td className="text-right flex gap-1 justify-end">
                         <button onClick={() => reimprimirVenta(v)} className="bg-slate-100 hover:bg-zinc-200 text-zinc-600 px-2 py-1 rounded text-[9px] font-black tracking-tighter transition shadow-sm">🖨️ REIMPRIMIR</button>
+                        {v.estado !== 'ANULADA' && ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) && (
+                          <button onClick={() => { setVentaParaAnular(v); setShowAnularModal(true) }} className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded text-[9px] font-black tracking-tighter transition shadow-sm">🚫 ANULAR</button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -398,7 +471,12 @@ export default function Reportes() {
                         <td className="font-mono text-slate-400 text-xs text-right">{fmtUSD(c.monto)}</td>
                         <td className="font-mono text-slate-800 font-bold text-right">{fmtUSD(pendiente)}</td>
                         <td className="text-slate-500 text-[11px] font-bold">{fmtDate(c.vencimiento)}</td>
-                        <td className="text-right"><span className={`badge ${pendiente <= 0 ? 'badge-g' : dias < 0 ? 'badge-r' : 'badge-y'}`}>{pendiente <= 0 ? 'COBRADA' : dias < 0 ? 'VENCIDA' : c.estado}</span></td>
+                        <td className="text-right flex justify-end gap-1">
+                          <button onClick={() => sendWhatsappStatement(c)} className="bg-green-50 text-green-600 p-1.5 rounded-lg hover:bg-green-100 flex items-center gap-1 text-[10px] font-bold">
+                            📲 WHATSAPP
+                          </button>
+                          <span className={`badge ${pendiente <= 0 ? 'badge-g' : dias < 0 ? 'badge-r' : 'badge-y'}`}>{pendiente <= 0 ? 'COBRADA' : dias < 0 ? 'VENCIDA' : c.estado}</span>
+                        </td>
                       </tr>
                     )
                   })}
@@ -487,7 +565,7 @@ export default function Reportes() {
                       <div className={`font-mono text-[10px] font-bold ${c.diferencia_usd < -0.01 ? 'text-red-500' : c.diferencia_usd > 0.01 ? 'text-green-600' : 'text-slate-400'}`}>
                         Dif: {fmtUSD(c.diferencia_usd)}
                       </div>
-                      <button className="btn btn-gr !py-1 !px-2 text-[9px] mt-1" onClick={() => alert(JSON.stringify(c.cierre_z, null, 2))}>VER</button>
+                      <button className="btn btn-gr !py-1 !px-2 text-[9px] mt-1" onClick={() => { setSelectedCierre(c); setShowCierreModal(true) }}>VER DETALLE</button>
                     </div>
                   </div>
                 </div>
@@ -507,7 +585,7 @@ export default function Reportes() {
                       <td className="font-mono text-slate-800 font-bold text-right">{fmtUSD(c.cierre_z?.esperadoUsd || 0)}</td>
                       <td className="font-mono text-slate-800 font-bold text-right">Bs {(c.cierre_z?.esperadoBs || 0).toFixed(2)}</td>
                       <td className={`font-mono font-bold text-right ${c.diferencia_usd < -0.01 ? 'text-red-500' : c.diferencia_usd > 0.01 ? 'text-green-600' : 'text-slate-400'}`}>{fmtUSD(c.diferencia_usd)}</td>
-                      <td className="text-right"><button className="btn btn-gr !py-1 !px-3 text-[10px]" onClick={() => alert(JSON.stringify(c.cierre_z, null, 2))}>VER</button></td>
+                      <td className="text-right"><button className="btn btn-gr !py-1 !px-3 text-[10px]" onClick={() => { setSelectedCierre(c); setShowCierreModal(true) }}>VER DETALLE</button></td>
                     </tr>
                   ))}
                   {cierres.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">No hay cierres registrados</td></tr>}
@@ -546,17 +624,114 @@ export default function Reportes() {
         </div>
       </Modal>
 
-      {/* Ticket oculto para react-to-print (aunque ahora lo mostramos en el modal, react-to-print necesita el ref asignado) */}
-      <div style={{ display: 'none' }}>
-        {selectedVenta && (
-          <TicketTermico
-            ref={ticketRef}
-            nota={selectedVenta}
-            config={configEmpresa}
-            isCopia={true}
-          />
+      {/* Modal Detalle de Cierre */}
+      <Modal open={showCierreModal} onClose={() => setShowCierreModal(false)} title="RESUMEN DE CIERRE DE CAJA">
+        {selectedCierre && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Cajero</p>
+                  <p className="text-sm font-bold text-slate-800">{selectedCierre.usuario}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Fecha</p>
+                  <p className="text-sm font-bold text-slate-800">{fmtDate(selectedCierre.fecha_apertura)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-primary uppercase tracking-widest px-1">Desglose de Operaciones</p>
+              <div className="panel bg-white space-y-3">
+                <CierreRow label="Inicial en Caja ($)" val={selectedCierre.monto_inicial_usd} />
+                <CierreRow label="Efectivo Recibido ($)" val={selectedCierre.cierre_z?.efectivoUsd} />
+                <CierreRow label="Zelle / Otros ($)" val={(selectedCierre.cierre_z?.zelle || 0) + (selectedCierre.cierre_z?.otros || 0)} />
+                <CierreRow label="Ingresos Extra C.C. ($)" val={selectedCierre.cierre_z?.ingresosCC || 0} />
+                <CierreRow label="Egresos / Gastos C.C. ($)" val={-(selectedCierre.cierre_z?.egresosCC || 0)} />
+                <div className="pt-2 border-t border-slate-100 flex justify-between">
+                  <span className="text-xs font-black text-slate-800">TOTAL ESPERADO ($)</span>
+                  <span className="text-sm font-mono font-black text-green-600">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd)}</span>
+                </div>
+              </div>
+
+              <div className="panel bg-white space-y-3">
+                <CierreRow label="Inicial en Caja (Bs)" val={selectedCierre.monto_inicial_bs} isBs />
+                <CierreRow label="Efectivo Recibido (Bs)" val={selectedCierre.cierre_z?.efectivoBs} isBs />
+                <CierreRow label="Pago Móvil / Punto (Bs)" val={(selectedCierre.cierre_z?.pagoMovil || 0) + (selectedCierre.cierre_z?.punto || 0)} isBs />
+                <div className="pt-2 border-t border-slate-100 flex justify-between">
+                  <span className="text-xs font-black text-slate-800">TOTAL ESPERADO (BS)</span>
+                  <span className="text-sm font-mono font-black text-blue-600">Bs {(selectedCierre.cierre_z?.esperadoBs || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-black text-amber-800 uppercase">Contado Físico</span>
+                  <span className="text-sm font-mono font-black text-amber-900">{fmtUSD(selectedCierre.monto_fisico_usd)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-amber-200/50 mt-1">
+                  <span className="text-[10px] font-black text-amber-800 uppercase">Diferencia Final</span>
+                  <span className={`text-sm font-mono font-black ${selectedCierre.diferencia_usd < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    {fmtUSD(selectedCierre.diferencia_usd)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button className="btn btn-gr w-full py-4 font-black" onClick={() => setShowCierreModal(false)}>
+              CERRAR VISTA
+            </button>
+          </div>
         )}
-      </div>
-    </div >
+      </Modal>
+
+      {/* Modal Anulación */}
+      <Modal open={showAnularModal} onClose={() => setShowAnularModal(false)} title="Anular Venta">
+        <div className="space-y-4">
+          <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+            <p className="text-[10px] text-red-600 font-bold uppercase mb-1">Atención</p>
+            <p className="text-xs text-red-800">
+              Está por anular la nota <strong>#{ventaParaAnular?.nro}</strong>. Esta acción devolverá los productos al stock y cancelará deudas pendientes.
+            </p>
+          </div>
+
+          <div className="field">
+            <label>Motivo de Anulación</label>
+            <textarea className="inp w-full !py-2 h-20 resize-none text-xs"
+              placeholder="Ej: Error en precio, El cliente ya no lo quiere..."
+              value={motivoAnulacion}
+              onChange={e => setMotivoAnulacion(e.target.value)}
+            />
+          </div>
+
+          <div className="field">
+            <label>PIN de Autorización (Admin/Supervisor)</label>
+            <input type="password"
+              className="inp w-full !py-3 text-center font-mono text-xl tracking-[1em]"
+              maxLength={4}
+              placeholder="****"
+              value={pinAnulacion}
+              onChange={e => setPinAnulacion(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button className="btn btn-gr flex-1" onClick={() => setShowAnularModal(false)}>Cancelar</button>
+            <button className="btn bg-red-600 text-white flex-1 font-black" onClick={handleAnular}>CONFIRMAR ANULACIÓN</button>
+          </div>
+        </div>
+      </Modal>
+
+    </div>
+  )
+}
+
+function CierreRow({ label, val, isBs }) {
+  return (
+    <div className="flex justify-between items-center text-[11px]">
+      <span className="text-slate-500 font-bold uppercase">{label}</span>
+      <span className="font-mono text-slate-800 font-bold">{isBs ? `Bs ${(val || 0).toFixed(2)}` : fmtUSD(val || 0)}</span>
+    </div>
   )
 }

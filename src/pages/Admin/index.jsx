@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { db, setConfig } from '../../db/db'
 import useStore from '../../store/useStore'
+import { signData, verifyData } from '../../utils/security'
+import { logAction } from '../../utils/audit'
 
 export default function Admin() {
   const toast = useStore(s => s.toast)
@@ -8,7 +10,7 @@ export default function Admin() {
   const [confirm2, setConfirm2] = useState(false)
 
   const exportDB = async () => {
-    const data = {
+    const rawData = {
       articulos: await db.articulos.toArray(),
       clientes: await db.clientes.toArray(),
       proveedores: await db.proveedores.toArray(),
@@ -21,14 +23,23 @@ export default function Admin() {
       devoluciones: await db.devoluciones.toArray(),
       caja_chica: await db.caja_chica.toArray(),
       cierre_dia: await db.cierre_dia.toArray(),
+      usuarios: await db.usuarios.toArray(),
       exported_at: new Date().toISOString(),
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+
+    const signature = await signData(rawData)
+    const finalBackup = { data: rawData, signature }
+
+    const blob = new Blob([JSON.stringify(finalBackup, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
+    const currentUser = useStore.getState().currentUser
+
     a.href = URL.createObjectURL(blob)
-    a.download = `guaicaipuro_backup_${new Date().toISOString().split('T')[0]}.json`
+    a.download = `kemaster_backup_${new Date().toISOString().split('T')[0]}.json`
     a.click()
-    toast('✅ Backup exportado correctamente')
+
+    logAction(currentUser, 'BACKUP_EXPORTADO', { total_articulos: rawData.articulos.length })
+    toast('✅ Backup firmado y exportado correctamente')
   }
 
   const importDB = () => {
@@ -37,12 +48,30 @@ export default function Admin() {
     inp.onchange = async e => {
       try {
         const text = await e.target.files[0].text()
-        const data = JSON.parse(text)
+        const package_ = JSON.parse(text)
+
+        // Validar Firma Digital
+        if (!package_.signature || !package_.data) {
+          toast('❌ El archivo no tiene el formato de KEMASTER', 'error')
+          return
+        }
+
+        const isValid = await verifyData(package_.data, package_.signature)
+        if (!isValid) {
+          toast('🚫 ALERTA: La firma digital no coincide. El archivo fue modificado manualmente o es de otra versión.', 'error')
+          const currentUser = useStore.getState().currentUser
+          logAction(currentUser, 'INTENTO_IMPORTACION_FALLIDO', { motivo: 'FIRMA_INVALIDA' })
+          return
+        }
+
+        const data = package_.data
+        const currentUser = useStore.getState().currentUser
+
         // Limpiar y restaurar
         await db.transaction('rw',
           [db.articulos, db.clientes, db.proveedores, db.ventas, db.venta_items,
           db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
-          db.devoluciones, db.caja_chica, db.cierre_dia],
+          db.devoluciones, db.caja_chica, db.cierre_dia, db.usuarios],
           async () => {
             await db.articulos.clear(); if (data.articulos) await db.articulos.bulkAdd(data.articulos)
             await db.clientes.clear(); if (data.clientes) await db.clientes.bulkAdd(data.clientes)
@@ -56,8 +85,11 @@ export default function Admin() {
             await db.devoluciones.clear(); if (data.devoluciones) await db.devoluciones.bulkAdd(data.devoluciones)
             await db.caja_chica.clear(); if (data.caja_chica) await db.caja_chica.bulkAdd(data.caja_chica)
             await db.cierre_dia.clear(); if (data.cierre_dia) await db.cierre_dia.bulkAdd(data.cierre_dia)
+            await db.usuarios.clear(); if (data.usuarios) await db.usuarios.bulkAdd(data.usuarios)
           }
         )
+
+        logAction(currentUser, 'BACKUP_RESTAURADO', { total_articulos: data.articulos?.length })
         toast('✅ Backup restaurado correctamente')
         setTimeout(() => location.reload(), 1500)
       } catch (err) {
@@ -103,7 +135,7 @@ export default function Admin() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-4 h-full overflow-y-auto custom-scroll pr-2 pb-10">
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
         <span className="material-icons-round text-amber-500 text-2xl">security</span>
         <div>
@@ -198,11 +230,28 @@ export default function Admin() {
                     unidad: String(a.unidad || 'UNI'),
                     stock: parseFloat(a.stock || a.existencia || 0) || 0,
                     precio: parseFloat(a.precio || a.venta || 0) || 0,
-                    costo: parseFloat(a.costo || 0) || 0
+                    costo: parseFloat(a.costo || 0) || 0,
+                    ubicacion: String(a.ubicacion || '')
                   })).filter(a => a.codigo && a.descripcion)
 
-                  await db.articulos.bulkPut(formatted)
-                  toast(`✅ ¡Éxito! Se cargaron ${formatted.length} artículos al inventario.`)
+                  const currentUser = useStore.getState().currentUser
+                  // Logica Anti-Duplicados: Obtener todos los artículos actuales para comparar
+                  const existingItems = await db.articulos.toArray()
+                  const codeMap = new Map(existingItems.map(item => [item.codigo, item.id]))
+
+                  const finalItems = formatted.map(item => {
+                    if (codeMap.has(item.codigo)) {
+                      return { ...item, id: codeMap.get(item.codigo) }
+                    }
+                    return item
+                  })
+
+                  await db.articulos.bulkPut(finalItems)
+                  const updates = finalItems.filter(i => i.id).length
+                  const news = finalItems.length - updates
+
+                  logAction(currentUser, 'IMPORTACION_MASIVA', { nuevos: news, actualizados: updates })
+                  toast(`✅ ¡Carga Exitosa! ${news} nuevos y ${updates} actualizados.`)
                   e.target.value = '' // Clear input
                 } catch (err) {
                   toast('❌ Error al procesar el archivo. Revisa el formato.', 'error')
@@ -223,20 +272,20 @@ export default function Admin() {
           </button>
 
           <div className="w-full flex justify-center mt-2">
-            <a href="#" className="text-[10px] text-blue-500 hover:underline font-bold uppercase tracking-widest"
+            <a href="#" className="text-[10px] text-blue-500 hover:underline font-bold uppercase tracking-widest flex items-center gap-1"
               onClick={(e) => {
                 e.preventDefault()
-                const template = [
-                  { codigo: '001', descripcion: 'PRODUCTO EJEMPLO', precio: 10, stock: 100, costo: 5, marca: 'GENERICA', departamento: 'GENERAL' }
-                ]
-                const json = JSON.stringify(template, null, 2)
-                const blob = new Blob([json], { type: 'application/json' })
+                const headers = "codigo,referencia,descripcion,marca,departamento,sub_depto,proveedor,unidad,stock,precio,costo,ubicacion"
+                const example = "759123456,REF-001,PASTILLAS DE FRENO DELANTERO,TOYOTA,REPUESTOS,FRENOS,PROVEEDOR A,UNI,10,25.50,15.00,PASILLO A-1"
+                const csvContent = headers + "\n" + example
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
                 const a = document.createElement('a')
                 a.href = URL.createObjectURL(blob)
-                a.download = 'formato_importacion.json'
+                a.download = 'formato_inventario_kemaster.csv'
                 a.click()
               }}>
-              DESCARGAR FORMATO DE EJEMPLO
+              <span className="material-icons-round text-xs">download_for_offline</span>
+              DESCARGAR PLANTILLA EXCEL (CSV)
             </a>
           </div>
         </div>
@@ -271,7 +320,7 @@ export default function Admin() {
         <div className="grid grid-cols-2 gap-y-2 gap-x-4">
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Sistema</span>
-            <span className="text-xs font-bold text-slate-700">KeClick POS / Guaicaipuro</span>
+            <span className="text-xs font-bold text-slate-700">KEMASTER / Guaicaipuro</span>
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Versión</span>

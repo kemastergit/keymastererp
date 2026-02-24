@@ -55,7 +55,7 @@ export default function ConfigPage() {
     if (!formData) return <div className="p-8 text-white">Cargando...</div>
 
     return (
-        <div className="p-4 md:p-8 max-w-4xl mx-auto animate-fade-in pb-24">
+        <div className="p-4 md:p-8 max-w-4xl mx-auto animate-fade-in pb-24 h-full overflow-y-auto custom-scroll pr-2 relative min-h-0">
             <header className="mb-8">
                 <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
                     <span className="text-primary">⚙️</span> CONFIGURACIÓN DE EMPRESA
@@ -199,6 +199,38 @@ export default function ConfigPage() {
                                         value={formData.porcentaje_iva}
                                         onChange={handleChange}
                                         className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-red-600 outline-none"
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between p-3 bg-black border border-gray-900 rounded-lg">
+                                <div>
+                                    <div className="text-emerald-500 font-bold flex items-center gap-2">
+                                        <span className="material-icons-round text-sm">payments</span>
+                                        Aplicar IGTF (3%)
+                                    </div>
+                                    <div className="text-xs text-gray-500">Impuesto a pagos en divisas / efectivo USD</div>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    name="aplicar_igtf"
+                                    checked={formData.aplicar_igtf}
+                                    onChange={handleChange}
+                                    className="w-6 h-6 accent-emerald-500 cursor-pointer"
+                                />
+                            </div>
+
+                            {formData.aplicar_igtf && (
+                                <div className="p-3 bg-black border border-gray-900 rounded-lg">
+                                    <label className="block text-xs uppercase font-bold text-gray-500 mb-1">Porcentaje IGTF (%)</label>
+                                    <input
+                                        type="number"
+                                        name="porcentaje_igtf"
+                                        value={formData.porcentaje_igtf}
+                                        onChange={handleChange}
+                                        className="w-full bg-black border border-gray-800 rounded p-2 text-white focus:border-emerald-500 outline-none font-mono"
                                         min="0"
                                         step="0.01"
                                     />

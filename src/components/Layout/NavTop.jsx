@@ -52,9 +52,11 @@ const menu = [
     ico: 'settings',
     sub: [
       { label: 'Gestión de Usuarios', to: '/usuarios', ico: 'manage_accounts', perm: 'CREAR_USUARIOS' },
+      { label: 'Auditoría de Acciones', to: '/auditoria', ico: 'history_edu', perm: 'CONFIGURACION' },
       { label: 'Configuración Empresa', to: '/config', ico: 'business', perm: 'CONFIGURACION' },
       { label: 'Seguridad Sistema', to: '/admin', ico: 'admin_panel_settings', perm: 'CONFIGURACION' },
       { label: 'Planes y Soporte', to: '/planes', ico: 'help_outline' },
+      { label: 'Centro de Ayuda', to: '/ayuda', ico: 'quiz' },
     ]
   }
 ]
@@ -96,7 +98,8 @@ function NavDropdown({ item, isOpen, onToggle }) {
 
       {/* Dropdown panel */}
       <div
-        className={`absolute top-full left-0 w-60 bg-white border border-slate-200 shadow-2xl rounded-b-2xl overflow-hidden z-[500] transition-all duration-200 origin-top
+        className={`absolute top-full w-60 bg-white border border-slate-200 shadow-2xl rounded-b-2xl overflow-hidden z-[500] transition-all duration-200 origin-top
+          ${(item.label === 'Sistema' || item.label === 'Reportes') ? 'left-auto right-0' : 'left-0'}
           ${isOpen
             ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none'
@@ -171,10 +174,9 @@ export default function NavTop() {
   return (
     <nav
       ref={navRef}
-      className={`bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 transition-all duration-300
-        ${openIndex !== null ? 'overflow-visible' : 'overflow-x-auto no-scrollbar scroll-smooth'}`}
+      className="bg-white/95 backdrop-blur-md border-b border-slate-100 transition-all duration-300 z-50 overflow-visible"
     >
-      <div className="flex max-w-[1600px] mx-auto w-full gap-1 flex-nowrap py-1">
+      <div className="flex max-w-[1600px] mx-auto w-full gap-x-1 gap-y-0.5 flex-wrap px-4 py-1 justify-center no-scrollbar overflow-visible">
         {filteredMenu.map((m, i) =>
           m.sub ? (
             <NavDropdown
@@ -202,10 +204,10 @@ export default function NavTop() {
           flex-direction: column;
           align-items: center;
           gap: 4px;
-          padding: 8px 16px;
-          font-size: 10px;
+          padding: 6px 10px;
+          font-size: 9px;
           font-weight: 700;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.05em;
           text-transform: uppercase;
           white-space: nowrap;
           border-bottom: 3px solid transparent;
@@ -219,6 +221,13 @@ export default function NavTop() {
           outline: none;
           text-decoration: none;
           position: relative;
+        }
+        @media (min-width: 768px) {
+          .nav-item {
+            padding: 8px 16px;
+            font-size: 10px;
+            gap: 4px;
+          }
         }
         .nav-item:hover {
           color: var(--primary);

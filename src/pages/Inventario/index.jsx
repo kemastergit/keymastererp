@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD } from '../../utils/format'
+import { logAction } from '../../utils/audit'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
 
@@ -63,18 +64,24 @@ export default function Inventario() {
     if (!form.codigo.trim() || !form.descripcion.trim()) {
       toast('Código y descripción son requeridos', 'warn'); return
     }
+    const currentUser = useStore.getState().currentUser
     if (editing) {
       await db.articulos.update(editing, { ...form, precio: parseFloat(form.precio) || 0, stock: parseInt(form.stock) || 0 })
+      logAction(currentUser, 'PRODUCTO_ACTUALIZADO', { codigo: form.codigo, descripcion: form.descripcion })
       toast('Producto actualizado')
     } else {
       await db.articulos.add({ ...form, precio: parseFloat(form.precio) || 0, stock: parseInt(form.stock) || 0 })
+      logAction(currentUser, 'PRODUCTO_CREADO', { codigo: form.codigo, descripcion: form.descripcion })
       toast('Producto agregado')
     }
     setShowModal(false)
   }
 
   const del = async () => {
+    const art = await db.articulos.get(delId)
+    const currentUser = useStore.getState().currentUser
     await db.articulos.delete(delId)
+    logAction(currentUser, 'PRODUCTO_ELIMINADO', { codigo: art?.codigo, descripcion: art?.descripcion })
     toast('Producto eliminado', 'warn')
     setDelId(null)
   }
@@ -85,7 +92,17 @@ export default function Inventario() {
     if (qty === 0) { toast('Cantidad no puede ser 0', 'warn'); return }
     const art = await db.articulos.get(ajuste.id)
     const newStock = Math.max(0, (art.stock || 0) + qty)
+    const currentUser = useStore.getState().currentUser
+
     await db.articulos.update(ajuste.id, { stock: newStock })
+    logAction(currentUser, 'AJUSTE_STOCK_MANUAL', {
+      codigo: art.codigo,
+      motivo: ajuste.motivo,
+      antes: art.stock,
+      ajuste: qty,
+      despues: newStock
+    })
+
     toast(`Stock ajustado: ${art.stock} → ${newStock}`)
     setAjuste(null)
   }
@@ -94,9 +111,9 @@ export default function Inventario() {
   const val = (v) => v && v.trim() !== '' ? v : <span className="text-slate-200">—</span>
 
   return (
-    <div className="space-y-4">
-      <div className="panel p-0 overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="h-full flex flex-col min-h-0 pb-6 relative">
+      <div className="panel p-0 flex flex-col min-h-0 flex-1 relative">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
           <div>
             <div className="panel-title mb-0 uppercase tracking-tighter">Maestro de Inventario</div>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{articulos.length} productos registrados</p>
@@ -115,7 +132,7 @@ export default function Inventario() {
           </div>
         </div>
 
-        <div className="px-4 py-3 bg-white border-b border-slate-50">
+        <div className="px-4 py-3 bg-white border-b border-slate-50 shrink-0">
           <div className="field !m-0">
             <input className="inp !py-2.5 !px-5 !bg-slate-50 !rounded-full text-sm"
               placeholder="🔍 Buscar por código, descripción o marca..."
@@ -124,7 +141,7 @@ export default function Inventario() {
         </div>
 
         {/* ─── MOBILE: Card View ─── */}
-        <div className="block md:hidden divide-y divide-slate-100" style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+        <div className="block md:hidden divide-y divide-slate-100 flex-1 min-h-0 overflow-y-auto custom-scroll">
           {articulos.map(a => (
             <div key={a.id} className="p-4 hover:bg-slate-50/80 transition-colors active:bg-slate-100" onClick={() => openEdit(a)}>
               <div className="flex items-start justify-between gap-3">
@@ -168,7 +185,7 @@ export default function Inventario() {
         </div>
 
         {/* ─── DESKTOP: Table View ─── */}
-        <div className="hidden md:block overflow-x-auto custom-scroll" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+        <div className="hidden md:block flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scroll">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50">

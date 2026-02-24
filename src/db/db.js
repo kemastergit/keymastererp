@@ -71,7 +71,9 @@ db.on('ready', async () => {
       auto_imprimir: false,
       copias_ticket: 1,
       moneda_principal: 'USD',
-      papel_bt: '58mm'
+      papel_bt: '58mm',
+      aplicar_igtf: false,
+      porcentaje_igtf: 3
     })
   }
 

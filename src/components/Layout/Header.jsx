@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { logAction } from '../../utils/audit'
 import useStore from '../../store/useStore'
 
 export default function Header() {
@@ -7,7 +8,10 @@ export default function Header() {
   useEffect(() => { loadTasa(); loadSession() }, [])
 
   const handleLogout = () => {
-    if (confirm('¿Cerrar sesión de KeClick POS?')) logout()
+    if (confirm('¿Cerrar sesión de KEMASTER?')) {
+      logAction(currentUser, 'LOGOUT')
+      logout()
+    }
   }
 
   return (
@@ -18,16 +22,17 @@ export default function Header() {
       <div className="px-4 py-4 flex items-center justify-between gap-4 max-w-[1600px] mx-auto">
         <div className="flex items-center gap-6 min-w-0">
           <div className="flex items-center gap-3 group cursor-pointer">
-            <div className="w-12 h-12 flex-shrink-0 bg-white p-1 flex items-center justify-center rounded-2xl shadow-lg border border-slate-800 transition-transform group-hover:scale-105">
-              <img src="/logoguaicaipuro.jpeg" alt="Logo" className="w-full h-full object-contain" />
+            <div className="w-12 h-12 flex-shrink-0 bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center rounded-2xl shadow-xl border border-red-500/20 transition-all group-hover:scale-110 group-hover:shadow-red-600/20 group-hover:rotate-3">
+              <span className="font-bebas text-2xl text-white tracking-tighter">KM</span>
             </div>
             <div className="min-w-0">
-              <h1 className="font-bebas text-2xl tracking-[0.15em] text-white leading-tight">
-                AUTOMOTORES GUAICAIPURO
+              <h1 className="font-bebas text-3xl tracking-[0.05em] leading-tight flex items-center">
+                <span className="text-red-600">KE</span>
+                <span className="text-white">MASTER</span>
               </h1>
               <p className="text-[10px] text-red-500 font-black uppercase tracking-widest flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></span>
-                SISTEMA KEMASTER VER 01
+                TECNOLOGÍA DE GESTIÓN AVANZADA
               </p>
             </div>
           </div>

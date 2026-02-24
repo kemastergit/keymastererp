@@ -59,7 +59,7 @@ export default function EtiquetasPage() {
     })
 
     return (
-        <div className="p-4 md:p-8 animate-fade-in pb-20">
+        <div className="p-4 md:p-8 animate-fade-in flex flex-col h-full min-h-0">
             <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white flex items-center gap-3">
@@ -79,10 +79,10 @@ export default function EtiquetasPage() {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-8 pb-4">
                 {/* Selector de Productos */}
-                <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-xl shadow-xl">
-                    <div className="flex items-center justify-between mb-6">
+                <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-xl shadow-xl flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-6 shrink-0">
                         <h2 className="text-xl font-bold text-white">1. Seleccionar Productos</h2>
                         <div className="flex gap-2">
                             <button
@@ -103,12 +103,12 @@ export default function EtiquetasPage() {
                     <input
                         type="text"
                         placeholder="Buscar por descripción o código..."
-                        className="w-full bg-black border border-gray-800 rounded-lg p-3 text-white mb-4 focus:border-red-600 outline-none"
+                        className="w-full bg-black border border-gray-800 rounded-lg p-3 text-white mb-4 focus:border-red-600 outline-none shrink-0"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
 
-                    <div className="max-h-[500px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                         {articulos.map(art => {
                             const isSelected = selected.find(s => s.item.id === art.id)
                             return (
@@ -130,10 +130,10 @@ export default function EtiquetasPage() {
                 </div>
 
                 {/* Lista de Selección & Preview */}
-                <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-xl shadow-xl flex flex-col">
-                    <h2 className="text-xl font-bold text-white mb-6">2. Cantidades y Vista Previa</h2>
+                <div className="bg-[#0f0f0f] border border-gray-800 p-6 rounded-xl shadow-xl flex flex-col min-h-0">
+                    <h2 className="text-xl font-bold text-white mb-6 shrink-0">2. Cantidades y Vista Previa</h2>
 
-                    <div className="flex-grow space-y-4 overflow-y-auto max-h-[400px] mb-6 pr-2 custom-scrollbar">
+                    <div className="flex-1 min-h-0 space-y-4 overflow-y-auto mb-6 pr-2 custom-scrollbar">
                         {selected.length === 0 ? (
                             <div className="text-center py-20 text-gray-600 italic">No hay productos seleccionados</div>
                         ) : (
@@ -167,9 +167,9 @@ export default function EtiquetasPage() {
                         )}
                     </div>
 
-                    <div className="border-t border-gray-800 pt-6 mt-auto">
-                        <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">Vista Previa Impression</h3>
-                        <div className="bg-white p-4 rounded overflow-auto max-h-[300px] flex flex-wrap gap-4 justify-center">
+                    <div className="border-t border-gray-800 pt-6 mt-auto shrink-0 flex flex-col min-h-0">
+                        <h3 className="text-sm font-bold text-gray-500 uppercase mb-4 shrink-0">Vista Previa Impression</h3>
+                        <div className="bg-white p-4 rounded overflow-auto h-[250px] flex flex-wrap gap-4 justify-center shrink-0">
                             <div ref={componentRef} className="print-area flex flex-wrap gap-4 justify-center p-4 bg-white">
                                 {labelType === 'PRECIO' ? (
                                     labelsToPrint.map((art, idx) => (

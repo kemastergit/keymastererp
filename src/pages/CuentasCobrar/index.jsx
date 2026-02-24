@@ -60,7 +60,7 @@ export default function CuentasCobrar() {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6">
       <div className="space-y-4">
         {vencidas.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 mb-4 flex items-center justify-between shadow-sm relative overflow-hidden">

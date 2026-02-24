@@ -28,8 +28,11 @@ export function printNota(venta, items, tasa) {
   <div>${linea}</div>
   <pre>${rows}</pre>
   <div>${linea}</div>
-  <div class="r big">TOTAL: ${fmtUSD(total)}</div>
-  <div class="r">EN Bs: ${fmtBS(total, tasa)}</div>
+  <div class="r">SUBTOTAL: ${fmtUSD(venta.subtotal)}</div>
+  ${venta.iva > 0 ? `<div class="r">IVA (${16}%): ${fmtUSD(venta.iva)}</div>` : ''}
+  ${venta.igtf > 0 ? `<div class="r">IGTF (3%): ${fmtUSD(venta.igtf)}</div>` : ''}
+  <div class="r big">TOTAL: ${fmtUSD(venta.total)}</div>
+  <div class="r">EN Bs: ${fmtBS(venta.total, tasa)}</div>
   <div class="r">TASA BCV: ${tasa}</div>
   <div>${linea}</div>
   <div class="c">¡Gracias por su compra!</div>
@@ -145,12 +148,15 @@ export function printNotaTermica(venta, items, tasa) {
   <pre>${linea}</pre>
   <pre>${itemLines}</pre>
   <pre>${linea}</pre>
-  <div class="r b big">TOTAL: $ ${total.toFixed(2)}</div>
-  <div class="r">Bs: ${bs}</div>
+  <div class="r">Subtotal: $ ${venta.subtotal?.toFixed(2)}</div>
+  ${venta.iva > 0 ? `<div class="r">IVA (16%): $ ${venta.iva.toFixed(2)}</div>` : ''}
+  ${venta.igtf > 0 ? `<div class="r">IGTF (3%): $ ${venta.igtf.toFixed(2)}</div>` : ''}
+  <div class="r b big">TOTAL: $ ${venta.total?.toFixed(2)}</div>
+  <div class="r">Bs: ${(venta.total * (tasa || 0)).toFixed(2)}</div>
   <div class="r" style="font-size:8px">Tasa: ${tasa || 0} Bs/$</div>
   <pre>${linea}</pre>
   <div class="c" style="font-size:8px;margin-top:4px">¡Gracias por su compra!</div>
-  <div class="c" style="font-size:7px">Sistema Guaicaipuro POS</div>
+  <div class="c" style="font-size:7px">KEMASTER</div>
   </body></html>`
 
   const w = window.open('', '_blank', 'width=320,height=600')

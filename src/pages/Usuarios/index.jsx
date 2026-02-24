@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
+import { hashPin } from '../../utils/security'
+import { logAction } from '../../utils/audit'
 
 export default function Usuarios() {
     const [showModal, setShowModal] = useState(false)
@@ -16,11 +18,17 @@ export default function Usuarios() {
         if (form.pin.length < 4) return toast('PIN debe ser de al menos 4 dígitos', 'warn')
 
         try {
+            const hashedPin = await hashPin(form.pin)
+            const userData = { ...form, pin: hashedPin }
+            const currentUser = useStore.getState().currentUser
+
             if (editing) {
-                await db.usuarios.update(editing.id, form)
+                await db.usuarios.update(editing.id, userData)
+                logAction(currentUser, 'USUARIO_ACTUALIZADO', { usuario_afectado: form.nombre, rol: form.rol })
                 toast('✅ Usuario actualizado')
             } else {
-                await db.usuarios.add({ ...form, fecha_creacion: new Date() })
+                await db.usuarios.add({ ...userData, fecha_creacion: new Date() })
+                logAction(currentUser, 'USUARIO_CREADO', { nuevo_usuario: form.nombre, rol: form.rol })
                 toast('✅ Usuario creado')
             }
             setShowModal(false)
@@ -40,7 +48,7 @@ export default function Usuarios() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 h-full overflow-y-auto custom-scroll pr-2 pb-6">
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Gestión de Usuarios</h1>

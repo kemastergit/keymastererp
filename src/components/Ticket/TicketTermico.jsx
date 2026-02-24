@@ -80,6 +80,13 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
                     </div>
                 )}
 
+                {nota.igtf > 0 && (
+                    <div className="ticket-row">
+                        <span>IGTF (3%):</span>
+                        <span>$ {nota.igtf.toFixed(2)}</span>
+                    </div>
+                )}
+
                 <div className="ticket-row" style={{ fontWeight: 'bold' }}>
                     <span>TOTAL $:</span>
                     <span>$ {totalUsd.toFixed(2)}</span>

@@ -45,7 +45,7 @@ export default function Cotizaciones() {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6">
       <div className="flex gap-2 mb-3">
         {['nueva', 'historial'].map(t => (
           <button key={t} onClick={() => setTab(t)}

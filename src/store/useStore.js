@@ -113,8 +113,15 @@ const useStore = create((set, get) => ({
   removePayment: (id) => set(s => ({ payments: s.payments.filter(p => p.id !== id) })),
 
   cartSubtotal: () => get().cart.reduce((s, i) => s + (i.precio * i.qty), 0),
-  cartIva: () => get().ivaEnabled ? get().cartSubtotal() * 0.16 : 0,
-  cartTotal: () => get().cartSubtotal() + get().cartIva(),
+  cartIva: () => get().ivaEnabled ? get().cartSubtotal() * (get().configEmpresa?.porcentaje_iva / 100 || 0.16) : 0,
+  cartIgtf: () => {
+    const config = get().configEmpresa
+    if (!config?.aplicar_igtf) return 0
+    const divisaPayments = get().payments.filter(p => ['EFECTIVO_USD', 'ZELLE', 'OTRO'].includes(p.metodo))
+    const sumDivisa = divisaPayments.reduce((s, p) => s + p.monto, 0)
+    return sumDivisa * (config.porcentaje_igtf / 100 || 0.03)
+  },
+  cartTotal: () => get().cartSubtotal() + get().cartIva() + get().cartIgtf(),
   paymentsTotal: () => get().payments.reduce((s, p) => s + p.monto, 0),
 
   // Carrito cotización
@@ -150,6 +157,65 @@ const useStore = create((set, get) => ({
     await db.config_empresa.update('main', newConfig)
     set({ configEmpresa: { ...get().configEmpresa, ...newConfig } })
     get().toast('✅ Configuración actualizada', 'ok')
+  },
+
+  anularVenta: async (ventaId, motivo, supervisor) => {
+    try {
+      await db.transaction('rw', [
+        db.ventas, db.venta_items, db.articulos,
+        db.ctas_cobrar, db.abonos, db.auditoria
+      ], async () => {
+        const venta = await db.ventas.get(ventaId)
+        if (!venta) throw new Error('Venta no encontrada')
+        if (venta.estado === 'ANULADA') throw new Error('La venta ya está anulada')
+
+        const items = await db.venta_items.where('venta_id').equals(ventaId).toArray()
+        for (const item of items) {
+          const art = await db.articulos.get(item.articulo_id)
+          if (art) {
+            await db.articulos.update(art.id, {
+              stock: (art.stock || 0) + item.qty
+            })
+          }
+        }
+
+        const cta = await db.ctas_cobrar.where('venta_id').equals(ventaId).first()
+        if (cta) {
+          await db.ctas_cobrar.update(cta.id, { estado: 'ANULADA' })
+          // Anular también abonos de esa cuenta
+          const abonosCta = await db.abonos.where('cuenta_id').equals(cta.id).and(a => a.tipo_cuenta === 'COBRAR').toArray()
+          for (const a of abonosCta) {
+            await db.abonos.update(a.id, { estado: 'ANULADA' })
+          }
+        }
+
+        // Anular abonos directos de la venta (CONTADO)
+        const abonosVenta = await db.abonos.where('cuenta_id').equals(ventaId).and(a => a.tipo_cuenta === 'VENTA').toArray()
+        for (const a of abonosVenta) {
+          await db.abonos.update(a.id, { estado: 'ANULADA' })
+        }
+
+        await db.ventas.update(ventaId, {
+          estado: 'ANULADA',
+          anulado_por: supervisor.nombre,
+          motivo_anulacion: motivo,
+          fecha_anulacion: new Date()
+        })
+
+        await db.auditoria.add({
+          fecha: new Date(),
+          usuario_id: supervisor.id,
+          accion: 'ANULACION_VENTA',
+          detalles: `Venta #${venta.nro} anulada. Motivo: ${motivo}`
+        })
+      })
+      get().toast(`🚫 Venta anulada exitosamente`, 'ok')
+      return true
+    } catch (err) {
+      get().toast(`❌ Error en anulación: ${err.message}`, 'error')
+      console.error(err)
+      return false
+    }
   },
 }))
 

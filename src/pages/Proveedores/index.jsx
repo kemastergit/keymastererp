@@ -5,7 +5,7 @@ import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
 
-const empty = { rif:'', nombre:'', direccion:'', ciudad:'', telefono:'', email:'', contacto:'', observaciones:'' }
+const empty = { rif: '', nombre: '', direccion: '', ciudad: '', telefono: '', email: '', contacto: '', observaciones: '' }
 
 export default function Proveedores() {
   const toast = useStore(s => s.toast)
@@ -18,9 +18,9 @@ export default function Proveedores() {
   const proveedores = useLiveQuery(
     () => busq.trim()
       ? db.proveedores.filter(p =>
-          p.rif?.toLowerCase().includes(busq.toLowerCase()) ||
-          p.nombre?.toLowerCase().includes(busq.toLowerCase())
-        ).toArray()
+        p.rif?.toLowerCase().includes(busq.toLowerCase()) ||
+        p.nombre?.toLowerCase().includes(busq.toLowerCase())
+      ).toArray()
       : db.proveedores.orderBy('nombre').toArray(),
     [busq], []
   )
@@ -48,14 +48,14 @@ export default function Proveedores() {
   }
 
   return (
-    <div>
+    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 space-y-4">
       <div className="panel">
         <div className="flex items-center gap-2 mb-2">
-          <span className="panel-title flex-1" style={{margin:0,paddingBottom:0,border:'none'}}>PROVEEDORES</span>
+          <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>PROVEEDORES</span>
           <button className="btn btn-r btn-sm" onClick={openNew}>+ NUEVO</button>
         </div>
         <input className="inp mb-2" placeholder="🔍 Buscar..." value={busq} onChange={e => setBusq(e.target.value)} />
-        <div className="tabla-wrap tabla-scroll" style={{maxHeight:'60vh'}}>
+        <div className="tabla-wrap tabla-scroll">
           <table>
             <thead><tr>
               <th>RIF</th><th>NOMBRE</th><th>CONTACTO</th><th>TELÉFONO</th><th>EMAIL</th><th>CIUDAD</th><th></th>

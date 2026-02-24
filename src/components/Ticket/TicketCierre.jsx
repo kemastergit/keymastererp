@@ -59,6 +59,22 @@ const TicketCierre = forwardRef(({ session, config, isZ = false }, ref) => {
                     <span>VENTAS CREDITO $:</span>
                     <span>$ {stats?.credito.toFixed(2) || '0.00'}</span>
                 </div>
+                <div className="ticket-row">
+                    <span>RECAUDACION IGTF $:</span>
+                    <span>$ {stats?.igtf?.toFixed(2) || '0.00'}</span>
+                </div>
+                <div className="ticket-row">
+                    <span>COBRANZAS CARTERA $:</span>
+                    <span>$ {stats?.cobranzaUsd?.toFixed(2) || '0.00'}</span>
+                </div>
+                <div className="ticket-row">
+                    <span>INGRESOS EXTRA C.C:</span>
+                    <span>$ {stats?.ingresosCC?.toFixed(2) || '0.00'}</span>
+                </div>
+                <div className="ticket-row">
+                    <span>EGRESOS GASTOS C.C:</span>
+                    <span>$ -{stats?.egresosCC?.toFixed(2) || '0.00'}</span>
+                </div>
 
                 <div className="ticket-divider"></div>
 
