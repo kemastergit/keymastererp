@@ -57,8 +57,10 @@ export default function Catalogo() {
 
     // Filtrar localmente según la búsqueda
     const filteredArticulos = articulos.filter(a => {
-        const matchesSearch = a.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) || a.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
-        const deptoProducto = a.categoria || a.departamento
+        const desc = a.descripcion || ''
+        const nom = a.nombre || ''
+        const matchesSearch = desc.toLowerCase().includes(searchTerm.toLowerCase()) || nom.toLowerCase().includes(searchTerm.toLowerCase())
+        const deptoProducto = a.categoria || a.departamento || 'VARIOS'
         const matchesDepto = selectedDepto === 'TODOS' || deptoProducto === selectedDepto
         return matchesSearch && matchesDepto
     })
@@ -76,7 +78,7 @@ export default function Catalogo() {
         setCart(cart.filter(i => i.id !== id))
     }
 
-    const total = cart.reduce((s, i) => s + (i.precio * i.qty), 0)
+    const total = cart.reduce((s, i) => s + ((i.precio_usd || i.precio || 0) * i.qty), 0)
 
     const [lastPedidoId, setLastPedidoId] = useState(null)
 
@@ -204,13 +206,13 @@ export default function Catalogo() {
                     <div className="flex items-center gap-2 bg-[var(--surface2)] border border-[var(--border2)] px-3 py-1.5 rounded-lg">
                         <div className="w-1.5 h-1.5 bg-[var(--teal)] rounded-full"></div>
                         <span className="text-[9px] font-black text-[var(--text2)] uppercase tracking-wider">
-                            {articulos?.length || 0} ítems
+                            {filteredArticulos?.length || 0} ítems
                         </span>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
-                    {articulos?.map(art => (
+                    {filteredArticulos?.map(art => (
                         <div
                             key={art.id}
                             className="group bg-[var(--surface)] border border-[var(--border-var)] p-4 rounded-card flex items-center gap-4 active:scale-[0.98] transition-all hover:border-[var(--teal)]"
@@ -221,23 +223,23 @@ export default function Catalogo() {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                     <span className="text-[8px] font-black text-[var(--teal)] bg-[var(--teal4)] px-2 py-0.5 rounded-full uppercase">
-                                        {art.marca || art.departamento}
+                                        {art.categoria || art.departamento || 'VARIOS'}
                                     </span>
                                 </div>
                                 <h3 className="font-black text-[12px] leading-tight text-[var(--text-main)] line-clamp-1 mb-1">
-                                    {art.descripcion}
+                                    {art.nombre || art.descripcion}
                                 </h3>
-                                <p className="text-[9px] text-[var(--text3)] font-mono">
-                                    REF: {art.referencia || art.codigo}
+                                <p className="text-[9px] text-[var(--text3)] font-mono leading-tight line-clamp-1">
+                                    {art.descripcion || `REF: ${art.codigo}`}
                                 </p>
                             </div>
                             <div className="flex flex-col items-end gap-2 shrink-0">
                                 <div className="text-right">
                                     <p className="font-black text-lg text-[var(--teal)] leading-none">
-                                        {fmtUSD(art.precio)}
+                                        {fmtUSD(art.precio_usd || art.precio)}
                                     </p>
-                                    <p className="text-[9px] font-mono text-[var(--text3)]">
-                                        ~ {fmtBS(art.precio * tasa)}
+                                    <p className="text-[9px] font-mono text-[var(--text3)] mt-1">
+                                        ~ {fmtBS((art.precio_usd || art.precio) * tasa)}
                                     </p>
                                 </div>
                                 <button
