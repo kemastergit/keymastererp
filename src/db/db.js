@@ -3,14 +3,19 @@ import { seedArticulos } from './seed_data'
 
 export const db = new Dexie('Guaicaipuro_Retail')
 
-db.version(8).stores({
+db.version(12).stores({
   articulos: '++id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad',
   clientes: '++id, rif, nombre',
   proveedores: '++id, rif, nombre',
   ventas: '++id, nro, fecha, cliente_id, tipo_pago, estado, usuario_id, turno_id',
   venta_items: '++id, venta_id',
+  compras: '++id, nro_factura, fecha, proveedor_id, estado, total_usd',
+  compra_items: '++id, compra_id',
+  bajas_inventario: '++id, articulo_id, fecha, qty, motivo, usuario_id',
   cotizaciones: '++id, nro, fecha, cliente_id',
   cot_items: '++id, cot_id',
+  pedidos: '++id, fecha, cliente_nombre, cliente_telefono, total_usd, estado',
+  pedido_items: '++id, pedido_id, articulo_id',
   ctas_cobrar: '++id, venta_id, cliente, monto, fecha, estado, vencimiento',
   ctas_pagar: '++id, proveedor, monto, fecha, estado, vencimiento',
   abonos: '++id, cuenta_id, tipo_cuenta, fecha, monto, metodo',
@@ -20,7 +25,9 @@ db.version(8).stores({
   cierre_dia: '++id, fecha',
   sesiones_caja: '++id, fecha_apertura, estado, usuario_id',
   usuarios: '++id, &nombre, pin, rol, activo',
-  auditoria: '++id, fecha, usuario_id, accion',
+  auditoria: '++id, fecha, usuario_id, accion, table_name, record_id',
+  comisiones_config: '++id, user_id, active',
+  comisiones_log: '++id, user_id, invoice_id, period_month, period_year, paid',
   config: 'clave',
   config_empresa: 'clave'
 })
@@ -73,7 +80,13 @@ db.on('ready', async () => {
       moneda_principal: 'USD',
       papel_bt: '58mm',
       aplicar_igtf: false,
-      porcentaje_igtf: 3
+      porcentaje_igtf: 3,
+      comisiones_habilitadas: false,
+      ticker_mostrar_stock: true,
+      ticker_mostrar_deudas: true,
+      ticker_mostrar_cobranzas: true,
+      ticker_mensaje_personalizado: '',
+      ticker_velocidad: 40
     })
   }
 

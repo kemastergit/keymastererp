@@ -1,65 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { usePermiso } from '../../hooks/usePermiso'
-
-const menu = [
-  { to: '/', ico: 'dashboard', label: 'Dashboard' },
-  {
-    label: 'Ventas',
-    ico: 'receipt_long',
-    sub: [
-      { label: 'Facturación', to: '/facturacion', ico: 'bolt' },
-      { label: 'Cotizaciones', to: '/cotizaciones', ico: 'assignment' },
-      { label: 'Devoluciones', to: '/devoluciones', ico: 'history' },
-      { label: 'Caja Chica', to: '/caja-chica', ico: 'payments' },
-    ]
-  },
-  { label: '🏧 CIERRE TURNOS', to: '/caja', ico: 'point_of_sale' },
-  {
-    label: 'Créditos',
-    ico: 'account_balance_wallet',
-    sub: [
-      { label: 'Cuentas por Cobrar', to: '/cobrar', ico: 'call_received' },
-      { label: 'Cuentas por Pagar', to: '/pagar', ico: 'call_made' },
-    ]
-  },
-  {
-    label: 'Stock',
-    ico: 'inventory_2',
-    sub: [
-      { label: 'Maestro de Inventario', to: '/inventario', ico: 'inventory_2' },
-      { label: 'Etiquetas y Códigos', to: '/etiquetas', ico: 'qr_code_2' },
-    ]
-  },
-  {
-    label: 'Entidades',
-    ico: 'groups',
-    sub: [
-      { label: 'Directorio Clientes', to: '/clientes', ico: 'person' },
-      { label: 'Directorio Proveedores', to: '/proveedores', ico: 'factory' },
-    ]
-  },
-  {
-    label: 'Reportes',
-    ico: 'insert_chart',
-    sub: [
-      { label: 'Consolidado Diario', to: '/reportes?tab=ventas', ico: 'summarize' },
-      { label: 'Historial de Cierres Z', to: '/reportes?tab=cierres', ico: 'history' },
-    ]
-  },
-  {
-    label: 'Sistema',
-    ico: 'settings',
-    sub: [
-      { label: 'Gestión de Usuarios', to: '/usuarios', ico: 'manage_accounts', perm: 'CREAR_USUARIOS' },
-      { label: 'Auditoría de Acciones', to: '/auditoria', ico: 'history_edu', perm: 'CONFIGURACION' },
-      { label: 'Configuración Empresa', to: '/config', ico: 'business', perm: 'CONFIGURACION' },
-      { label: 'Seguridad Sistema', to: '/admin', ico: 'admin_panel_settings', perm: 'CONFIGURACION' },
-      { label: 'Planes y Soporte', to: '/planes', ico: 'help_outline' },
-      { label: 'Centro de Ayuda', to: '/ayuda', ico: 'quiz' },
-    ]
-  }
-]
+import { menu } from './menu'
+import useStore from '../../store/useStore'
 
 /* ─── Single nav item (no dropdown) ─── */
 function NavItem({ item }) {
@@ -157,13 +100,21 @@ export default function NavTop() {
     }
   }, [handleClickOutside, handleKeyDown])
 
+  const { configEmpresa } = useStore()
+
   const filteredMenu = menu.map(item => {
     if (item.sub) {
-      const sub = item.sub.filter(s => !s.perm || check(s.perm))
+      const sub = item.sub.filter(s => {
+        const hasPerm = !s.perm || check(s.perm)
+        const hasFeature = !s.feature || configEmpresa?.[s.feature] === true
+        return hasPerm && hasFeature
+      })
       if (sub.length === 0) return null
       return { ...item, sub }
     }
-    if (item.perm && !check(item.perm)) return null
+    const hasPerm = !item.perm || check(item.perm)
+    const hasFeature = !item.feature || configEmpresa?.[item.feature] === true
+    if (!hasPerm || !hasFeature) return null
     return item
   }).filter(Boolean)
 
@@ -174,7 +125,7 @@ export default function NavTop() {
   return (
     <nav
       ref={navRef}
-      className="bg-white/95 backdrop-blur-md border-b border-slate-100 transition-all duration-300 z-50 overflow-visible"
+      className="hidden md:block bg-white/95 backdrop-blur-md border-b border-slate-100 transition-all duration-300 z-50 overflow-visible"
     >
       <div className="flex max-w-[1600px] mx-auto w-full gap-x-1 gap-y-0.5 flex-wrap px-4 py-1 justify-center no-scrollbar overflow-visible">
         {filteredMenu.map((m, i) =>
@@ -211,9 +162,10 @@ export default function NavTop() {
           text-transform: uppercase;
           white-space: nowrap;
           border-bottom: 3px solid transparent;
-          color: #0f172a;
+          color: var(--text-main);
+          font-family: 'IBM Plex Mono', monospace;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: none;
           background: none;
           border-left: none;
           border-right: none;
@@ -230,26 +182,26 @@ export default function NavTop() {
           }
         }
         .nav-item:hover {
-          color: var(--primary);
-          background-color: rgba(245, 158, 11, 0.04);
+          color: var(--teal);
+          background-color: var(--teal4);
         }
         .nav-item--active {
-          border-bottom-color: var(--primary) !important;
-          color: var(--primary) !important;
-          background-color: rgba(245, 158, 11, 0.06) !important;
+          border-bottom-color: var(--teal) !important;
+          color: var(--teal) !important;
+          background-color: var(--teal4) !important;
         }
         .nav-item--open {
-          color: var(--primary) !important;
-          background-color: rgba(245, 158, 11, 0.06) !important;
-          border-bottom-color: var(--primary) !important;
+          color: var(--teal) !important;
+          background-color: var(--teal4) !important;
+          border-bottom-color: var(--teal) !important;
         }
         .nav-item-icon {
-          color: #0f172a;
-          transition: color 0.15s ease;
+          color: var(--text2);
+          transition: none;
         }
         .nav-item--active .nav-item-icon,
         .nav-item--open .nav-item-icon {
-          color: var(--primary) !important;
+          color: var(--teal) !important;
         }
         .nav-item-label {
           display: flex;

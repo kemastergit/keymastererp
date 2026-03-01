@@ -99,7 +99,7 @@ export default function ClienteSelector({ value, onChange, placeholder = 'Nombre
         <>
             <div ref={wrapRef} className="relative">
                 <input
-                    className="inp"
+                    className="inp rounded-none focus:border-[var(--teal)] transition-none shadow-inner !py-3 font-black uppercase text-xs"
                     value={inputVal}
                     onChange={handleInputChange}
                     onFocus={() => setOpen(true)}
@@ -109,72 +109,67 @@ export default function ClienteSelector({ value, onChange, placeholder = 'Nombre
                 />
 
                 {open && (
-                    <div className="absolute z-30 w-full bg-white border border-borde border-t-0 rounded-b-lg shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200"
-                        style={{ maxHeight: '320px' }}>
+                    <div className="absolute z-30 w-full bg-[var(--surface)] border-2 border-[var(--border-var)] border-t-0 shadow-[var(--win-shadow)] overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200 rounded-none mt-0"
+                        style={{ maxHeight: '350px' }}>
 
-                        {/* Client list */}
-                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        {/* Listado de Clientes */}
+                        <div style={{ maxHeight: '220px', overflowY: 'auto' }} className="custom-scroll">
                             {clientes.map(c => (
                                 <div key={c.id}
-                                    className="px-3 py-2 cursor-pointer border-b border-borde/50 hover:bg-blue-50 transition-colors flex items-center gap-2 group"
+                                    className="px-4 py-3 cursor-pointer border-b border-[var(--border-var)] hover:bg-[var(--surfaceDark)] transition-none flex items-center justify-between group"
                                     onClick={() => selectCliente(c)}>
                                     <div className="flex-1 min-w-0">
-                                        <div className="font-semibold text-sm truncate group-hover:text-primary" style={{ color: '#201f1e' }}>{c.nombre}</div>
-                                        <div className="flex gap-3 text-[10px]" style={{ color: '#605e5c' }}>
+                                        <div className="font-black text-[11px] truncate text-[var(--text-main)] uppercase tracking-tight">{c.nombre}</div>
+                                        <div className="flex gap-4 text-[9px] text-[var(--text2)] font-black uppercase mt-0.5 opacity-60">
                                             {c.rif && <span>RIF: {c.rif}</span>}
                                             {c.telefono && <span>📞 {c.telefono}</span>}
                                             {c.ciudad && <span>📍 {c.ciudad}</span>}
                                         </div>
                                     </div>
-                                    <span className="text-[9px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                        style={{ background: '#deecf9', color: '#0078d4' }}>
-                                        ENTER PARA SELECCIONAR
+                                    <span className="text-[8px] px-2 py-1 opacity-0 group-hover:opacity-100 transition-none bg-[var(--teal)] text-white font-black uppercase tracking-widest shadow-sm">
+                                        SELECCIONAR
                                     </span>
                                 </div>
                             ))}
                             {!hasResults && searchTerm && (
-                                <div className="px-3 py-3 text-center text-sm" style={{ color: '#605e5c' }}>
-                                    No se encontraron clientes con "<strong style={{ color: '#201f1e' }}>{searchTerm}</strong>"
+                                <div className="px-3 py-3 text-center text-sm text-[var(--text2)]">
+                                    No se encontraron clientes con "<strong className="text-[var(--text-main)]">{searchTerm}</strong>"
                                 </div>
                             )}
                         </div>
 
                         {/* Actions bar */}
                         {searchTerm && !exactMatch && (
-                            <div className="border-t border-borde px-3 py-2.5 flex flex-col gap-2"
-                                style={{ background: '#fafafa' }}>
-                                <div className="text-[10px] text-muted font-bold uppercase tracking-wider mb-0.5">Opciones de creación:</div>
-                                <div className="flex gap-2">
+                            <div className="border-t-2 border-[var(--border-var)] px-4 py-4 flex flex-col gap-3 bg-[var(--surface2)] shadow-inner">
+                                <div className="text-[9px] text-[var(--text2)] font-black uppercase tracking-widest mb-1 text-center opacity-60">¿ALTA DE NUEVO CLIENTE?</div>
+                                <div className="flex gap-3">
                                     <button
                                         type="button"
-                                        className="btn btn-sm flex-1 flex flex-col items-center py-2"
-                                        style={{ background: '#107c10', color: '#fff', fontSize: '10px' }}
+                                        className="flex-1 flex flex-col items-center py-3 bg-[var(--green-var)] text-white transition-none shadow-[var(--win-shadow)] cursor-pointer rounded-none border-b-4 border-black/20 active:border-b-0 active:translate-y-1"
                                         onClick={crearRapido}>
-                                        <span className="font-bold">⚡ CREAR RÁPIDO</span>
-                                        <span className="opacity-80 text-[8px] uppercase">{searchTerm.length > 15 ? searchTerm.slice(0, 15) + '...' : searchTerm}</span>
+                                        <span className="font-black text-[10px] tracking-tight">RÁPIDO</span>
+                                        <span className="opacity-90 text-[8px] font-black uppercase mt-0.5 truncate max-w-full italic px-1">"{searchTerm}"</span>
                                     </button>
                                     <button
                                         type="button"
-                                        className="btn btn-sm flex-1 flex flex-col items-center py-2"
-                                        style={{ background: '#0078d4', color: '#fff', fontSize: '10px' }}
+                                        className="flex-1 flex flex-col items-center py-3 bg-[var(--teal)] text-white transition-none shadow-[var(--win-shadow)] cursor-pointer rounded-none border-b-4 border-black/20 active:border-b-0 active:translate-y-1"
                                         onClick={openFullForm}>
-                                        <span className="font-bold">📋 CON DATOS</span>
-                                        <span className="opacity-80 text-[8px] uppercase">Formulario completo</span>
+                                        <span className="font-black text-[10px] tracking-tight">FORMULARIO</span>
+                                        <span className="opacity-90 text-[8px] font-black uppercase mt-0.5">AVANZADO</span>
                                     </button>
                                 </div>
                                 <button
                                     type="button"
-                                    className="w-full text-[10px] py-1 text-muted hover:text-primary transition-colors border border-transparent hover:border-blue-200 rounded"
+                                    className="w-full text-[9px] font-black uppercase tracking-widest py-2 text-[var(--text2)] hover:text-[var(--teal)] transition-none border border-black/5 bg-[var(--surfaceDark)] mt-1"
                                     onClick={() => setOpen(false)}>
-                                    CONTINUAR SIN REGISTRAR (SÓLO NOMBRE)
+                                    OMITIR REGISTRO (SOLO NOMBRE)
                                 </button>
                             </div>
                         )}
 
                         {/* Hint: can use without registering */}
                         {!searchTerm && (
-                            <div className="border-t border-borde px-3 py-2 text-center text-[10px]"
-                                style={{ background: '#fafafa', color: '#a19f9d' }}>
+                            <div className="border-t border-[var(--border-var)] px-3 py-2 text-center text-[10px] bg-[var(--surface2)] text-[var(--text2)]">
                                 Escribe un nombre para buscar o crear un cliente
                             </div>
                         )}
@@ -183,45 +178,48 @@ export default function ClienteSelector({ value, onChange, placeholder = 'Nombre
             </div>
 
             {/* Full registration modal */}
-            <Modal open={showModal} onClose={() => setShowModal(false)} title="REGISTRAR NUEVO CLIENTE">
-                <div className="grid grid-cols-2 gap-2">
+            <Modal open={showModal} onClose={() => setShowModal(false)} title="ALTA DE CLIENTE EN BASE DE DATOS">
+                <div className="grid grid-cols-2 gap-4">
                     <div className="field">
-                        <label>RIF</label>
-                        <input className="inp" value={form.rif} onChange={e => f('rif', e.target.value)} placeholder="J-12345678-9" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">C.I. / R.I.F.</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner uppercase font-black text-xs" value={form.rif} onChange={e => f('rif', e.target.value.toUpperCase())} placeholder="V-12345678-9" />
                     </div>
                     <div className="field">
-                        <label>Teléfono</label>
-                        <input className="inp" value={form.telefono} onChange={e => f('telefono', e.target.value)} placeholder="0414-1234567" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">TELÉFONO CONTACTO</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner font-black text-xs" value={form.telefono} onChange={e => f('telefono', e.target.value)} placeholder="0424-1234567" />
                     </div>
                     <div className="field col-span-2">
-                        <label>Nombre / Razón Social *</label>
-                        <input className="inp" value={form.nombre} onChange={e => f('nombre', e.target.value)} />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">NOMBRE / RAZÓN SOCIAL *</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner font-black uppercase" value={form.nombre} onChange={e => f('nombre', e.target.value.toUpperCase())} />
                     </div>
                     <div className="field col-span-2">
-                        <label>Dirección</label>
-                        <input className="inp" value={form.direccion} onChange={e => f('direccion', e.target.value)} />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">DOMICILIO FISCAL / DIRECCIÓN</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner uppercase text-[10px]" value={form.direccion} onChange={e => f('direccion', e.target.value.toUpperCase())} />
                     </div>
                     <div className="field">
-                        <label>Ciudad</label>
-                        <input className="inp" value={form.ciudad} onChange={e => f('ciudad', e.target.value)} />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">CIUDAD</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner uppercase font-black" value={form.ciudad} onChange={e => f('ciudad', e.target.value.toUpperCase())} />
                     </div>
                     <div className="field">
-                        <label>Email</label>
-                        <input className="inp" type="email" value={form.email} onChange={e => f('email', e.target.value)} />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">CORREO ELECTRÓNICO</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner font-black" type="email" value={form.email} onChange={e => f('email', e.target.value.toLowerCase())} />
                     </div>
                     <div className="field">
-                        <label>Límite de Crédito $</label>
-                        <input className="inp" type="number" value={form.limite_credito}
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">LÍMITE DE CRÉDITO USD ($)</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner font-mono font-black" type="number" value={form.limite_credito}
                             onChange={e => f('limite_credito', e.target.value)} step="0.01" inputMode="decimal" />
                     </div>
                     <div className="field">
-                        <label>Observaciones</label>
-                        <input className="inp" value={form.observaciones} onChange={e => f('observaciones', e.target.value)} />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">NOTAS / OBSERVACIONES</label>
+                        <input className="inp rounded-none focus:border-[var(--teal)] shadow-inner uppercase" value={form.observaciones} onChange={e => f('observaciones', e.target.value.toUpperCase())} />
                     </div>
                 </div>
-                <div className="flex gap-2 mt-3">
-                    <button className="btn btn-gr flex-1" onClick={() => setShowModal(false)}>Cancelar</button>
-                    <button className="btn btn-g flex-1" onClick={saveFullCliente}>💾 GUARDAR Y USAR</button>
+                <div className="flex gap-4 mt-6 pt-6 border-t border-[var(--border-var)]">
+                    <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => setShowModal(false)}>DESCARTAR</button>
+                    <button className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={saveFullCliente}>
+                        <span className="material-icons-round text-base">verified</span>
+                        <span>REGISTRAR CLIENTE</span>
+                    </button>
                 </div>
             </Modal>
         </>

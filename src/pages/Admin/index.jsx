@@ -35,7 +35,7 @@ export default function Admin() {
     const currentUser = useStore.getState().currentUser
 
     a.href = URL.createObjectURL(blob)
-    a.download = `kemaster_backup_${new Date().toISOString().split('T')[0]}.json`
+    a.download = `keymaster_backup_${new Date().toISOString().split('T')[0]}.json`
     a.click()
 
     logAction(currentUser, 'BACKUP_EXPORTADO', { total_articulos: rawData.articulos.length })
@@ -52,7 +52,7 @@ export default function Admin() {
 
         // Validar Firma Digital
         if (!package_.signature || !package_.data) {
-          toast('❌ El archivo no tiene el formato de KEMASTER', 'error')
+          toast('❌ El archivo no tiene el formato de KEYMASTER', 'error')
           return
         }
 
@@ -135,7 +135,7 @@ export default function Admin() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 h-full overflow-y-auto custom-scroll pr-2 pb-10">
+    <div className="max-w-2xl mx-auto space-y-4 pr-2 pb-10">
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
         <span className="material-icons-round text-amber-500 text-2xl">security</span>
         <div>
@@ -281,7 +281,7 @@ export default function Admin() {
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
                 const a = document.createElement('a')
                 a.href = URL.createObjectURL(blob)
-                a.download = 'formato_inventario_kemaster.csv'
+                a.download = 'formato_inventario_keymaster.csv'
                 a.click()
               }}>
               <span className="material-icons-round text-xs">download_for_offline</span>
@@ -320,11 +320,11 @@ export default function Admin() {
         <div className="grid grid-cols-2 gap-y-2 gap-x-4">
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Sistema</span>
-            <span className="text-xs font-bold text-slate-700">KEMASTER / Guaicaipuro</span>
+            <span className="text-xs font-bold text-slate-700">KEYMASTER / Guaicaipuro</span>
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Versión</span>
-            <span className="text-xs font-bold text-slate-700">2.4.0 Amber Edition</span>
+            <span className="text-xs font-bold text-slate-700">2.5.0 Amber Edition</span>
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Motor DB</span>

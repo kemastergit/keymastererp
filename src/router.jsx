@@ -22,11 +22,20 @@ import Protected from './components/Protected'
 import Config from './pages/Config'
 import Etiquetas from './pages/Etiquetas'
 import Ayuda from './pages/Ayuda'
+import Compras from './pages/Compras'
+import ComprasHistorial from './pages/Compras/Historial'
+import Comisiones from './pages/Comisiones'
+import Catalogo from './pages/Catalogo'
+import PedidosWeb from './pages/PedidosWeb'
 
 export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />
+  },
+  {
+    path: '/catalogo',
+    element: <Catalogo />
   },
   {
     path: '/',
@@ -35,6 +44,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Dashboard /> },
       { path: 'facturacion', element: <Facturacion /> },
       { path: 'cotizaciones', element: <Cotizaciones /> },
+      { path: 'compras', element: <Compras /> },
+      { path: 'compras-historial', element: <ComprasHistorial /> },
       { path: 'inventario', element: <Inventario /> },
       { path: 'clientes', element: <Clientes /> },
       { path: 'proveedores', element: <Proveedores /> },
@@ -52,6 +63,8 @@ export const router = createBrowserRouter([
       { path: 'config', element: <Config /> },
       { path: 'etiquetas', element: <Etiquetas /> },
       { path: 'ayuda', element: <Ayuda /> },
+      { path: 'comisiones', element: <Comisiones /> },
+      { path: 'pedidos-web', element: <PedidosWeb /> },
     ]
   },
   {

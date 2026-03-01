@@ -48,37 +48,39 @@ export default function Clientes() {
   }
 
   return (
-    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 space-y-4">
-      <div className="panel">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>FICHA DE CLIENTES</span>
-          <button className="btn btn-r btn-sm" onClick={openNew}>+ NUEVO</button>
+    <div className="flex flex-col h-full min-h-0 pb-2 md:pb-6 space-y-4">
+      <div className="panel flex-1 flex flex-col min-h-0 overflow-hidden transition-none">
+        <div className="shrink-0 p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="panel-title flex-1 !m-0 !p-0 !border-none !text-[var(--text-main)]">FICHA DE CLIENTES</span>
+            <button className="btn bg-[var(--teal)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={openNew}>+ NUEVO</button>
+          </div>
+          <input className="inp w-full focus:border-[var(--teal)] transition-none rounded-none" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
         </div>
-        <input className="inp mb-2" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
-        <div className="tabla-wrap tabla-scroll">
+        <div className="flex-1 overflow-auto tabla-wrap tabla-scroll pb-24">
           <table>
-            <thead><tr>
-              <th>RIF</th><th>NOMBRE</th><th>CIUDAD</th><th>TELÉFONO</th><th>EMAIL</th><th>LÍM. CRÉDITO $</th><th></th>
+            <thead><tr className="bg-[var(--surface2)]">
+              <th>RIF</th><th>NOMBRE</th><th>CIUDAD</th><th>TELÉFONO</th><th>EMAIL</th><th>LÍM. CRÉDITO $</th><th className="text-right">ACCIONES</th>
             </tr></thead>
             <tbody>
               {clientes.map(c => (
-                <tr key={c.id}>
-                  <td className="font-mono2 text-rojo-bright">{c.rif}</td>
-                  <td className="font-semibold">{c.nombre}</td>
-                  <td className="text-muted">{c.ciudad}</td>
-                  <td className="text-muted">{c.telefono}</td>
-                  <td className="text-muted">{c.email}</td>
-                  <td className="font-mono2">{c.limite_credito ? `$ ${c.limite_credito}` : '—'}</td>
-                  <td>
-                    <div className="flex gap-1">
-                      <button className="btn btn-y btn-sm" onClick={() => openEdit(c)}>✏</button>
-                      <button className="btn btn-r btn-sm" onClick={() => setDelId(c.id)}>🗑</button>
+                <tr key={c.id} className="hover:bg-[var(--surfaceDark)] transition-none">
+                  <td className="font-mono text-[var(--red-var)] font-bold">{c.rif}</td>
+                  <td className="font-bold text-[var(--text-main)]">{c.nombre}</td>
+                  <td className="text-[var(--text2)] text-[11px] font-bold uppercase">{c.ciudad}</td>
+                  <td className="text-[var(--text2)] text-[11px] font-bold">{c.telefono}</td>
+                  <td className="text-[var(--text2)] text-[11px] font-bold">{c.email}</td>
+                  <td className="font-mono text-[var(--text-main)] font-black">{c.limite_credito ? `$ ${fmtUSD(c.limite_credito)}` : '—'}</td>
+                  <td className="text-right">
+                    <div className="flex gap-1 justify-end">
+                      <button className="btn bg-[var(--orange-var)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => openEdit(c)}>✏</button>
+                      <button className="btn bg-[var(--red-var)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => setDelId(c.id)}>🗑</button>
                     </div>
                   </td>
                 </tr>
               ))}
               {clientes.length === 0 && (
-                <tr><td colSpan={7} className="text-center text-muted py-6 tracking-widest">SIN CLIENTES</td></tr>
+                <tr><td colSpan={7} className="text-center text-[var(--text2)] py-12 tracking-widest font-bold uppercase">SIN CLIENTES</td></tr>
               )}
             </tbody>
           </table>
@@ -87,43 +89,43 @@ export default function Clientes() {
 
       <Modal open={showModal} onClose={() => setShowModal(false)}
         title={editing ? 'EDITAR CLIENTE' : 'NUEVO CLIENTE'}>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <div className="field">
             <label>RIF</label>
-            <input className="inp" value={form.rif} onChange={e => f('rif', e.target.value)} placeholder="J-12345678-9" />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.rif} onChange={e => f('rif', e.target.value)} placeholder="J-12345678-9" />
           </div>
           <div className="field">
             <label>Teléfono</label>
-            <input className="inp" value={form.telefono} onChange={e => f('telefono', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.telefono} onChange={e => f('telefono', e.target.value)} />
           </div>
           <div className="field col-span-2">
             <label>Nombre / Razón Social *</label>
-            <input className="inp" value={form.nombre} onChange={e => f('nombre', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.nombre} onChange={e => f('nombre', e.target.value)} />
           </div>
           <div className="field col-span-2">
             <label>Dirección</label>
-            <input className="inp" value={form.direccion} onChange={e => f('direccion', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.direccion} onChange={e => f('direccion', e.target.value)} />
           </div>
           <div className="field">
             <label>Ciudad</label>
-            <input className="inp" value={form.ciudad} onChange={e => f('ciudad', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.ciudad} onChange={e => f('ciudad', e.target.value)} />
           </div>
           <div className="field">
             <label>Email</label>
-            <input className="inp" type="email" value={form.email} onChange={e => f('email', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" type="email" value={form.email} onChange={e => f('email', e.target.value)} />
           </div>
           <div className="field col-span-2">
             <label>Límite de Crédito $</label>
-            <input className="inp" type="number" value={form.limite_credito} onChange={e => f('limite_credito', e.target.value)} step="0.01" inputMode="decimal" />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" type="number" value={form.limite_credito} onChange={e => f('limite_credito', e.target.value)} step="0.01" inputMode="decimal" />
           </div>
           <div className="field col-span-2">
             <label>Observaciones</label>
-            <input className="inp" value={form.observaciones} onChange={e => f('observaciones', e.target.value)} />
+            <input className="inp transition-none focus:border-[var(--teal)] rounded-none" value={form.observaciones} onChange={e => f('observaciones', e.target.value)} />
           </div>
         </div>
-        <div className="flex gap-2 mt-3">
-          <button className="btn btn-gr flex-1" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button className="btn btn-g flex-1" onClick={save}>💾 GUARDAR</button>
+        <div className="flex gap-2 mt-6">
+          <button className="btn btn-gr flex-1 transition-none shadow-[var(--win-shadow)] cursor-pointer font-bold" onClick={() => setShowModal(false)}>CANCELAR</button>
+          <button className="btn bg-[var(--green-var)] text-white flex-1 transition-none shadow-[var(--win-shadow)] cursor-pointer font-bold" onClick={save}>💾 GUARDAR FICHA</button>
         </div>
       </Modal>
 

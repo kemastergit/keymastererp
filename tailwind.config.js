@@ -21,15 +21,21 @@ export default {
         'borde-dark': '#1e293b', // slate-800
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        bebas: ['Inter', 'sans-serif'], // Remapping for fast swap
-        mono2: ['JetBrains Mono', 'monospace'],
-        raj: ['Inter', 'sans-serif'],
+        sans: ['IBM Plex Sans', 'sans-serif'],
+        bebas: ['IBM Plex Sans', 'sans-serif'], // Remapping for fast swap
+        mono2: ['IBM Plex Mono', 'monospace'],
+        raj: ['IBM Plex Sans', 'sans-serif'],
       },
       borderRadius: {
-        'xl': '0.75rem',
-        '2xl': '1rem',
-        '3xl': '1.5rem',
+        'none': '0px',
+        'sm': '0px',
+        DEFAULT: '0px',
+        'md': '0px',
+        'lg': '0px',
+        'xl': '0px',
+        '2xl': '0px',
+        '3xl': '0px',
+        'full': '0px',
       }
     },
   },

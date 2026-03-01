@@ -2,14 +2,14 @@ export const fmtUSD = (n) =>
   '$ ' + (parseFloat(n) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 
 export const fmtBS = (n, tasa) => {
-  const bs = (parseFloat(n) || 0) * (parseFloat(tasa) || 0)
-  return 'Bs ' + bs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  const amount = tasa !== undefined ? (parseFloat(n) || 0) * (parseFloat(tasa) || 0) : (parseFloat(n) || 0)
+  return 'Bs ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 export const fmtDate = (d) => {
   if (!d) return '—'
   const date = d instanceof Date ? d : new Date(d)
-  return date.toLocaleDateString('es-VE', { day:'2-digit', month:'2-digit', year:'numeric' })
+  return date.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 export const today = () => new Date().toISOString().split('T')[0]

@@ -71,43 +71,162 @@ export function printCotizacion(cot, items, tasa) {
 }
 
 export function printReporte(titulo, columnas, data, totales = null) {
-  const html = `
+  const ahora = new Date()
+  const fechaStr = ahora.toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const horaStr = ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+  const totalRows = data.length
+
+  const rows = data.map((row, idx) => {
+    const isEven = idx % 2 === 0
+    const isEmpty = row.every(c => !c || c === '')
+    const isBold = row[0] && (
+      row[0].startsWith('VENTAS NETAS') || row[0].startsWith('UTILIDAD') ||
+      row[0].startsWith('TOTAL') || row[0] === 'VENTAS NETAS'
+    )
+    if (isEmpty) return `<tr><td colspan="${columnas.length}" style="height:6px;border:none;"></td></tr>`
+    return `<tr style="background:${isBold ? '#f0fdfa' : isEven ? '#fafbfc' : '#fff'};${isBold ? 'font-weight:800;' : ''}">
+      ${row.map((cell, ci) => {
+      const cellStr = String(cell || '')
+      const isNum = cellStr.startsWith('$') || cellStr.startsWith('-$') || cellStr.startsWith('−') || cellStr.endsWith('%')
+      const isNeg = cellStr.startsWith('-') || cellStr.startsWith('−') || cellStr.startsWith('(-')
+      return `<td style="
+          padding:10px 14px;
+          border-bottom:1px solid #eef0f2;
+          font-size:11px;
+          ${isNum ? 'text-align:right;font-family:\'Courier New\',monospace;font-weight:600;' : ''}
+          ${isNeg ? 'color:#dc2626;' : ''}
+          ${isBold ? 'color:#0d9488;font-size:12px;border-top:2px solid #0d9488;border-bottom:2px solid #0d9488;' : 'color:#374151;'}
+          ${ci === 0 && cellStr.startsWith('  ') ? 'padding-left:32px;color:#6b7280;font-style:italic;' : ''}
+        ">${cell || ''}</td>`
+    }).join('')}
+    </tr>`
+  }).join('')
+
+  const totalesHtml = totales ? Object.entries(totales).map(([label, val], idx) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;${idx > 0 ? 'border-top:1px solid #e5e7eb;' : ''}">
+      <span style="font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:#374151;font-size:12px;">${label}</span>
+      <span style="font-family:'Courier New',monospace;font-weight:800;font-size:18px;color:#0d9488;">${val}</span>
+    </div>`
+  ).join('') : ''
+
+  const html = `<!DOCTYPE html>
   <html><head>
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 11px; padding: 20px; color:#333; }
-    .header { text-align:center; margin-bottom: 20px; border-bottom: 2px solid #0078d4; padding-bottom:10px; }
-    .title { font-size: 18px; font-weight: bold; color: #0078d4; text-transform: uppercase; }
-    table { width:100%; border-collapse:collapse; margin-top: 10px; }
-    th { background: #f4f4f4; text-align: left; padding: 8px; border: 1px solid #ddd; }
-    td { padding: 8px; border: 1px solid #ddd; }
-    .footer { margin-top: 20px; text-align: right; font-size: 14px; font-weight: bold; }
-    .totales-box { background: #f9f9f9; padding: 10px; border: 1px solid #ddd; display: inline-block; min-width: 200px; }
-    @media print { .no-print { display: none; } }
+    @page { margin: 15mm 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #1f2937; background: #fff; }
+
+    .page-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding-bottom: 16px; margin-bottom: 20px;
+      border-bottom: 3px solid #0d9488;
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-icon {
+      width: 48px; height: 48px; background: #0d9488; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 900; font-size: 20px; letter-spacing: -0.05em;
+    }
+    .brand-name { font-size: 16px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: -0.02em; }
+    .brand-rif { font-size: 10px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+
+    .meta { text-align: right; }
+    .meta-label { font-size: 9px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.15em; }
+    .meta-value { font-size: 11px; font-weight: 600; color: #374151; }
+
+    .report-title {
+      background: linear-gradient(135deg, #f0fdfa 0%, #e0f7f3 100%);
+      border: 1px solid #99e6d9;
+      padding: 14px 20px; margin-bottom: 20px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .report-title h1 {
+      font-size: 15px; font-weight: 800; color: #0d9488;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .report-title .badge {
+      background: #0d9488; color: white; padding: 4px 12px;
+      font-size: 10px; font-weight: 700; border-radius: 2px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    thead th {
+      background: #0f172a; color: white; padding: 10px 14px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.12em; text-align: left; border: none;
+    }
+    thead th:last-child { text-align: right; }
+
+    .totales-box {
+      margin-left: auto; width: 320px; max-width: 100%;
+      background: #f8fafc; border: 2px solid #0d9488;
+      padding: 16px 20px; border-radius: 2px;
+    }
+
+    .page-footer {
+      margin-top: 30px; padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 8px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.1em;
+    }
+
+    @media print {
+      .no-print { display: none; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style></head><body>
-  <div class="header">
-    <div class="title">AUTOMOTORES GUAICAIPURO C.A.</div>
-    <div>REPORTE: ${titulo}</div>
-    <div>Fecha de impresión: ${new Date().toLocaleString()}</div>
-  </div>
-  <table>
-    <thead><tr>${columnas.map(c => `<th>${c}</th>`).join('')}</tr></thead>
-    <tbody>
-      ${data.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
-    </tbody>
-  </table>
-  ${totales ? `
-    <div class="footer">
-      <div class="totales-box">
-        ${Object.entries(totales).map(([label, val]) => `<div>${label}: ${val}</div>`).join('')}
+
+  <!-- HEADER CORPORATIVO -->
+  <div class="page-header">
+    <div class="brand">
+      <div class="brand-icon">AG</div>
+      <div>
+        <div class="brand-name">Automotores Guaicaipuro C.A.</div>
+        <div class="brand-rif">Sistema Keymaster — Reporte Oficial</div>
       </div>
     </div>
+    <div class="meta">
+      <div><span class="meta-label">Fecha: </span><span class="meta-value">${fechaStr}</span></div>
+      <div><span class="meta-label">Hora: </span><span class="meta-value">${horaStr}</span></div>
+      <div><span class="meta-label">Registros: </span><span class="meta-value">${totalRows}</span></div>
+    </div>
+  </div>
+
+  <!-- TÍTULO DEL REPORTE -->
+  <div class="report-title">
+    <h1>${titulo}</h1>
+    <span class="badge">Documento Oficial</span>
+  </div>
+
+  <!-- TABLA DE DATOS -->
+  <table>
+    <thead><tr>${columnas.map((c, i) =>
+    `<th${i === columnas.length - 1 ? ' style="text-align:right"' : ''}>${c}</th>`
+  ).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <!-- TOTALES -->
+  ${totales ? `
+    <div style="display:flex;justify-content:flex-end;">
+      <div class="totales-box">${totalesHtml}</div>
+    </div>
   ` : ''}
+
+  <!-- PIE DE PÁGINA -->
+  <div class="page-footer">
+    <span>Generado por Keymaster POS — ${fechaStr}</span>
+    <span>Automotores Guaicaipuro C.A. — Todos los derechos reservados</span>
+  </div>
+
   </body></html>`
+
   const w = window.open('', '_blank')
   w.document.write(html)
   w.document.close()
-  // Esperar a que cargue para imprimir (especialmente si tuviera imágenes)
-  setTimeout(() => w.print(), 500)
+  setTimeout(() => w.print(), 400)
 }
 
 export function printNotaTermica(venta, items, tasa) {
@@ -156,7 +275,7 @@ export function printNotaTermica(venta, items, tasa) {
   <div class="r" style="font-size:8px">Tasa: ${tasa || 0} Bs/$</div>
   <pre>${linea}</pre>
   <div class="c" style="font-size:8px;margin-top:4px">¡Gracias por su compra!</div>
-  <div class="c" style="font-size:7px">KEMASTER</div>
+  <div class="c" style="font-size:7px">KEYMASTER</div>
   </body></html>`
 
   const w = window.open('', '_blank', 'width=320,height=600')

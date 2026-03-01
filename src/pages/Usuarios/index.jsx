@@ -4,11 +4,13 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { hashPin } from '../../utils/security'
 import { logAction } from '../../utils/audit'
+import Modal from '../../components/UI/Modal'
 
 export default function Usuarios() {
     const [showModal, setShowModal] = useState(false)
     const [editing, setEditing] = useState(null)
     const [form, setForm] = useState({ nombre: '', rol: 'CAJERO', pin: '', activo: true })
+    const [commissionForm, setCommissionForm] = useState({ commission_type: 'SALES_PCT', percentage: 0, active: true })
     const toast = useStore(s => s.toast)
 
     const usuarios = useLiveQuery(() => db.usuarios.toArray(), [], [])
@@ -23,17 +25,44 @@ export default function Usuarios() {
             const currentUser = useStore.getState().currentUser
 
             if (editing) {
+                const oldUser = await db.usuarios.get(editing.id)
                 await db.usuarios.update(editing.id, userData)
-                logAction(currentUser, 'USUARIO_ACTUALIZADO', { usuario_afectado: form.nombre, rol: form.rol })
+
+                // Actualizar/Crear configuración de comisión
+                const existingComm = await db.comisiones_config.where('user_id').equals(editing.id).first()
+                if (existingComm) {
+                    await db.comisiones_config.update(existingComm.id, commissionForm)
+                } else {
+                    await db.comisiones_config.add({ ...commissionForm, user_id: editing.id })
+                }
+
+                let action = 'USUARIO_ACTUALIZADO'
+                if (oldUser?.rol !== form.rol) action = 'CAMBIO_ROL'
+
+                logAction(currentUser, action, {
+                    table_name: 'usuarios',
+                    record_id: editing.id,
+                    old_value: oldUser,
+                    new_value: { ...userData, id: editing.id }
+                })
                 toast('✅ Usuario actualizado')
             } else {
-                await db.usuarios.add({ ...userData, fecha_creacion: new Date() })
-                logAction(currentUser, 'USUARIO_CREADO', { nuevo_usuario: form.nombre, rol: form.rol })
+                const id = await db.usuarios.add({ ...userData, fecha_creacion: new Date() })
+
+                // Crear configuración de comisión para el nuevo usuario
+                await db.comisiones_config.add({ ...commissionForm, user_id: id })
+
+                logAction(currentUser, 'USUARIO_CREADO', {
+                    table_name: 'usuarios',
+                    record_id: id,
+                    new_value: { ...userData, id, fecha_creacion: new Date() }
+                })
                 toast('✅ Usuario creado')
             }
             setShowModal(false)
             setEditing(null)
             setForm({ nombre: '', rol: 'CAJERO', pin: '', activo: true })
+            setCommissionForm({ commission_type: 'SALES_PCT', percentage: 0, active: true })
         } catch (err) {
             toast('Error: El nombre de usuario ya existe', 'error')
         }
@@ -48,51 +77,59 @@ export default function Usuarios() {
     }
 
     return (
-        <div className="space-y-6 h-full overflow-y-auto custom-scroll pr-2 pb-6">
-            <div className="flex justify-between items-center">
+        <div className="space-y-6 pr-2 pb-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-[var(--surface2)] p-6 border-b-4 border-[var(--teal)] shadow-[var(--win-shadow)]">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Gestión de Usuarios</h1>
-                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Administración de acceso y roles (RBAC)</p>
+                    <h1 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter">GESTIÓN DE PERSONAL Y ACCESOS</h1>
+                    <p className="text-[var(--text2)] font-black text-xs uppercase tracking-widest mt-1 opacity-60">ADMINISTRACIÓN DE ROLES, PERMISOS Y SEGURIDAD OPERATIVA</p>
                 </div>
-                <button className="btn btn-primary !py-3 !px-6" onClick={() => setShowModal(true)}>
-                    <span className="material-icons-round">person_add</span>
-                    <span>NUEVO USUARIO</span>
+                <button className="btn bg-[var(--teal)] text-white px-8 py-4 font-black text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer rounded-none uppercase tracking-widest" onClick={() => setShowModal(true)}>
+                    <span className="material-icons-round text-base">person_add</span>
+                    <span>ALTA DE USUARIO</span>
                 </button>
             </div>
 
-            <div className="panel p-0 overflow-hidden">
-                <table className="w-full">
+            <div className="panel p-0 overflow-hidden transition-none shadow-[var(--win-shadow)]">
+                <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr>
-                            <th>Nombre</th>
-                            <th>Rol / Cargo</th>
-                            <th>Estado</th>
-                            <th>Último Acceso</th>
-                            <th className="text-right">Acciones</th>
+                        <tr className="bg-[var(--surface2)] text-[10px] uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
+                            <th className="py-3 px-4">Nombre</th>
+                            <th className="py-3 px-4">Rol / Cargo</th>
+                            <th className="py-3 px-4">Estado</th>
+                            <th className="py-3 px-4">Último Acceso</th>
+                            <th className="py-3 px-4 text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-[var(--border-var)]">
                         {usuarios?.map(u => (
-                            <tr key={u.id} className={!u.activo ? 'opacity-50 italic grayscale' : ''}>
-                                <td className="font-bold text-slate-700">{u.nombre}</td>
-                                <td>
-                                    <span className={`badge ${u.rol === 'ADMIN' ? 'badge-r' : u.rol === 'SUPERVISOR' ? 'badge-y' : 'badge-g'}`}>
+                            <tr key={u.id} className={`${!u.activo ? 'opacity-50 italic grayscale bg-[var(--surfaceDark)]' : 'hover:bg-[var(--surfaceDark)]'} transition-none`}>
+                                <td className="font-bold text-[var(--text-main)] py-3 px-4">{u.nombre}</td>
+                                <td className="py-3 px-4">
+                                    <span className={`badge shadow-[var(--win-shadow)] ${u.rol === 'ADMIN' ? 'bg-[var(--red-var)] text-white' : u.rol === 'SUPERVISOR' ? 'bg-[var(--orange-var)] text-white' : 'badge-g'}`}>
                                         {u.rol}
                                     </span>
                                 </td>
-                                <td>
+                                <td className="py-3 px-4">
                                     <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full ${u.activo ? 'bg-green-500' : 'bg-slate-300'}`}></div>
-                                        <span className="text-[10px] font-bold uppercase">{u.activo ? 'Activo' : 'Inactivo'}</span>
+                                        <div className={`w-2 h-2 rounded-none border border-black/10 ${u.activo ? 'bg-[var(--teal)]' : 'bg-slate-300'}`}></div>
+                                        <span className="text-[10px] font-black uppercase text-[var(--text2)]">{u.activo ? 'Activo' : 'Inactivo'}</span>
                                     </div>
                                 </td>
-                                <td className="text-slate-400 text-[10px] font-mono">{u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString() : 'Nunca'}</td>
-                                <td className="text-right">
+                                <td className="text-[var(--text2)] text-[10px] font-mono py-3 px-4">{u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString() : 'Nunca'}</td>
+                                <td className="text-right py-3 px-4">
                                     <div className="flex justify-end gap-1">
-                                        <button className="btn btn-gr !p-2" title="Editar" onClick={() => { setEditing(u); setForm(u); setShowModal(true) }}>
+                                        <button className="btn bg-[var(--surface2)] text-[var(--text-main)] !p-2 transition-none shadow-[var(--win-shadow)] cursor-pointer" title="Editar"
+                                            onClick={async () => {
+                                                setEditing(u);
+                                                setForm(u);
+                                                const comm = await db.comisiones_config.where('user_id').equals(u.id).first()
+                                                if (comm) setCommissionForm({ commission_type: comm.commission_type, percentage: comm.percentage, active: comm.active })
+                                                else setCommissionForm({ commission_type: 'SALES_PCT', percentage: 0, active: true })
+                                                setShowModal(true)
+                                            }}>
                                             <span className="material-icons-round text-base">edit</span>
                                         </button>
-                                        <button className={`btn !p-2 ${u.activo ? 'btn-r' : 'btn-gr'}`} title={u.activo ? 'Desactivar' : 'Activar'}
+                                        <button className={`btn !p-2 transition-none shadow-[var(--win-shadow)] cursor-pointer ${u.activo ? 'bg-[var(--red-var)] text-white' : 'btn-gr'}`} title={u.activo ? 'Desactivar' : 'Activar'}
                                             onClick={() => toggleActivo(u)}>
                                             <span className="material-icons-round text-base">{u.activo ? 'block' : 'check_circle'}</span>
                                         </button>
@@ -104,45 +141,71 @@ export default function Usuarios() {
                 </table>
             </div>
 
-            {showModal && (
-                <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <form className="bg-white p-6 rounded-[32px] max-w-sm w-full shadow-2xl animate-in zoom-in-95" onSubmit={handleSave}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">{editing ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
-                            <button type="button" onClick={() => { setShowModal(false); setEditing(null) }} className="text-slate-400 hover:text-slate-600">
-                                <span className="material-icons-round">close</span>
-                            </button>
-                        </div>
+            <Modal open={showModal} onClose={() => { setShowModal(false); setEditing(null) }}
+                title={editing ? 'ACTUALIZAR CREDENCIALES DE USUARIO' : 'REGISTRO DE NUEVO OPERADOR'}>
+                <form className="space-y-6" onSubmit={handleSave}>
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">NOMBRE COMPLETO DEL OPERADOR *</label>
+                        <input type="text" required className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black uppercase text-sm" placeholder="EJ: MARIA DELGADO"
+                            value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value.toUpperCase() })} />
+                    </div>
 
-                        <div className="space-y-4">
-                            <div className="field">
-                                <label>Nombre Completo</label>
-                                <input type="text" required className="inp !py-3" placeholder="Ej: Maria Delgado"
-                                    value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value.toUpperCase() })} />
-                            </div>
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">ROL / CARGO EN EL SISTEMA</label>
+                        <select className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none uppercase text-xs font-black shadow-inner" value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
+                            <option value="CAJERO">VENDEDOR / CAJERO</option>
+                            <option value="SUPERVISOR">SUPERVISOR DE PISO</option>
+                            <option value="ADMIN">ADMINISTRADOR TOTAL</option>
+                        </select>
+                    </div>
 
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">PIN DE SEGURIDAD (4-6 DÍGITOS)</label>
+                        <input type="password" required className="inp !py-4 font-mono tracking-widest rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black text-center text-xl" maxLength={6}
+                            value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
+                        <p className="text-[10px] font-black text-[var(--text2)] mt-2 uppercase opacity-40 text-center italic">Este PIN será requerido para iniciar sesión</p>
+                    </div>
+
+                    <div className="bg-[var(--surfaceDark)] p-6 border-t-2 border-[var(--orange-var)] space-y-4">
+                        <h3 className="text-xs font-black text-[var(--orange-var)] uppercase tracking-widest flex items-center gap-2">
+                            <span className="material-icons-round text-sm">payments</span>
+                            Incentivos y Comisiones
+                        </h3>
+
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="field">
-                                <label>Rol del Sistema</label>
-                                <select className="inp !py-3" value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
-                                    <option value="CAJERO">CAJERO (Facturación)</option>
-                                    <option value="SUPERVISOR">SUPERVISOR (Control)</option>
-                                    <option value="ADMIN">ADMINISTRADOR (Todo)</option>
+                                <label className="text-[9px] font-black uppercase text-[var(--text2)]">Tipo de Comisión</label>
+                                <select className="inp bg-[var(--surface2)] !py-3 text-[10px] font-black"
+                                    value={commissionForm.commission_type}
+                                    onChange={e => setCommissionForm({ ...commissionForm, commission_type: e.target.value })}>
+                                    <option value="SALES_PCT">% SOBRE VENTA TOTAL</option>
+                                    <option value="PROFIT_PCT">% SOBRE UTILIDAD (PROFIT)</option>
                                 </select>
                             </div>
-
                             <div className="field">
-                                <label>PIN de Acceso (4-6 dígitos)</label>
-                                <input type="password" required className="inp !py-3 font-mono tracking-widest" maxLength={6}
-                                    value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button type="submit" className="btn btn-primary flex-1 !py-3 font-black">GUARDAR CAMBIOS</button>
+                                <label className="text-[9px] font-black uppercase text-[var(--text2)]">Porcentaje (%)</label>
+                                <input type="number" step="0.01" className="inp bg-[var(--surface2)] !py-3 text-center font-black"
+                                    value={commissionForm.percentage}
+                                    onChange={e => setCommissionForm({ ...commissionForm, percentage: parseFloat(e.target.value) || 0 })} />
                             </div>
                         </div>
-                    </form>
-                </div>
-            )}
+                        <div className="flex items-center gap-2">
+                            <input type="checkbox" checked={commissionForm.active}
+                                onChange={e => setCommissionForm({ ...commissionForm, active: e.target.checked })}
+                                className="w-4 h-4 accent-[var(--teal)]" />
+                            <label className="text-[9px] font-black uppercase text-[var(--text2)]">Generar Comisiones para este usuario</label>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-4 border-t border-[var(--border-var)]">
+                        <button type="button" className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => { setShowModal(false); setEditing(null) }}>ABORTAR</button>
+                        <button type="submit" className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest uppercase">
+                            <span className="material-icons-round text-base">verified_user</span>
+                            <span>{editing ? 'ACTUALIZAR' : 'REGISTRAR'} OPERADOR</span>
+                        </button>
+                    </div>
+                </form>
+            </Modal>
         </div>
     )
 }

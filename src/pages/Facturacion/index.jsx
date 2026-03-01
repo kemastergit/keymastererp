@@ -13,6 +13,7 @@ import { btPrinter } from '../../utils/bluetoothPrinter'
 import Catalogo from './Catalogo'
 import ItemsAgregados from './ItemsAgregados'
 import PanelPago from './PanelPago'
+import SmartSidebar from './SmartSidebar'
 
 export default function Facturacion() {
   const {
@@ -22,26 +23,91 @@ export default function Facturacion() {
     ivaEnabled, setIvaEnabled, payments, addPayment, removePayment,
     paymentsTotal, activeSession, toast,
     configEmpresa, loadConfigEmpresa, currentUser,
-    btStatus, setBtStatus
+    btStatus, setBtStatus, setHideNav, setShowHelp,
   } = useStore()
+  const lastScrollY = useRef(0)
+
+  const handleScroll = (e) => {
+    const currentScroll = e.target.scrollTop
+    if (window.innerWidth >= 768) return
+
+    if (currentScroll > lastScrollY.current && currentScroll > 64) {
+      setHideNav(true)
+    } else if (currentScroll < lastScrollY.current) {
+      setHideNav(false)
+    }
+    lastScrollY.current = currentScroll
+  }
 
   const [busq, setBusq] = useState('')
   const [showDrop, setShowDrop] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [payForm, setPayForm] = useState({ metodo: 'EFECTIVO_USD', monto: '' })
+  const [payForm, setPayForm] = useState({ metodo: 'EFECTIVO_USD', montoUSD: '', montoBS: '' })
+
+  const openModalWithMethod = (method) => {
+    setPayForm({ ...payForm, metodo: method, montoUSD: '', montoBS: '' });
+    setShowPaymentModal(true);
+  }
+
   const [lastVenta, setLastVenta] = useState(null)
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [editForm, setEditForm] = useState({ descripcion: '', precio: '' })
 
   // Mobile stepper state
-  const [step, setStep] = useState(1) // 1: Catalogo, 2: Items, 3: Pago
+  const [step, setStep] = useState(1) // 1: Catalogo, 2: Items, 3: Pago, 4: Smart
 
   const ticketRef = useRef()
 
   useEffect(() => {
     loadConfigEmpresa()
+    const { loadTasa } = useStore.getState()
+    loadTasa()
   }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if a modal is open to let modal inputs handle keys if needed
+      // Actually per rules: Enter=confirm modal, Esc=close modal. Those 
+      // are better handled by the Modal component.
+
+      if (e.key === 'F2') {
+        e.preventDefault()
+        // Focus the search input inside Catalogo
+        const searchInput = document.getElementById('search-products')
+        if (searchInput) {
+          setStep(1)
+          searchInput.focus()
+        }
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        // Open payment modal
+        if (cart.length > 0) {
+          setStep(3)
+          setShowPaymentModal(true)
+        } else {
+          toast('El carrito está vacío', 'warn')
+        }
+      } else if (e.key === 'F9') {
+        e.preventDefault()
+        // Clear cart with confirmation
+        if (cart.length > 0 && confirm('¿Estás seguro de vaciar el carrito?')) {
+          clearCart()
+        }
+      } else if (e.key === 'z' && e.ctrlKey) {
+        // Undo last item from cart
+        e.preventDefault()
+        if (cart.length > 0) {
+          const lastItem = cart[cart.length - 1]
+          removeFromCart(lastItem.id)
+          toast('Último ítem removido: ' + lastItem.descripcion, 'info')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [cart, setShowPaymentModal, clearCart, setStep, removeFromCart, toast])
 
   const handlePrint = useReactToPrint({
     contentRef: ticketRef,
@@ -101,6 +167,8 @@ export default function Facturacion() {
     }
 
     const nro = await nextNro('nro_nota')
+    let ventaId = null
+    let ventaCalculada = null
 
     try {
       await db.transaction('rw', [
@@ -108,7 +176,7 @@ export default function Facturacion() {
         db.ctas_cobrar, db.abonos, db.sesiones_caja, db.config
       ], async () => {
 
-        // 1. VALIDACIÓN DE STOCK EN TIEMPO REAL
+        // 1. VALIDACIÓN DE STOCK EN TIEMEPO REAL
         for (const item of cart) {
           const freshArticle = await db.articulos.get(item.id)
           if (!freshArticle || freshArticle.stock < item.qty) {
@@ -116,14 +184,14 @@ export default function Facturacion() {
           }
         }
 
-        const venta = {
+        ventaCalculada = {
           nro, fecha: new Date(), cliente: clienteFact,
           tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(),
           igtf: cartIgtf(),
           total, payments, estado: 'ACTIVA', vencimiento: vencFact || null,
           usuario_id: currentUser?.id, turno_id: activeSession.id
         }
-        const ventaId = await db.ventas.add(venta)
+        ventaId = await db.ventas.add(ventaCalculada)
 
         // 2. Items y Actualización de Stock Atómica
         for (const item of cart) {
@@ -164,9 +232,14 @@ export default function Facturacion() {
         await db.sesiones_caja.update(activeSession.id, { notas_del_dia: nuevasNotas })
       })
 
-      // FUERA DE LA TRANSACCIÓN (Efectos secundarios)
+      // FUERA DE LA TRANSACCIÓn (Efectos secundarios)
       await useStore.getState().loadSession()
       logAction(currentUser, 'VENTA_PROCESADA', { nro, cliente: clienteFact, total })
+
+      // PROCESAR COMISIONES (Si aplica)
+      const { processSaleCommissions } = await import('../../utils/comisiones')
+      await processSaleCommissions(ventaId, ventaCalculada, cart.map(i => ({ ...i, costo: i.costo || 0 })))
+
       toast(`✅ Nota #${nro} procesada — Total: ${fmtUSD(total)}`)
 
       // Preparar para impresión
@@ -176,7 +249,9 @@ export default function Facturacion() {
         igtf: cartIgtf(),
         total, payments, items: cart
       }
-      printNota(ventaFull, cart, tasa)
+      setLastVenta(ventaFull)
+      setShowPrintModal(true)
+
       clearCart()
       setStep(1)
 
@@ -213,10 +288,28 @@ export default function Facturacion() {
   }
 
   const handleAddPay = () => {
-    const m = parseFloat(payForm.monto)
-    if (!m || m <= 0) return
-    addPayment(payForm.metodo, m)
-    setPayForm({ ...payForm, monto: '' })
+    const usd = parseFloat(payForm.montoUSD)
+    if (!usd || usd <= 0) return
+    const bs = parseFloat(payForm.montoBS) || (usd * tasa)
+    addPayment(payForm.metodo, usd, tasa, bs)
+    setPayForm({ ...payForm, montoUSD: '', montoBS: '' })
+  }
+
+  const updatePayAmount = (val, fromUSD = true) => {
+    const n = parseFloat(val) || 0
+    if (fromUSD) {
+      setPayForm(prev => ({
+        ...prev,
+        montoUSD: val,
+        montoBS: n > 0 ? (n * tasa).toFixed(2) : ''
+      }))
+    } else {
+      setPayForm(prev => ({
+        ...prev,
+        montoBS: val,
+        montoUSD: n > 0 ? (n / tasa).toFixed(2) : ''
+      }))
+    }
   }
 
   const addGeneric = async () => {
@@ -244,23 +337,58 @@ export default function Facturacion() {
   }
 
   return (
-    <>
+    <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-[var(--surfaceDark)]">
       {/* TABS MOBILE ONLY */}
-      <div className="lg:hidden flex bg-white rounded-2xl p-1 mb-3 shadow-sm border border-slate-100 flex-none z-10">
-        <button className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest rounded-xl transition-all ${step === 1 ? 'bg-primary text-white shadow-md' : 'text-slate-400'}`} onClick={() => setStep(1)}>1. Buscar</button>
-        <button className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest rounded-xl transition-all relative ${step === 2 ? 'bg-primary text-white shadow-md' : 'text-slate-400'}`} onClick={() => setStep(2)}>
-          2. Items
-          {cart.length > 0 && <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px]">{cart.length}</span>}
+      <div className="lg:hidden flex bg-[var(--surface)] p-1 mb-1 shadow-sm border-b border-[var(--border-var)] flex-none z-20">
+        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 1 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(1)}>1. Buscar</button>
+        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none relative ${step === 2 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(2)}>
+          2. Items {cart.length > 0 && `(${cart.length})`}
         </button>
-        <button className={`flex-1 py-3 text-xs font-bold uppercase tracking-widest rounded-xl transition-all ${step === 3 ? 'bg-primary text-white shadow-md' : 'text-slate-400'}`} onClick={() => setStep(3)}>3. Pago</button>
+        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 3 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(3)}>3. Pago</button>
+        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 4 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(4)}>4. App</button>
       </div>
 
-      <div className="ventas-container flex-1 w-full h-full pb-[80px] md:pb-0 relative min-h-0 flex flex-col">
+      <div className="ventas-container flex-1 w-full overflow-hidden relative min-h-0 flex flex-col">
         {/* DESKTOP LAYOUT AND MOBILE CONDITIONAL VISIBILITY */}
-        <div className="flex flex-col lg:flex-row h-full gap-3 overflow-hidden min-h-0 flex-1">
+        <div className="flex flex-col lg:flex-row h-full gap-0 lg:gap-2 overflow-hidden min-h-0 flex-1">
 
+          {/* MOBILE SCROLL WRAPPER FOR STEPS */}
+          <div
+            className="lg:hidden flex-1 overflow-y-auto custom-scroll pb-10 scroll-smooth"
+            onScroll={handleScroll}
+          >
+            {step === 1 && (
+              <Catalogo
+                busq={busq} setBusq={setBusq}
+                showDrop={showDrop} setShowDrop={setShowDrop}
+                articulos={articulos} addToCart={addToCart} addGeneric={addGeneric}
+              />
+            )}
+            {step === 2 && (
+              <ItemsAgregados
+                cart={cart} updateQty={updateQty}
+                openEditItem={openEditItem} removeFromCart={removeFromCart}
+              />
+            )}
+            {step === 3 && (
+              <PanelPago
+                cart={cart} cartSubtotal={cartSubtotal} cartIva={cartIva} cartIgtf={cartIgtf} cartTotal={cartTotal}
+                ivaEnabled={ivaEnabled} setIvaEnabled={setIvaEnabled}
+                tipoPago={tipoPago} setTipoPago={setTipoPago}
+                payments={payments} paymentsTotal={paymentsTotal}
+                openModalWithMethod={openModalWithMethod}
+                setShowPaymentModal={setShowPaymentModal} removePayment={removePayment}
+                tasa={tasa} vencFact={vencFact} setVencFact={setVencFact}
+                procesarCotizacion={procesarCotizacion} clearCart={clearCart}
+                procesarNota={procesarNota} clienteFact={clienteFact} setClienteFact={setClienteFact}
+              />
+            )}
+            {step === 4 && <SmartSidebar tasa={tasa} />}
+          </div>
+
+          {/* DESKTOP VIEW (HIDDEN ON MOBILE) */}
           {/* COLUMNA 1: CATALOGO */}
-          <div className={`h-full lg:flex ${step === 1 ? 'flex' : 'hidden'} lg:flex-1`}>
+          <div className="hidden lg:flex lg:flex-1 h-full min-w-0">
             <Catalogo
               busq={busq} setBusq={setBusq}
               showDrop={showDrop} setShowDrop={setShowDrop}
@@ -268,108 +396,130 @@ export default function Facturacion() {
             />
           </div>
 
-          {/* COLUMNA 2: ITEMS */}
-          <div className={`h-full lg:flex ${step === 2 ? 'flex' : 'hidden'} lg:flex-none lg:w-[280px] xl:w-[320px]`}>
+          {/* COLUMNA 2: ITEMS (WIDTH MODERADO) */}
+          <div className={`h-full hidden lg:flex lg:flex-none lg:w-[240px] xl:w-[280px]`}>
             <ItemsAgregados
               cart={cart} updateQty={updateQty}
               openEditItem={openEditItem} removeFromCart={removeFromCart}
             />
           </div>
 
-          {/* COLUMNA 3: PAGO */}
-          <div className={`h-full lg:flex ${step === 3 ? 'flex' : 'hidden'} lg:flex-none lg:w-[280px] xl:w-[320px]`}>
+          {/* COLUMNA 3: PAGO (WIDTH MODERADO) */}
+          <div className={`h-full hidden lg:flex lg:flex-none lg:w-[240px] xl:w-[280px]`}>
             <PanelPago
               cart={cart} cartSubtotal={cartSubtotal} cartIva={cartIva} cartIgtf={cartIgtf} cartTotal={cartTotal}
               ivaEnabled={ivaEnabled} setIvaEnabled={setIvaEnabled}
               tipoPago={tipoPago} setTipoPago={setTipoPago}
               payments={payments} paymentsTotal={paymentsTotal}
+              openModalWithMethod={openModalWithMethod}
               setShowPaymentModal={setShowPaymentModal} removePayment={removePayment}
               tasa={tasa} vencFact={vencFact} setVencFact={setVencFact}
               procesarCotizacion={procesarCotizacion} clearCart={clearCart}
               procesarNota={procesarNota} clienteFact={clienteFact} setClienteFact={setClienteFact}
             />
           </div>
+
+          {/* COLUMNA 4: SMART SIDEBAR (APP DENTRO DE APP) */}
+          <div className={`h-full hidden lg:flex lg:flex-none lg:w-[180px] xl:w-[220px]`}>
+            <SmartSidebar tasa={tasa} />
+          </div>
         </div>
       </div>
 
-      {/* MOBILE FLOATING BUTTONS FOR NAVIGATION */}
-      <div className="fixed bottom-[80px] md:bottom-24 left-1/2 -translate-x-1/2 w-[90%] lg:hidden flex gap-2 z-40">
-        {step === 1 && (
-          <button onClick={() => setStep(2)} className="flex-1 bg-amber-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-amber-500/30 uppercase tracking-widest flex items-center justify-center gap-2">
-            Ver Items <span className="bg-white text-amber-500 px-2 py-0.5 rounded-full text-xs font-mono">{cart.length}</span> <span className="material-icons-round">arrow_forward</span>
-          </button>
-        )}
-        {step === 2 && (
-          <>
-            <button onClick={() => setStep(1)} className="flex-1 bg-white text-slate-500 border border-slate-200 font-bold py-4 rounded-2xl uppercase tracking-widest flex items-center justify-center gap-1">
-              <span className="material-icons-round text-sm">arrow_back</span> Atrás
-            </button>
-            <button onClick={() => setStep(3)} className="flex-[2] bg-primary text-white font-black py-4 rounded-2xl shadow-xl shadow-primary/30 uppercase tracking-widest flex items-center justify-center gap-2">
-              Ir a Pagar <span className="material-icons-round">arrow_forward</span>
-            </button>
-          </>
-        )}
-        {step === 3 && (
-          <>
-            <button onClick={() => setStep(2)} className="flex-1 bg-white text-slate-500 border border-slate-200 font-bold py-4 rounded-2xl uppercase tracking-widest flex items-center justify-center gap-1">
-              <span className="material-icons-round text-sm">arrow_back</span> Items
-            </button>
-            <button onClick={procesarNota} className="flex-[2] bg-green-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-green-500/30 uppercase tracking-widest flex items-center justify-center gap-2">
-              Cerrar Venta <span className="material-icons-round">check_circle</span>
-            </button>
-          </>
-        )}
-      </div>
-
       {/* MODALS */}
-      <Modal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="Registrar Pago">
-        <div className="space-y-4">
+      <Modal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="REGISTRAR PAGO RECIBIDO">
+        <div className="space-y-6">
           <div className="field">
-            <label>Método de Pago</label>
-            <select className="inp !py-3" value={payForm.metodo} onChange={e => setPayForm({ ...payForm, metodo: e.target.value })}>
-              <option value="EFECTIVO_USD">Efectivo $</option>
-              <option value="EFECTIVO_BS">Efectivo Bs</option>
-              <option value="PAGO_MOVIL">Pago Móvil</option>
-              <option value="PUNTO_VENTA">Punto de Venta</option>
-              <option value="ZELLE">Zelle</option>
-              <option value="OTRO">Otro</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Monto en Dólares ($)</label>
-            <div className="relative">
-              <input type="number" className="inp !py-3 !pl-8 font-mono text-lg font-bold"
-                autoFocus
-                placeholder="0.00" value={payForm.monto} onChange={e => setPayForm({ ...payForm, monto: e.target.value })} />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold z-10">$</span>
+            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)] mb-3 block">Seleccione el Método de Cobro *</label>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              {[
+                { id: 'EFECTIVO_USD', label: 'EFECTIVO', icon: 'payments' },
+                { id: 'PAGO_MOVIL', label: 'P.MÓVIL', icon: 'account_balance' },
+                { id: 'ZELLE', label: 'ZELLE', icon: 'credit_card' },
+                { id: 'EFECTIVO_BS', label: 'BOLÍVARES', icon: 'savings' },
+                { id: 'PUNTO_VENTA', label: 'PUNTO', icon: 'point_of_sale' },
+                { id: 'OTRO', label: 'OTRO', icon: 'more_horiz' },
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setPayForm({ ...payForm, metodo: m.id })}
+                  className={`flex flex-col items-center justify-center gap-2 p-3 border-2 transition-all duration-200 aspect-square sm:aspect-auto sm:h-24
+                    ${payForm.metodo === m.id
+                      ? 'bg-[var(--teal)] border-[var(--teal)] text-white shadow-lg lg:scale-105 z-10'
+                      : 'bg-[var(--surfaceDark)] border-[var(--border-var)] text-[var(--text2)] hover:border-[var(--teal)] hover:text-[var(--text-main)] cursor-pointer'
+                    }`}
+                >
+                  <span className="material-icons-round text-2xl">{m.icon}</span>
+                  <span className="text-[9px] font-black uppercase tracking-tighter text-center leading-none">{m.label}</span>
+                </button>
+              ))}
             </div>
-            {payForm.metodo === 'EFECTIVO_BS' || payForm.metodo === 'PAGO_MOVIL' || payForm.metodo === 'PUNTO_VENTA' ? (
-              <p className="text-[10px] text-primary font-bold mt-2 uppercase">Equivalente: {fmtBS(parseFloat(payForm.monto) || 0, tasa)}</p>
-            ) : null}
           </div>
-          <div className="flex gap-3 pt-2">
-            <button className="btn btn-gr flex-1" onClick={() => setShowPaymentModal(false)}>Cancelar</button>
-            <button className="btn btn-primary flex-1 font-black" onClick={handleAddPay}>Agregar</button>
+
+          <div className="bg-[var(--surfaceDark)] p-6 border-2 border-[var(--border-var)] shadow-inner space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
+              <div className="field !mb-0">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--teal)] mb-2 block min-h-[24px]">Monto en Dólares ($)</label>
+                <div className="relative">
+                  <input type="number"
+                    className="inp !py-4 !pl-10 font-mono text-xl font-black w-full rounded-none focus:bg-[var(--teal)]/5 transition-none shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    autoFocus
+                    placeholder="0.00"
+                    value={payForm.montoUSD}
+                    onChange={e => updatePayAmount(e.target.value, true)}
+                    inputMode="decimal"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--teal)] font-black z-10">$</span>
+                </div>
+              </div>
+
+              <div className="field !mb-0">
+                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)] mb-2 block min-h-[24px]">Equivalencia en Bolívares (Bs)</label>
+                <div className="relative">
+                  <input type="number"
+                    className="inp !py-4 !pl-12 font-mono text-xl font-black w-full rounded-none focus:bg-[var(--teal)]/5 transition-none shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    placeholder="0.00"
+                    value={payForm.montoBS}
+                    onChange={e => updatePayAmount(e.target.value, false)}
+                    inputMode="decimal"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)] font-black z-10 text-[10px]">BS</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center py-2 px-3 bg-[var(--surface2)] border-l-4 border-[var(--teal)]">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text2)]">Tasa de Cambio (BCV):</span>
+              <span className="font-mono font-black text-[var(--teal)]">1 $ = {tasa.toFixed(2)} BS</span>
+            </div>
+          </div>
+
+          <div className="flex gap-4 pt-2">
+            <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => setShowPaymentModal(false)}>DESCARTAR</button>
+            <button className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={handleAddPay}>
+              <span className="material-icons-round text-base">add_task</span>
+              <span>CARGAR PAGO</span>
+            </button>
           </div>
         </div>
       </Modal>
 
       <Modal open={showPrintModal && !!lastVenta} onClose={() => setShowPrintModal(false)} title="Venta Exitosa">
         <div className="space-y-6">
-          <div className="bg-slate-50 p-2 rounded-xl scale-90 origin-top overflow-hidden border border-slate-100 h-[280px] overflow-y-auto">
+          <div className="bg-[var(--surfaceDark)] p-1 scale-90 origin-top overflow-hidden border border-[var(--border-var)] h-[280px] overflow-y-auto shadow-inner">
             <TicketTermico ref={null} nota={lastVenta} config={configEmpresa} />
           </div>
 
           <div className="grid grid-cols-1 gap-2">
-            <button className="btn btn-primary py-4 font-black flex items-center justify-center gap-3" onClick={() => handlePrint()}>
+            <button className="btn py-4 font-black flex items-center justify-center gap-3 bg-[var(--teal)] text-white shadow-[var(--win-shadow)] hover:bg-[var(--tealDark)]" onClick={() => handlePrint()}>
               <span className="material-icons-round">print</span>
               IMPRIMIR CABLE / RED
             </button>
 
             <button
-              className={`btn py-4 font-black flex items-center justify-center gap-3 transition-all
-                ${btStatus === 'CONNECTED' ? 'bg-blue-600 text-white' :
-                  btStatus === 'CONNECTING' ? 'bg-amber-500 text-white animate-pulse' : 'bg-slate-800 text-slate-300'}`}
+              className={`btn py-4 font-black flex items-center justify-center gap-3 transition-none border border-[var(--border-var)] shadow-[var(--win-shadow)]
+                ${btStatus === 'CONNECTED' ? 'bg-[#0078d4] text-white hover:bg-[#005a9e]' :
+                  btStatus === 'CONNECTING' ? 'bg-[var(--orange-var)] text-white animate-pulse' : 'bg-[var(--surface2)] text-[var(--text2)] hover:bg-[var(--surface)]'}`}
               onClick={handlePrintBT}
               disabled={btStatus === 'CONNECTING'}>
               <span className="material-icons-round">
@@ -404,6 +554,6 @@ export default function Facturacion() {
       <div style={{ display: 'none' }}>
         <TicketTermico ref={ticketRef} nota={lastVenta} config={configEmpresa} />
       </div>
-    </>
+    </div>
   )
 }

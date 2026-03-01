@@ -29,3 +29,6 @@ cleaned_data.json
 extract_excel.js
 *.xlsx
 *.csv
+
+# Local Netlify folder
+.netlify

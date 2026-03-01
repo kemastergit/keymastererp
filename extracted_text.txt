@@ -1,0 +1,481 @@
+ADDENDUM TÉCNICO — PARTE 9
+SISTEMA VISUAL FRONTEND
+Keymaster ERP — Design System + Prompt para Cursor / Android Studio
+Estilo MDI Utilitario · Teal/Gris Perla · IBM Plex · Responsive Inteligente
+1. Filosofía de Diseño — Lo que es y lo que no es
+REGLA MAESTRA: Cada píxel tiene una función. La decoración es el enemigo. La densidad de información es el objetivo.
+El sistema visual de Keymaster se basa en tres principios que NO se negocian en ninguna pantalla, en ningún componente, en ninguna versión futura:
+Elemento
+HACER ✓
+NUNCA ✗
+Border radius
+0px en todo. Cero. Sin excepciones.
+border-radius de cualquier valor. Ni 2px, ni 4px.
+Sombras
+Box-shadow sólido tipo offset: 2px 2px 0px rgba(0,0,0,0.15)
+Sombras difusas tipo blur. Nada de glow.
+Botones
+Borde definido 1px solid, fondo plano, estado :active con transform translate(1px,1px)
+Gradientes, sombras, animaciones largas en botones.
+Hover en filas
+background-color sólido. Sin transición o con transition:none
+Transiciones lentas de 300ms+. El hover es instantáneo.
+Selección activa
+Color sólido teal con texto blanco o fondo teal3 con borde izquierdo 3px teal
+Outline punteado, subrayado, o indicadores sutiles invisibles.
+Tipografía
+IBM Plex Sans para UI. IBM Plex Mono para números, SKU, código, montos.
+Inter, Roboto, Arial, system-ui. Están prohibidos.
+Colores
+Solo los del Design Token definido en esta sección.
+Colores ad-hoc fuera del sistema de tokens.
+Ventanas
+MDI: ventanas flotantes con titlebar teal en desktop. Stack de pantallas en móvil.
+Una sola pantalla plana sin estructura de ventana.
+2. Design Tokens — Variables CSS Globales
+Estas variables van en :root del archivo global.css. Ningún componente usa colores hardcoded. Todo referencia estas variables. Si algún día cambia la paleta, se cambia aquí y se propaga a todo el sistema.
+PALETA BASE — Fondo claro / Gris Perla
+Variable CSS
+Valor
+Uso
+--bg
+#F0F2F5
+Fondo general de la aplicación. Gris perla.
+--surface
+#FFFFFF
+Fondo de ventanas MDI, paneles, formularios.
+--surface2
+#E8EAED
+Fondo de toolbars, menubars, headers de tabla.
+--border
+#B0B8C4
+Borde principal. Usado en inputs, tablas, ventanas.
+--border2
+#D0D5DC
+Borde secundario. Separadores internos, filas alternas.
+--text
+#1A1F2E
+Texto principal. Títulos, labels, datos importantes.
+--text2
+#4A5568
+Texto secundario. Descripciones, subtítulos.
+--text3
+#8A93A2
+Texto terciario. Placeholders, info desactivada.
+PALETA DE ACENTO — Teal Moderno
+Variable CSS
+Valor
+Uso
+--teal
+#0B7285
+Acento principal. Titlebars, botones primarios, headers activos.
+--teal2
+#0E8FA3
+Acento hover. Estado hover de elementos teal.
+--teal3
+#C0EBF0
+Acento claro. Fondo de filas seleccionadas, badges.
+--teal4
+#E8F7FA
+Acento muy claro. Hover en filas, fondo de inputs focus.
+--tealDark
+#085E73
+Acento oscuro. Borde de botones primarios, active state.
+PALETA SEMÁNTICA — Estados del sistema
+Variable CSS
+Valor
+Uso
+--red
+#C0392B
+Error, eliminar, cancelar, precio bajo mínimo.
+--redLight
+#FDECEA
+Fondo de alertas de error, campos con error.
+--green
+#1A7A4A
+Éxito, confirmación, vuelto positivo, cuadre de caja.
+--greenLight
+#E8F5EE
+Fondo de alertas de éxito, vuelto, confirmaciones.
+--orange
+#B7600A
+Advertencia, stock bajo, tasa paralelo, atención.
+--orangeLight
+#FEF3E2
+Fondo de advertencias, stock bajo.
+--yellow
+#9A7D0A
+Información secundaria, estados pendientes.
+--shadow
+2px 2px 0px rgba(0,0,0,0.12)
+Sombra de botones normales.
+--shadow2
+3px 3px 0px rgba(0,0,0,0.15)
+Sombra de botones primarios y ventanas MDI.
+--win-shadow
+4px 4px 0px rgba(0,0,0,0.20)
+Sombra de ventanas MDI flotantes.
+3. Sistema de Ventanas MDI — Multiple Document Interface
+Keymaster usa un sistema MDI moderno. Cada módulo se abre como una ventana flotante dentro del workspace. En desktop hay múltiples ventanas simultáneas. En tablet las ventanas ocupan casi toda la pantalla. En móvil cada ventana es pantalla completa con navegación de regreso.
+3.1 Estructura de capas del shell
+┌─────────────────────────────────────────────────────────┐
+│  TITLEBAR (28px) — Logo, usuario, reloj, estado         │
+├─────────────────────────────────────────────────────────┤
+│  MENUBAR (24px) — Módulos principales del sistema       │
+├─────────────────────────────────────────────────────────┤
+│  TOOLBAR (36px) — Acciones contextuales del módulo      │
+├──────────────┬──────────────────────────────────────────┤
+│              │                                          │
+│  SIDEBAR     │   WORKSPACE / CONTENT                    │
+│  (180px)     │   ┌─── MDI WINDOW ───────────────┐      │
+│              │   │  TITLEBAR (24px) teal        │      │
+│  Nav por     │   │  ─────────────────────────── │      │
+│  módulo      │   │  WINDOW BODY                 │      │
+│              │   │  (contenido del módulo)      │      │
+│              │   └──────────────────────────────┘      │
+├──────────────┴──────────────────────────────────────────┤
+│  STATUSBAR (20px) — Info de turno, tasas, totales       │
+└─────────────────────────────────────────────────────────┘
+3.2 Comportamiento responsive de ventanas MDI
+Breakpoint
+Ventana MDI
+Sidebar
+Toolbar
+Desktop ≥ 1024px
+Flotante, redimensionable, múltiples simultáneas
+Visible fija 180px
+Completa con labels
+Tablet 600–1023px
+Ocupa 95% del workspace, centrada
+Colapsada, botón hamburguesa
+Iconos + labels cortos
+Móvil < 600px
+Pantalla completa, sin marco de ventana
+Oculta, drawer lateral
+Solo iconos + scroll horizontal
+4. Componentes Base — Especificaciones exactas
+4.1 Botones
+Existen 5 tipos de botón. Ningún otro. No se crean variantes sin documentarlas aquí primero.
+Tipo
+Fondo
+Borde
+Hover
+Uso
+PRIMARY
+--teal / blanco
+--tealDark
+--tealDark
+Cobrar, Guardar, Confirmar
+DEFAULT
+--surface2 / --text
+--border
+--teal / blanco
+Acciones normales toolbar
+DANGER
+--redLight / --red
+--red
+--red / blanco
+Cancelar, Eliminar, Anular
+GHOST
+transparent / --text2
+--border2
+--teal4 / --teal
+Acciones secundarias
+ICON
+--surface2 / --text
+--border
+--teal / blanco
+Solo ícono, sin texto
+Todos los botones tienen height: 26px en toolbar, 32px en formularios, 44px en acción principal (cobrar). Font-family: IBM Plex Mono para botones de toolbar. border-radius: 0px siempre.
+4.2 Inputs y Selects
+Elemento
+HACER ✓
+NUNCA ✗
+Input normal
+height:32px, border:1px solid --border, font: IBM Plex Mono 13px
+placeholder con font distinto, height variable
+Input focus
+border-color: --teal, background: --teal4, outline: none
+outline azul del browser por defecto
+Input error
+border-color: --red, background: --redLight
+solo cambiar color sin indicador visible
+Input readonly
+background: --surface2, color: --text2, cursor: not-allowed
+aspecto idéntico a input editable
+Select
+Mismo estilo que input. Flecha personalizada con CSS.
+Select nativo sin estilizar
+Label
+Font 11px, font-weight:700, color:--text2, UPPERCASE, letter-spacing:0.5px, font:IBM Plex Mono
+Label sin estilo o muy grande
+4.3 Tablas de datos
+Las tablas son el elemento más importante del sistema. El 80% del tiempo el usuario mira una tabla. Deben ser perfectas.
+Elemento
+HACER ✓
+NUNCA ✗
+Header de columna
+background:--surface2, font 10px bold UPPERCASE letter-spacing:0.8px, --text3, sticky top:0
+Colores llamativos en headers
+Fila par
+background: --surface (blanco)
+Alternado de colores muy contrastados
+Fila impar
+background: --gray (#F8F9FA muy sutil)
+Hover en fila
+background: --teal4 instantáneo, sin transición
+transition de 200ms o más en hover
+Fila seleccionada
+background: --teal3, border-left: 3px solid --teal
+Checkbox o indicador flotante
+Columna de montos
+font-family: IBM Plex Mono, text-align:right, color:--teal
+Montos en font proporcional
+Columna de SKU/código
+font-family: IBM Plex Mono, font-size:11px, color:--text3
+SKU en font normal
+Columna de acciones
+Ancho mínimo, íconos sin texto, hover color --red para eliminar
+Botones grandes en columna de acciones
+5. Anatomía de Cada Pantalla del Sistema
+Cada pantalla tiene una estructura interna fija. No se improvisa el layout de ninguna pantalla nueva.
+Pantalla
+Módulo
+Rol mínimo
+Ventana MDI / comportamiento
+Punto de Venta
+Caja
+CASHIER
+Grid 2 col: catálogo izq + carrito der. En móvil apilado. Maximizada por defecto.
+Dashboard
+Resumen
+CASHIER
+Grid de widgets: ingresos, caja, alertas. Ventana maximizada al login.
+Lista de Facturas
+Ventas
+CASHIER
+Toolbar + tabla full width con filtros inline. Doble clic abre detalle en nueva ventana MDI.
+Nueva Factura
+Ventas
+CASHIER
+Formulario 2 col: datos cliente izq + tabla ítems der. Modal para buscar productos.
+Cotizaciones
+Ventas
+CASHIER
+Igual a facturas pero con badge COTIZ en titlebar. Botón Convertir a Factura.
+Lista Clientes
+Clientes
+CASHIER
+Tabla con búsqueda inline. Panel lateral derecho con detalle al seleccionar fila.
+Ficha Cliente
+Clientes
+CASHIER
+Tabs: Datos / Facturas / Pagos / CxC. Cada tab es scroll interno.
+Entrada Inventario
+Compras
+SUPERVISOR
+Formulario de factura proveedor. Tabla de productos con costo nuevo vs anterior.
+Órdenes de Compra
+Compras
+SUPERVISOR
+Lista + detalle. Badge de estado: BORRADOR / ENVIADA / RECIBIDA.
+Catálogo Productos
+Inventario
+SUPERVISOR
+Grid de tarjetas O tabla togglable. Filtros por categoría en sidebar.
+Kardex Producto
+Inventario
+SUPERVISOR
+Timeline de movimientos. Saldo calculado en cada línea. Solo lectura.
+Cierre de Caja
+Caja
+SUPERVISOR
+Formulario de conteo físico. Comparativa teórico vs físico. Diferencia resaltada.
+Libro Diario
+Contabilidad
+ACCOUNTANT
+Tabla de asientos. Expandible para ver líneas débito/crédito. Solo lectura.
+Estado Resultados
+Reportes
+ACCOUNTANT
+Árbol colapsable de cuentas. Columnas: período actual vs anterior.
+Gestión Usuarios
+Configurar
+ADMIN
+Lista + formulario inline. Toggle activo/inactivo. Badge de rol por color.
+Tasas de Cambio
+Configurar
+ADMIN
+Historial inmutable en tabla. Formulario para nueva tasa en parte superior.
+Auditoría
+Auditoría
+AUDIT
+Tabla de log. Solo lectura absoluta. Filtros por usuario, fecha, tabla, acción.
+6. Atajos de Teclado Globales
+El sistema está diseñado para poder operarse completamente sin mouse. Esto es crítico para cajeros que procesan muchas ventas por hora.
+Tecla
+Acción
+Contexto
+F2
+Enfocar barra de búsqueda de productos
+Punto de Venta
+F8
+Abrir modal de cobro
+Punto de Venta con carrito no vacío
+F9
+Limpiar carrito (pide confirmación)
+Punto de Venta
+F10
+Abrir modal de devolución
+Punto de Venta
+Enter
+Confirmar acción principal del modal activo
+Cualquier modal abierto
+Escape
+Cerrar modal activo / cancelar operación
+Cualquier modal abierto
+Ctrl+N
+Nueva ventana MDI del módulo activo
+Cualquier módulo
+Ctrl+F
+Búsqueda en tabla activa
+Pantallas con tabla
+Ctrl+P
+Imprimir / exportar PDF del documento activo
+Facturas, reportes
+Tab / Shift+Tab
+Navegar entre campos del formulario activo
+Formularios
+Flechas ↑↓
+Navegar filas de tabla activa
+Tablas con selección
+Ctrl+Z
+Deshacer último ítem del carrito
+Punto de Venta
+7. Comportamientos Especiales Obligatorios
+7.1 Actualización de precio en tiempo real
+Cuando el servidor emite el evento WebSocket 'price_updated', el frontend debe:
+Actualizar el precio en el catálogo de productos visible en pantalla.
+Si el producto está en el carrito activo, actualizar su precio y recalcular totales.
+Aplicar animación CSS keyframe 'priceFlash': fondo teal3 → transparente en 1.5s en la tarjeta del producto.
+Mostrar toast de notificación: '⚡ PRECIO ACTUALIZADO: [nombre] → $[nuevo_precio]'
+7.2 Toast de notificación
+El sistema tiene un único componente Toast global. Posición: bottom-center fija. Aparece sobre el status bar. Desaparece en 2.8 segundos. Tiene 3 estados:
+Elemento
+HACER ✓
+NUNCA ✗
+INFO
+background: --teal, texto blanco
+Precio actualizado, operación exitosa
+WARN
+background: --orange, texto blanco
+Stock bajo, descuento requiere autorización
+ERROR
+background: --red, texto blanco
+Precio bajo mínimo, stock insuficiente, caja cerrada
+7.3 Estados de carga
+Ninguna pantalla muestra un spinner circular. Los estados de carga se muestran como:
+Filas de tabla: skeleton de barras grises con animación pulse horizontal.
+Botón en proceso: texto cambia a '...' y se deshabilita. Nunca spinner dentro del botón.
+Modal abierto esperando respuesta: overlay semitransparente sobre el modal con texto 'PROCESANDO...' en IBM Plex Mono.
+8. PROMPT LISTO PARA CURSOR / ANDROID STUDIO
+INSTRUCCIÓN: Copia todo el bloque de texto de esta sección y pégalo como System Prompt en Cursor (Settings → Rules for AI) o como primer mensaje en Android Studio con acceso a Claude Sonnet. Este prompt le dice al agente cómo construir o modificar CUALQUIER pantalla del sistema manteniendo el estilo Keymaster sin que tengas que explicarlo cada vez.
+═══ INICIO DEL PROMPT — COPIAR DESDE AQUÍ ═══
+Eres el agente de desarrollo del sistema ERP Keymaster.
+Antes de escribir cualquier línea de código frontend, lee y
+aplica estas reglas sin excepción.
+═══ IDENTIDAD DEL SISTEMA ═══
+Nombre: Keymaster ERP
+Stack frontend: React 18 + TypeScript + Zustand + React Query
+Fuente principal UI: IBM Plex Sans (import desde Google Fonts)
+Fuente datos/montos: IBM Plex Mono (import desde Google Fonts)
+PROHIBIDO: Inter, Roboto, Arial, system-ui, cualquier otra fuente
+═══ TOKENS DE COLOR — USAR SOLO ESTOS ═══
+--bg: #F0F2F5          /* fondo app */
+--surface: #FFFFFF     /* ventanas, paneles */
+--surface2: #E8EAED    /* toolbars, headers tabla */
+--border: #B0B8C4      /* borde principal */
+--border2: #D0D5DC     /* borde secundario */
+--text: #1A1F2E        /* texto principal */
+--text2: #4A5568       /* texto secundario */
+--text3: #8A93A2       /* texto terciario */
+--teal: #0B7285        /* acento principal */
+--teal2: #0E8FA3       /* hover acento */
+--teal3: #C0EBF0       /* acento claro */
+--teal4: #E8F7FA       /* acento muy claro */
+--tealDark: #085E73    /* acento oscuro */
+--red: #C0392B         /* error, peligro */
+--redLight: #FDECEA    /* fondo error */
+--green: #1A7A4A       /* éxito */
+--greenLight: #E8F5EE  /* fondo éxito */
+--orange: #B7600A      /* advertencia */
+--orangeLight: #FEF3E2 /* fondo advertencia */
+═══ REGLAS DE ESTILO — ABSOLUTOS ═══
+1. border-radius: 0px EN TODO. Sin excepciones.
+2. Sombras: solo offset sólido. Ej: box-shadow: 2px 2px 0px rgba(0,0,0,0.15)
+3. Hover en filas: instantáneo. transition: none o transition: background 0s
+4. Botones: borde 1px definido. Estado :active { transform: translate(1px,1px) }
+5. Tablas: th con UPPERCASE, letter-spacing:0.8px, font-size:10-11px, sticky top:0
+6. Columnas de montos: font-family IBM Plex Mono, text-align:right, color:--teal
+7. Labels de formulario: 11px, font-weight:700, UPPERCASE, IBM Plex Mono
+8. Inputs: height:32px, border:1px solid --border, focus→border-color:--teal + bg:--teal4
+9. NUNCA usar gradientes en botones, fondos o headers
+10. NUNCA usar border-radius, ni siquiera 2px
+═══ ESTRUCTURA DE VENTANA MDI ═══
+Toda pantalla es un componente <MdiWindow> con esta estructura:
+<MdiWindow title='NOMBRE MÓDULO' icon='📟'>
+  {/* contenido del módulo */}
+</MdiWindow>
+MdiWindow tiene:
+- win-titlebar: 24px, background:--teal, texto blanco IBM Plex Mono
+- Botones ─ □ ✕ en titlebar (18x16px, border:1px rgba(255,255,255,0.4))
+- win-body: flex-1, overflow:auto
+- En móvil <600px: ocupa pantalla completa sin borde de ventana
+- En tablet 600-1023px: width:95%, centrada
+- En desktop ≥1024px: flotante, redimensionable, arrastrble
+═══ SHELL GLOBAL DE LA APP ═══
+Estructura fija de arriba a abajo:
+1. TITLEBAR 28px — background:--teal — Logo KEYMASTER + usuario + reloj
+2. MENUBAR 24px — background:--surface2 — módulos del sistema
+3. TOOLBAR 36px — background:--surface — acciones contextuales
+4. WORKSPACE — flex:1 — [SIDEBAR 180px | CONTENT flex:1]
+5. STATUSBAR 20px — background:--teal — info de turno y tasas
+═══ SIDEBAR ═══
+- Ancho: 180px fijo en desktop, drawer en móvil
+- Items: padding 5px 10px, font 12px, border-left: 3px solid transparent
+- Hover: background:--teal4, color:--teal, border-left-color:--teal3
+- Activo: background:--teal4, color:--teal, border-left-color:--teal, font-weight:600
+- Badges: background:--teal, color:white, font 9px IBM Plex Mono
+═══ COMPORTAMIENTOS OBLIGATORIOS ═══
+- WebSocket 'price_updated': actualizar precio en catálogo + carrito + animación priceFlash
+- priceFlash keyframe: background --teal3 → transparent en 1.5s
+- Toast global: posición bottom-center, 2.8s, 3 estados (info/warn/error)
+- Loading state: skeleton bars, NO spinners circulares
+- Precio bajo mínimo: toast ERROR + bloquear confirmación
+- Caja cerrada al intentar vender: toast ERROR + bloquear
+- Descuento sobre límite de rol: toast WARN + requerir autorización supervisor
+═══ ATAJOS DE TECLADO OBLIGATORIOS EN POS ═══
+F2: focus barra búsqueda productos
+F8: abrir modal de cobro
+F9: limpiar carrito (con confirmación)
+Enter: confirmar modal activo
+Escape: cerrar modal activo
+═══ CÁLCULOS — REGLA ABSOLUTA ═══
+NUNCA calcular montos en el frontend.
+El frontend MUESTRA lo que el backend devuelve.
+La única excepción: mostrar el vuelto/cambio en el modal de cobro
+(recibido - total) calculado localmente solo para UX, nunca enviado al backend.
+═══ CUANDO TE PIDA CONSTRUIR UNA PANTALLA ═══
+1. Usa <MdiWindow> como contenedor
+2. Aplica todos los tokens de color definidos arriba
+3. IBM Plex Sans para texto, IBM Plex Mono para datos
+4. border-radius:0 en todo
+5. Tablas con th sticky, hover instantáneo, montos en Mono
+6. Responsive: desktop=MDI flotante, tablet=ventana grande, móvil=fullscreen
+7. Atajos de teclado según el módulo
+8. Toast para feedback de operaciones
+9. Nunca gradientes, nunca sombras difusas, nunca animaciones largas
+10. El estilo es: FoxPro + Bloomberg + VS Code = denso, eficiente, moderno
+═══ FIN DEL PROMPT — HASTA AQUÍ ═══
+DOCUMENTO CONFIDENCIAL — USO INTERNO — NO DISTRIBUIR
+Keymaster ERP — Parte 9: Sistema Visual Frontend — v1.0 — 2026

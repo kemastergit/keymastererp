@@ -48,7 +48,7 @@ export default function Proveedores() {
   }
 
   return (
-    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 space-y-4">
+    <div className="pr-2 pb-6 space-y-4">
       <div className="panel">
         <div className="flex items-center gap-2 mb-2">
           <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>PROVEEDORES</span>

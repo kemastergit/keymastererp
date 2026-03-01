@@ -1,20 +1,26 @@
 export default function Modal({ open, onClose, title, children, wide }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} />
-      <div className={`relative bg-white border border-borde rounded-t-2xl sm:rounded-xl w-full
+    <div className="fixed inset-0 z-[5000] flex items-end md:items-center justify-center p-0 md:p-6">
+      {/* Overlay - full screen and captures all clicks outside content */}
+      <div
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+        onClick={onClose}
+      />
+
+      {/* Modal Content */}
+      <div className={`relative bg-[var(--surface)] border border-[var(--border-var)] w-full
         ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'}
-        shadow-2xl z-[60] max-h-[90vh] overflow-y-auto`}>
-        <div className="w-10 h-1 bg-borde rounded mx-auto mt-3 mb-3 sm:hidden" />
+        shadow-[var(--win-shadow)] z-[5001] max-h-full overflow-y-auto animate-in zoom-in-95 slide-in-from-bottom-10 md:slide-in-from-bottom-0 duration-200`}>
         {title && (
-          <div className="flex items-center justify-between px-4 pb-3 border-b border-borde">
-            <h2 className="font-bebas text-xl tracking-widest text-rojo-bright">{title}</h2>
-            <button onClick={onClose} className="text-muted hover:text-rojo text-xl leading-none">✕</button>
+          <div className="flex items-center justify-between px-3 min-h-[32px] bg-[var(--surface2)] border-b border-[var(--border-var)] select-none">
+            <h2 className="font-['IBM_Plex_Mono'] font-bold text-[11px] uppercase tracking-wider text-[var(--teal)]">{title}</h2>
+            <button onClick={onClose} className="w-[20px] h-[20px] flex items-center justify-center border border-[var(--border-var)] hover:bg-[var(--red-var)] hover:text-white hover:border-[var(--red-var)] transition-colors">
+              <span className="text-[10px] pb-px">✕</span>
+            </button>
           </div>
         )}
-        <div className="p-4">{children}</div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   )

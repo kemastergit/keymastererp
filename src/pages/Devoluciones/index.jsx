@@ -11,7 +11,7 @@ export default function Devoluciones() {
   const [busqVenta, setBusqVenta] = useState('')
   const [ventaSel, setVentaSel] = useState(null)
   const [ventaItems, setVentaItems] = useState([])
-  const [selItems, setSelItems] = useState({})
+  const [selItems, setSelItems] = useState({}) // { [itemId]: qty }
   const [motivo, setMotivo] = useState('')
   const [reingresarStock, setReingresarStock] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -37,95 +37,117 @@ export default function Devoluciones() {
     setShowModal(true)
   }
 
-  const toggleItem = (id) => setSelItems(p => ({ ...p, [id]: !p[id] }))
+  const updateItemQty = (id, val, max) => {
+    const qty = Math.max(0, Math.min(max, parseInt(val) || 0))
+    setSelItems(p => ({ ...p, [id]: qty }))
+  }
 
   const procesarDevolucion = async () => {
-    const devItems = ventaItems.filter(i => selItems[i.id])
-    if (devItems.length === 0) { toast('Selecciona al menos un producto', 'warn'); return }
-    if (!motivo.trim()) { toast('Ingresa el motivo', 'warn'); return }
+    const devItems = ventaItems.filter(i => (selItems[i.id] || 0) > 0).map(i => ({ ...i, qty_dev: selItems[i.id] }))
+    if (devItems.length === 0) { toast('Establezca la cantidad a devolver', 'warn'); return }
+    if (!motivo.trim()) { toast('Ingresa el motivo técnico', 'warn'); return }
 
-    const currentUser = useStore.getState().currentUser
-    const devId = await db.devoluciones.add({
-      venta_id: ventaSel.id, nro_venta: ventaSel.nro,
-      cliente: ventaSel.cliente, motivo, fecha: new Date(),
-      total: devItems.reduce((s, i) => s + i.precio * i.qty, 0),
-      reingreso_stock: reingresarStock,
-      usuario_id: currentUser?.id
-    })
+    try {
+      await db.transaction('rw', [db.devoluciones, db.dev_items, db.articulos, db.ventas, db.bajas_inventario, db.auditoria], async () => {
+        const currentUser = useStore.getState().currentUser
+        const totalUSD = devItems.reduce((s, i) => s + i.precio * i.qty_dev, 0)
 
-    logAction(currentUser, 'DEVOLUCION_PROCESADA', {
-      nota: ventaSel.nro,
-      cliente: ventaSel.cliente,
-      items: devItems.length,
-      reingreso: reingresarStock
-    })
+        const devId = await db.devoluciones.add({
+          venta_id: ventaSel.id,
+          nro_venta: ventaSel.nro,
+          cliente: ventaSel.cliente,
+          motivo,
+          fecha: new Date(),
+          total: totalUSD,
+          reingreso_stock: reingresarStock,
+          usuario_id: currentUser?.id
+        })
 
-    for (const item of devItems) {
-      const { id, ...itemData } = item
-      await db.dev_items.add({ devolucion_id: devId, ...itemData })
-      // Devolver al stock solo si se seleccionó reingresar
-      if (reingresarStock) {
-        const art = await db.articulos.get(item.articulo_id)
-        if (art) {
-          const oldStock = art.stock || 0
-          await db.articulos.update(art.id, { stock: oldStock + item.qty })
-          logAction(currentUser, 'REINGRESO_STOCK_DEVOLUCION', {
-            codigo: art.codigo,
-            cant: item.qty,
-            antes: oldStock,
-            despues: oldStock + item.qty
+        for (const item of devItems) {
+          await db.dev_items.add({
+            devolucion_id: devId,
+            articulo_id: item.articulo_id,
+            descripcion: item.descripcion,
+            codigo: item.codigo,
+            qty: item.qty_dev,
+            precio: item.precio
           })
-        }
-      }
-    }
 
-    toast(reingresarStock ? '✅ Devolución procesada — Stock actualizado' : '⚠️ Devolución registrada como MERMA (Stock no afectado)')
-    // Marcar la venta como devuelta
-    await db.ventas.update(ventaSel.id, { estado: 'DEVUELTA' })
-    setShowModal(false); setVentaSel(null); setMotivo('')
+          if (reingresarStock) {
+            const art = await db.articulos.get(item.articulo_id)
+            if (art) {
+              await db.articulos.update(art.id, { stock: (art.stock || 0) + item.qty_dev })
+            }
+          } else {
+            await db.bajas_inventario.add({
+              articulo_id: item.articulo_id,
+              fecha: new Date(),
+              qty: item.qty_dev,
+              motivo: `DEVOLUCIÓN DAÑADA: ${motivo}`,
+              usuario_id: currentUser?.id
+            })
+          }
+        }
+
+        await logAction(currentUser, 'DEVOLUCION_PROCESADA', {
+          nota: ventaSel.nro,
+          total: totalUSD,
+          merma: !reingresarStock
+        })
+
+        await db.ventas.update(ventaSel.id, { estado: 'DEVUELTA_PARCIAL' })
+      })
+
+      toast(reingresarStock ? '✅ Stock reintegrado correctamente' : '⚠️ Registrado como DAÑADO (Pérdida)')
+      setShowModal(false)
+      setVentaSel(null)
+      setMotivo('')
+    } catch (err) {
+      console.error(err)
+      toast('❌ Error al procesar: ' + err.message, 'error')
+    }
   }
 
   return (
-    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="pr-2 pb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div>
-        <div className="panel p-0 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <div className="panel-title mb-0 uppercase tracking-tighter">Buscar Nota de Entrega</div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Seleccione la factura original</p>
+        <div className="panel p-0 overflow-hidden rounded-none shadow-[var(--win-shadow)] transition-none border-t-4 border-t-[var(--teal)]">
+          <div className="p-5 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+            <div className="text-xl font-black text-[var(--text-main)] mb-1 uppercase tracking-tighter">BÚSQUEDA DE VENTAS PARA DEVOLUCIÓN</div>
+            <p className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest">Identifique el comprobante original de la transacción</p>
           </div>
-          <div className="p-4">
+          <div className="p-5 bg-[var(--surface)]">
             <div className="field !m-0">
-              <input className="inp !py-2 !px-4 !bg-slate-50" placeholder="🔍 Buscar por N° nota o cliente..."
-                value={busqVenta} onChange={e => setBusqVenta(e.target.value)} />
+              <input className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner" placeholder="🔍 BUSCAR POR NRO DE NOTA O NOMBRE DEL CLIENTE..."
+                value={busqVenta} onChange={e => setBusqVenta(e.target.value.toUpperCase())} />
             </div>
           </div>
-          <div className="overflow-x-auto min-h-[300px]">
-            <table>
-              <thead><tr><th>Nota</th><th>Cliente</th><th>Fecha</th><th className="text-right">Total</th><th></th></tr></thead>
-              <tbody>
+          <div className="overflow-x-auto min-h-[350px]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
+                  <th className="py-3 px-4">Nota Ref.</th>
+                  <th className="py-3 px-4">Cliente / Comprador</th>
+                  <th className="py-3 px-4">Fecha</th>
+                  <th className="py-3 px-4 text-right">Total USD</th>
+                  <th className="py-3 px-4 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-var)]">
                 {ventas.map(v => (
-                  <tr key={v.id}>
-                    <td className="font-mono text-primary font-bold">#{v.nro}</td>
-                    <td className="font-bold text-slate-700">{v.cliente}</td>
-                    <td className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{fmtDate(v.fecha)}</td>
-                    <td className="font-mono text-right font-bold text-slate-800">{fmtUSD(v.total)}</td>
-                    <td className="text-right">
-                      {v.estado === 'DEVUELTA' ? (
-                        <span className="text-[8px] font-black tracking-widest text-slate-300 bg-slate-100 px-2 py-0.5 rounded-full uppercase">
-                          YA DEVUELTA
-                        </span>
-                      ) : (
-                        <button className="btn btn-y !py-1 !px-3 !text-[9px]" onClick={() => selVenta(v)}>
-                          <span className="material-icons-round text-sm">assignment_return</span>
-                          <span>DEVOLVER</span>
-                        </button>
-                      )}
+                  <tr key={v.id} className="hover:bg-[var(--surface2)] transition-none">
+                    <td className="py-3 px-4 font-mono text-[var(--teal)] font-black text-xs uppercase">#{v.nro}</td>
+                    <td className="py-3 px-4 font-black text-[var(--text-main)] text-xs uppercase">{v.cliente}</td>
+                    <td className="py-3 px-4 text-[var(--text2)] text-[10px] font-black uppercase tracking-tighter">{fmtDate(v.fecha)}</td>
+                    <td className="py-3 px-4 font-mono text-right font-black text-[var(--text-main)] text-xs">{fmtUSD(v.total)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <button className="btn bg-[var(--orange-var)] text-white !py-2 !px-4 !text-[10px] font-black uppercase tracking-widest shadow-[var(--win-shadow)] transition-none cursor-pointer inline-flex items-center gap-2" onClick={() => selVenta(v)}>
+                        <span className="material-icons-round text-sm">assignment_return</span>
+                        <span>DEVOLVER</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
-                {ventas.length === 0 && (
-                  <tr><td colSpan={5} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">No se encontraron notas</td></tr>
-                )}
               </tbody>
             </table>
           </div>
@@ -133,92 +155,101 @@ export default function Devoluciones() {
       </div>
 
       <div>
-        <div className="panel p-0 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <div className="panel-title mb-0 uppercase tracking-tighter">Historial Reciente</div>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Últimas devoluciones procesadas</p>
+        <div className="panel p-0 overflow-hidden rounded-none shadow-[var(--win-shadow)] transition-none border-t-4 border-t-[var(--red-var)]">
+          <div className="p-5 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+            <div className="text-xl font-black text-[var(--red-var)] mb-1 uppercase tracking-tighter">HISTORIAL DE DEVOLUCIONES</div>
+            <p className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest">Control Histórico de Mermas y Ajustes de Venta</p>
           </div>
-          <div className="overflow-x-auto min-h-[300px]">
-            <table>
-              <thead><tr><th>Ref</th><th>Cliente</th><th>Motivo</th><th className="text-right">Monto</th></tr></thead>
-              <tbody>
+          <div className="overflow-x-auto min-h-[350px]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
+                  <th className="py-3 px-4">Ref. Venta</th>
+                  <th className="py-3 px-4">Cliente</th>
+                  <th className="py-3 px-4 text-right">Monto Dev.</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-var)]">
                 {historial.map(d => (
-                  <tr key={d.id}>
-                    <td className="font-mono text-slate-400 font-bold text-[11px]">#{d.nro_venta}</td>
-                    <td className="font-bold text-slate-700">{d.cliente}</td>
-                    <td className="text-[10px] text-slate-500 font-bold uppercase truncate max-w-[120px]">{d.motivo}</td>
-                    <td className="font-mono text-red-500 text-right font-black">-{fmtUSD(d.total)}</td>
+                  <tr key={d.id} className="hover:bg-[var(--surface2)] transition-none italic opacity-80">
+                    <td className="py-3 px-4 font-mono text-[var(--text2)] font-black text-[11px] uppercase">#{d.nro_venta}</td>
+                    <td className="py-3 px-4 font-black text-[var(--text-main)] text-xs uppercase">{d.cliente}</td>
+                    <td className="py-3 px-4 font-mono text-[var(--red-var)] text-right font-black uppercase">-{fmtUSD(d.total)}</td>
                   </tr>
                 ))}
-                {historial.length === 0 && (
-                  <tr><td colSpan={4} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin historial de devoluciones</td></tr>
-                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Procesar Devolución" wide>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="GESTIÓN DE REVERSIÓN Y DEVOLUCIÓN" wide>
         {ventaSel && (
           <div className="space-y-6">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">Nota Ref / Cliente</p>
-                <p className="text-slate-800 font-bold">#{ventaSel.nro} — {ventaSel.cliente}</p>
+            <div className="bg-[var(--surfaceDark)] p-5 border-2 border-[var(--border-var)] flex items-center justify-between shadow-inner rounded-none">
+              <div className="flex flex-col">
+                <p className="text-[var(--text2)] text-[10px] font-black uppercase tracking-widest mb-1">COMPROBANTE ORIGINAL / TITULAR</p>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[var(--teal)] font-black text-lg uppercase">#{ventaSel.nro}</span>
+                  <span className="text-[var(--text-main)] font-black uppercase text-sm">{ventaSel.cliente}</span>
+                </div>
               </div>
-              <div className="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Original: {fmtUSD(ventaSel.total)}
+              <div className="text-right border-l border-[var(--border-var)] pl-6">
+                <p className="text-[var(--text2)] text-[10px] font-black uppercase tracking-widest mb-1">TOTAL FACTURADO</p>
+                <p className="text-2xl font-mono font-black text-[var(--text-main)]">{fmtUSD(ventaSel.total)}</p>
               </div>
             </div>
 
             <div>
-              <p className="text-[10px] text-slate-400 mb-3 tracking-widest uppercase font-bold">Seleccionar productos a devolver:</p>
-              <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scroll">
+              <p className="text-[10px] text-[var(--text2)] mb-3 tracking-widest uppercase font-black">Establezca cantidades a retornar:</p>
+              <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scroll">
                 {ventaItems.map(i => (
-                  <label key={i.id} className={`flex items-center gap-4 p-3 rounded-xl border transition-all cursor-pointer
-                    ${selItems[i.id] ? 'bg-primary/10 border-primary/20' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
-                    <input type="checkbox" checked={!!selItems[i.id]} onChange={() => toggleItem(i.id)}
-                      className="w-5 h-5 rounded-lg border-slate-300 text-primary focus:ring-primary/20 accent-primary" />
+                  <div key={i.id} className={`flex items-center gap-4 p-4 border-2 transition-none rounded-none shadow-sm
+                    ${(selItems[i.id] || 0) > 0 ? 'bg-[var(--teal)]/5 border-[var(--teal)]' : 'bg-[var(--surface)] border-[var(--border-var)]'}`}>
                     <div className="flex-1">
-                      <div className="text-sm font-bold text-slate-800">{i.descripcion}</div>
-                      <div className="text-[10px] font-mono text-primary font-bold">{i.codigo}</div>
+                      <div className="text-sm font-black text-[var(--text-main)] uppercase tracking-tight">{i.descripcion}</div>
+                      <div className="text-[10px] font-mono text-[var(--teal)] font-black uppercase tracking-widest">#{i.codigo} | Comprado: {i.qty}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs font-black text-slate-700">Cant: {i.qty}</div>
-                      <div className="text-[10px] font-mono text-slate-400">{fmtUSD(i.precio * i.qty)}</div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] font-black uppercase text-[var(--text2)] mr-1">Cant. Devolver:</label>
+                      <input
+                        type="number"
+                        className="inp !w-20 !py-2 text-center font-mono font-black !bg-[var(--surfaceDark)]"
+                        value={selItems[i.id] || 0}
+                        onChange={e => updateItemQty(i.id, e.target.value, i.qty)}
+                      />
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
 
-            <div className={`p-4 rounded-2xl border transition-all ${reingresarStock ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
-              <label className="flex items-center gap-4 cursor-pointer">
+            <div className={`p-5 border-2 transition-none rounded-none shadow-inner ${reingresarStock ? 'bg-[var(--teal)]/5 border-[var(--teal)]/30' : 'bg-[var(--red-var)]/5 border-[var(--red-var)]/30'}`}>
+              <label className="flex items-center gap-5 cursor-pointer">
                 <input type="checkbox" checked={reingresarStock} onChange={e => setReingresarStock(e.target.checked)}
-                  className={`w-6 h-6 rounded-full transition-all accent-current ${reingresarStock ? 'text-green-600' : 'text-amber-600'}`} />
+                  className={`w-7 h-7 rounded-none border-2 transition-none accent-current ${reingresarStock ? 'text-[var(--teal)]' : 'text-[var(--red-var)]'}`} />
                 <div>
-                  <div className={`text-sm font-black uppercase tracking-tight ${reingresarStock ? 'text-green-800' : 'text-amber-800'}`}>
-                    {reingresarStock ? 'Reingresar al Inventario' : 'Registrar como Merma'}
+                  <div className={`text-sm font-black uppercase tracking-widest ${reingresarStock ? 'text-[var(--teal)]' : 'text-[var(--red-var)]'}`}>
+                    {reingresarStock ? 'RESTAURAR EXISTENCIAS EN INVENTARIO' : 'REGISTRAR COMO PRODUCTO DAÑADO / MERMA'}
                   </div>
-                  <div className={`text-[10px] font-medium opacity-70 ${reingresarStock ? 'text-green-700' : 'text-amber-700'}`}>
-                    {reingresarStock ? 'El stock de los productos aumentará automáticamente' : 'El producto está dañado, el stock no se verá afectado'}
+                  <div className={`text-[10px] font-black uppercase tracking-widest opacity-60 mt-1 ${reingresarStock ? 'text-[var(--teal)]' : 'text-[var(--red-var)]'}`}>
+                    {reingresarStock ? 'La cantidad retornada se sumará al stock disponible para la venta' : 'Los productos NO entrarán al stock (se registran como baja por daño)'}
                   </div>
                 </div>
               </label>
             </div>
 
             <div className="field">
-              <label>Motivo de devolución *</label>
-              <input className="inp !py-3 !px-4" value={motivo} onChange={e => setMotivo(e.target.value)}
-                placeholder="Ej. Producto defectuoso, error en pedido..." />
+              <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">JUSTIFICACIÓN TÉCNICA DE LA DEVOLUCIÓN (POR QUÉ REGRESA?) *</label>
+              <input className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner uppercase text-[11px] font-black" value={motivo} onChange={e => setMotivo(e.target.value.toUpperCase())}
+                placeholder="EJ. ERROR DE DESPACHO, CAMBIO POR TALLA, PRODUCTO DAÑADO..." />
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button className="btn btn-gr flex-1 justify-center" onClick={() => setShowModal(false)}>Cancelar</button>
-              <button className="btn btn-r flex-1 justify-center font-bold" onClick={procesarDevolucion}>
-                <span className="material-icons-round text-base">assignment_return</span>
-                <span>Procesar Devolución</span>
+            <div className="flex gap-4 pt-4 border-t border-[var(--border-var)]">
+              <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => setShowModal(false)}>CONSERVAR VENTA</button>
+              <button className="btn bg-[var(--orange-var)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={procesarDevolucion}>
+                <span className="material-icons-round text-base">swap_horiz</span>
+                <span>EJECUTAR DEVOLUCIÓN</span>
               </button>
             </div>
           </div>

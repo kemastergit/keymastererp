@@ -9,26 +9,26 @@ import {
 } from 'recharts'
 
 const COLORS = {
-    primary: '#f59e0b', // Amber
-    primaryDark: '#b45309',
-    primaryLight: '#fbbf24',
-    bg: '#f8fafc',
-    g1: '#ffffff',
-    g2: '#f8fafc',
-    g3: '#f1f5f9',
-    borde: '#e2e8f0',
-    muted: '#000000',
-    text: '#000000',
-    green: '#10bccb', // Teal for balance
-    amber: '#f59e0b',
-    red: '#ef4444'
+    primary: '#0F172A', // Deep Blue (matching header/footer)
+    primaryDark: '#020617',
+    primaryLight: '#1E293B',
+    bg: '#F0F2F5',
+    g1: '#FFFFFF',
+    g2: '#E8EAED',
+    g3: '#D1D5DB',
+    borde: '#B0B8C4',
+    muted: '#3C4043',
+    text: '#202124',
+    green: '#2D9A6C', // Green
+    amber: '#F59E0B',
+    red: '#D93025'
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
     return (
-        <div className="bg-white border border-borde p-3 rounded-lg shadow-2xl">
-            <p className="text-muted text-[10px] uppercase tracking-widest mb-1 font-bold">{label}</p>
+        <div className="bg-[var(--surface)] border border-[var(--border-var)] p-3 rounded-none shadow-[var(--win-shadow)]">
+            <p className="text-[var(--text2)] text-[10px] uppercase tracking-widest mb-1 font-bold">{label}</p>
             {payload.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
@@ -118,19 +118,19 @@ export default function Dashboard() {
     if (!data) return <div className="h-screen flex items-center justify-center bg-white font-bebas text-primary text-3xl animate-pulse tracking-widest">CARGANDO...</div>
 
     const KPI = ({ label, value, color, icon, onClick }) => (
-        <div className={`panel flex items-center justify-between border-l-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''}`}
+        <div className={`panel flex items-center justify-between border-l-4 transition-none shadow-[var(--win-shadow)] ${onClick ? 'cursor-pointer active:translate-x-0.5 active:translate-y-0.5' : ''}`}
             style={{ borderColor: color }}
             onClick={onClick}>
-            <div>
-                <div className="text-[10px] text-black uppercase tracking-widest mb-1 font-bold">{label}</div>
-                <div className="font-bebas text-2xl tracking-wider" style={{ color: COLORS.text }}>{value}</div>
+            <div className="flex-1">
+                <div className="text-[10px] text-[var(--text2)] uppercase tracking-widest mb-1 font-black">{label}</div>
+                <div className="text-2xl font-black text-[var(--text-main)] font-mono">{value}</div>
             </div>
-            <div className="text-2xl opacity-10">{icon}</div>
+            <div className="text-3xl opacity-20 filter grayscale">{icon}</div>
         </div>
     )
 
     return (
-        <div className="space-y-4 pb-6 h-full overflow-y-auto custom-scroll pr-2 relative min-h-0">
+        <div className="space-y-4 pb-24 md:pb-8 pr-2 relative min-h-0">
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                 <KPI label="Utilidad Estimada" value={fmtUSD(data.totalUtilidad)} color={COLORS.green} icon="📈" />
@@ -208,11 +208,11 @@ export default function Dashboard() {
                             return (
                                 <div key={i}>
                                     <div className="flex justify-between text-[10px] mb-1">
-                                        <span className="font-bold text-slate-500 uppercase">{m.name}</span>
-                                        <span className="font-mono" style={{ color: COLORS.text }}>{m.value} UND</span>
+                                        <span className="font-bold text-[var(--text2)] uppercase">{m.name}</span>
+                                        <span className="font-mono text-[var(--text-main)]">{m.value} UND</span>
                                     </div>
-                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-primary transition-all duration-1000 rounded-full" style={{ width: `${percent}%` }} />
+                                    <div className="h-1.5 w-full bg-[var(--surface2)] rounded-none overflow-hidden">
+                                        <div className="h-full bg-[var(--teal)] transition-none rounded-none" style={{ width: `${percent}%` }} />
                                     </div>
                                 </div>
                             )
@@ -221,14 +221,17 @@ export default function Dashboard() {
                 </div>
 
                 {/* RANKING FINAL */}
-                <div className="lg:col-span-12 panel">
-                    <div className="panel-title text-sm uppercase">Ranking de Productos (Más Vendidos)</div>
+                <div className="lg:col-span-12 panel transition-none shadow-[var(--win-shadow)]">
+                    <div className="panel-title text-sm uppercase flex items-center gap-2">
+                        <span className="material-icons-round text-base text-[var(--teal)]">trending_up</span>
+                        PRODUCTOS MÁS VENDIDOS
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-2">
                         {data.topVendidos.map((p, i) => (
-                            <div key={i} className="bg-slate-50 border border-slate-100 p-4 rounded-2xl text-center group hover:border-primary/30 transition-colors">
-                                <div className="text-primary font-bold text-2xl mb-1 opacity-20 group-hover:opacity-100 transition-opacity">0{i + 1}</div>
-                                <div className="text-[11px] font-bold uppercase truncate mb-1 text-slate-700">{p.name}</div>
-                                <div className="font-mono text-[10px] text-slate-400 font-bold">{p.value} VENDIDOS</div>
+                            <div key={i} className="bg-[var(--surfaceDark)] border border-[var(--border-var)] p-4 rounded-none text-center group hover:bg-[var(--surface2)] hover:border-[var(--teal)] transition-none shadow-[var(--win-shadow)] cursor-default">
+                                <div className="text-[var(--teal)] font-black text-2xl mb-1 opacity-20 group-hover:opacity-100 transition-none font-mono">0{i + 1}</div>
+                                <div className="text-[11px] font-bold uppercase truncate mb-1 text-[var(--text-main)] font-sans">{p.name}</div>
+                                <div className="font-mono text-[10px] text-[var(--text2)] font-bold">{p.value} UNIDADES</div>
                             </div>
                         ))}
                     </div>

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useState as useReactState } from 'react' // Avoid collision if needed, but standard useState is fine
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import TecladoPin from '../../components/TecladoPin'
 import { hashPin } from '../../utils/security'
 import { logAction } from '../../utils/audit'
+import Header from '../../components/Layout/Header'
 
 export default function Login() {
     const [selectedUser, setSelectedUser] = useState(null)
@@ -17,20 +17,17 @@ export default function Login() {
     const handleComplete = async (pin) => {
         const hashedInput = await hashPin(pin)
 
-        // 1. Intentar comparar con Hash
         if (selectedUser.pin === hashedInput) {
             toast(`✅ Bienvenido, ${selectedUser.nombre}`)
-            logAction(selectedUser, 'LOGIN_EXITOSO')
+            logAction(selectedUser, 'LOGIN_EXITOSO', { table_name: 'usuarios', record_id: selectedUser.id })
             login(selectedUser)
             window.location.assign('/')
             return
         }
 
-        // 2. Transición: Intentar comparar con texto plano (para usuarios existentes)
         if (selectedUser.pin === pin) {
             toast(`✅ Bienvenido, ${selectedUser.nombre}`)
-            logAction(selectedUser, 'LOGIN_EXITOSO_MIGRACION_HASH')
-            // Migrar PIN a Hash inmediatamente
+            logAction(selectedUser, 'LOGIN_EXITOSO_MIGRACION_HASH', { table_name: 'usuarios', record_id: selectedUser.id })
             await db.usuarios.update(selectedUser.id, { pin: hashedInput })
             login({ ...selectedUser, pin: hashedInput })
             window.location.assign('/')
@@ -38,62 +35,67 @@ export default function Login() {
         }
 
         toast('❌ PIN Incorrecto', 'error')
+        logAction(selectedUser, 'LOGIN_FAIL', { table_name: 'usuarios', record_id: selectedUser.id, attempt: 'WRONG_PIN' })
     }
 
     return (
-        <div className="fixed inset-0 flex items-center justify-center p-4 bg-slate-950" style={{
-            backgroundImage: "linear-gradient(rgba(10, 10, 10, 0.85), rgba(10, 10, 10, 0.95)), url('/Gemini_Generated_Image_taflkntaflkntafl.png')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-        }}>
-            <div className="max-w-md w-full animate-in fade-in zoom-in duration-500">
+        <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-sans">
+            <Header hideTasa hideUser />
 
-                {/* Logo/Hex Decor */}
-                <div className="mb-12 flex flex-col items-center text-center">
-                    <div className="w-40 h-40 mb-8 relative">
-                        <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl"></div>
-                        <div className="absolute inset-0 bg-white rounded-[40px] flex items-center justify-center shadow-[0_0_50px_rgba(245,158,11,0.2)] overflow-hidden border-2 border-primary/50 p-2">
+            <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10">
+                <div className="max-w-4xl w-full animate-in fade-in slide-in-from-bottom-4 duration-700">
+
+                    {/* Simplified Client Branding */}
+                    <div className="mb-12 flex flex-col items-center text-center">
+                        <div className="w-24 h-24 mb-4 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-slate-200 overflow-hidden p-1">
                             <img src="/logoguaicaipuro.jpeg" alt="Logo" className="w-full h-full object-contain" />
                         </div>
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase leading-tight">AUTOMOTORES GUAICAIPURO</h1>
+                        <div className="w-12 h-1 bg-primary mt-2"></div>
                     </div>
-                    <h1 className="text-4xl font-black text-white tracking-widest uppercase leading-tight">AUTOMOTORES GUAICAIPURO</h1>
-                    <p className="text-primary font-bold text-[10px] tracking-[0.4em] uppercase mt-4">SISTEMA DE FACTURACION Y GESTIÓN KEMASTER VER 01</p>
-                </div>
 
-                {!selectedUser ? (
-                    <div className="space-y-6">
-                        <h2 className="text-center text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">Seleccione su Usuario</h2>
-                        <div className="grid grid-cols-2 gap-4">
-                            {usuarios?.map(u => (
-                                <button key={u.id} onClick={() => setSelectedUser(u)}
-                                    className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl text-center group hover:border-primary transition-all duration-300 active:scale-95">
-                                    <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/10 transition-colors">
-                                        <span className="material-icons-round text-2xl text-zinc-500 group-hover:text-primary transition-colors">person</span>
-                                    </div>
-                                    <div className="text-zinc-300 font-bold text-sm tracking-tight group-hover:text-white">{u.nombre}</div>
-                                    <div className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mt-1">{u.rol}</div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-8 py-4 bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-12">
-                        <div className="px-8 pt-6 flex items-center justify-between">
-                            <button onClick={() => setSelectedUser(null)} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600">
-                                <span className="material-icons-round">arrow_back</span>
-                            </button>
-                            <div className="text-right">
-                                <div className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Ingresar PIN</div>
-                                <div className="text-slate-900 font-black text-lg">{selectedUser.nombre}</div>
+                    {!selectedUser ? (
+                        <div className="space-y-8">
+                            <h2 className="text-center text-slate-400 text-[10px] font-black uppercase tracking-[0.3em]">Seleccione su Usuario para continuar</h2>
+                            <div className="flex flex-wrap justify-center gap-6">
+                                {usuarios?.map(u => (
+                                    <button key={u.id} onClick={() => setSelectedUser(u)}
+                                        className="w-48 bg-white border-2 border-transparent p-6 rounded-3xl text-center shadow-xl hover:shadow-2xl hover:border-primary transition-all duration-300 active:scale-95 group">
+                                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/10 transition-colors">
+                                            <span className="material-icons-round text-3xl text-slate-400 group-hover:text-primary transition-colors">person</span>
+                                        </div>
+                                        <div className="text-slate-800 font-bold text-lg tracking-tight group-hover:text-primary transition-colors truncate">{u.nombre}</div>
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{u.rol}</div>
+                                    </button>
+                                ))}
                             </div>
                         </div>
+                    ) : (
+                        <div className="max-w-md mx-auto bg-white rounded-[40px] shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-500">
+                            <div className="p-8 pb-4 flex items-center justify-between border-b border-slate-50">
+                                <button onClick={() => setSelectedUser(null)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all">
+                                    <span className="material-icons-round text-lg">arrow_back</span>
+                                </button>
+                                <div className="text-right">
+                                    <div className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Cajero Activo</div>
+                                    <div className="text-slate-800 font-black text-xl tracking-tighter">{selectedUser.nombre}</div>
+                                </div>
+                            </div>
 
-                        <div className="pb-10">
-                            <TecladoPin onComplete={handleComplete} length={selectedUser.pin.length} />
+                            <div className="p-10">
+                                <TecladoPin onComplete={handleComplete} length={4} />
+                            </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            </main>
+
+            <footer className="bg-slate-900 text-white py-4 px-8 border-t border-slate-800">
+                <div className="max-w-[1600px] mx-auto flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    <div>KEYMASTER &bull; GESTIÓN EMPRESARIAL</div>
+                    <div>AUTOMOTORES GUAICAIPURO &bull; 2026</div>
+                </div>
+            </footer>
         </div>
     )
 }

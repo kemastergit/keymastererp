@@ -1,6 +1,6 @@
 {
-    "name": "KEMASTER",
-    "short_name": "KEMASTER",
+    "name": "KEYMASTER",
+    "short_name": "KEYMASTER",
     "description": "Tecnología de Gestión Avanzada",
     "start_url": "/",
     "display": "standalone",

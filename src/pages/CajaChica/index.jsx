@@ -4,9 +4,19 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD, fmtDate, today } from '../../utils/format'
 
+const CATEGORIAS_GASTO = [
+  { value: 'ALQUILER', label: '🏠 Alquiler', color: 'badge-y' },
+  { value: 'NOMINA', label: '👥 Nómina', color: 'badge-r' },
+  { value: 'SERVICIOS', label: '💡 Servicios (Agua/Luz/Internet)', color: 'badge-g' },
+  { value: 'TRANSPORTE', label: '🚚 Transporte', color: 'badge-y' },
+  { value: 'MANTENIMIENTO', label: '🔧 Mantenimiento', color: 'badge-y' },
+  { value: 'CAJA_CHICA_GENERAL', label: '💰 Caja Chica General', color: 'badge-gr' },
+  { value: 'OTRO', label: '📝 Otro (especificar)', color: 'badge-gr' },
+]
+
 export default function CajaChica() {
   const toast = useStore(s => s.toast)
-  const [form, setForm] = useState({ concepto: '', tipo: 'EGRESO', monto: '', fecha: today() })
+  const [form, setForm] = useState({ concepto: '', tipo: 'EGRESO', categoria: 'CAJA_CHICA_GENERAL', categoria_otro: '', monto: '', fecha: today() })
   const [filtroFecha, setFiltroFecha] = useState(today())
 
   const movimientos = useLiveQuery(
@@ -20,9 +30,19 @@ export default function CajaChica() {
 
   const save = async () => {
     if (!form.concepto.trim() || !form.monto) { toast('Completa todos los campos', 'warn'); return }
-    await db.caja_chica.add({ ...form, monto: parseFloat(form.monto) || 0, created_at: new Date() })
+    if (form.tipo === 'EGRESO' && form.categoria === 'OTRO' && !form.categoria_otro.trim()) {
+      toast('Especifica la categoría personalizada', 'warn'); return
+    }
+    const registro = {
+      ...form,
+      monto: parseFloat(form.monto) || 0,
+      categoria: form.tipo === 'EGRESO' ? (form.categoria === 'OTRO' ? form.categoria_otro.toUpperCase() : form.categoria) : null,
+      created_at: new Date()
+    }
+    delete registro.categoria_otro
+    await db.caja_chica.add(registro)
     toast(`${form.tipo === 'INGRESO' ? '📥' : '📤'} Movimiento registrado`)
-    setForm(p => ({ ...p, concepto: '', monto: '' }))
+    setForm(p => ({ ...p, concepto: '', monto: '', categoria_otro: '' }))
   }
 
   const del = async (id) => {
@@ -33,7 +53,7 @@ export default function CajaChica() {
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   return (
-    <div className="h-full overflow-y-auto custom-scroll pr-2 pb-6 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-3">
+    <div className="pr-2 pb-6 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-3">
 
       {/* Formulario */}
       <div>
@@ -54,6 +74,21 @@ export default function CajaChica() {
               ))}
             </div>
           </div>
+          {form.tipo === 'EGRESO' && (
+            <div className="field">
+              <label>Categoría de Gasto *</label>
+              <select className="inp" value={form.categoria} onChange={e => f('categoria', e.target.value)}>
+                {CATEGORIAS_GASTO.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+              {form.categoria === 'OTRO' && (
+                <input className="inp mt-2" value={form.categoria_otro}
+                  onChange={e => f('categoria_otro', e.target.value)}
+                  placeholder="Especifique la categoría..." />
+              )}
+            </div>
+          )}
           <div className="field">
             <label>Concepto *</label>
             <input className="inp" value={form.concepto} onChange={e => f('concepto', e.target.value)}
@@ -96,26 +131,37 @@ export default function CajaChica() {
           </div>
           <div className="tabla-wrap tabla-scroll">
             <table>
-              <thead><tr><th>TIPO</th><th>CONCEPTO</th><th>MONTO $</th><th></th></tr></thead>
+              <thead><tr><th>TIPO</th><th>CATEGORÍA</th><th>CONCEPTO</th><th>MONTO $</th><th></th></tr></thead>
               <tbody>
-                {movimientos.map(m => (
-                  <tr key={m.id}>
-                    <td>
-                      <span className={`badge ${m.tipo === 'INGRESO' ? 'badge-g' : 'badge-r'}`}>
-                        {m.tipo === 'INGRESO' ? '📥' : '📤'} {m.tipo}
-                      </span>
-                    </td>
-                    <td className="font-semibold">{m.concepto}</td>
-                    <td className={`font-mono2 ${m.tipo === 'INGRESO' ? 'text-green-400' : 'text-red-400'}`}>
-                      {m.tipo === 'EGRESO' ? '-' : '+'}{fmtUSD(m.monto)}
-                    </td>
-                    <td>
-                      <button className="btn btn-r btn-sm" onClick={() => del(m.id)}>🗑</button>
-                    </td>
-                  </tr>
-                ))}
+                {movimientos.map(m => {
+                  const catInfo = CATEGORIAS_GASTO.find(c => c.value === m.categoria)
+                  return (
+                    <tr key={m.id}>
+                      <td>
+                        <span className={`badge ${m.tipo === 'INGRESO' ? 'badge-g' : 'badge-r'}`}>
+                          {m.tipo === 'INGRESO' ? '📥' : '📤'} {m.tipo}
+                        </span>
+                      </td>
+                      <td>
+                        {m.categoria ? (
+                          <span className={`badge ${catInfo?.color || 'badge-gr'}`} style={{ fontSize: '9px' }}>
+                            {catInfo?.label || m.categoria}
+                          </span>
+                        ) : (
+                          <span className="text-muted text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="font-semibold">{m.concepto}</td>
+                      <td className={`font-mono2 ${m.tipo === 'INGRESO' ? 'text-green-400' : 'text-red-400'}`}>
+                        {m.tipo === 'EGRESO' ? '-' : '+'}{fmtUSD(m.monto)}
+                      </td>
+                      <td>
+                        <button className="btn btn-r btn-sm" onClick={() => del(m.id)}>🗑</button>
+                      </td>
+                    </tr>)
+                })}
                 {movimientos.length === 0 && (
-                  <tr><td colSpan={4} className="text-center text-muted py-6">SIN MOVIMIENTOS</td></tr>
+                  <tr><td colSpan={5} className="text-center text-muted py-6">SIN MOVIMIENTOS</td></tr>
                 )}
               </tbody>
             </table>
