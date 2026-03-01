@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { fmtUSD, fmtBS } from '../../utils/format'
 import useStore from '../../store/useStore'
+import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+
 
 export default function PedidosWeb() {
     const { tasa, cart, addToCart, clearCart, setClienteFact, toast } = useStore()
@@ -11,58 +12,102 @@ export default function PedidosWeb() {
     const [filtro, setFiltro] = useState('PENDIENTE')
     const [selectedPedido, setSelectedPedido] = useState(null)
 
-    // Live query: pedidos en tiempo real
-    const pedidos = useLiveQuery(async () => {
-        let query = db.pedidos.orderBy('id').reverse()
-        if (filtro !== 'TODOS') {
-            query = db.pedidos.where('estado').equals(filtro).reverse()
-        }
-        const result = await query.toArray()
+    // Estado para pedidos consolidados (Dexie + Supabase)
+    const [pedidos, setPedidos] = useState([])
+    const [loading, setLoading] = useState(true)
 
-        // Cargar items para cada pedido
-        const full = await Promise.all(result.map(async (p) => {
-            const items = await db.pedido_items
-                .where('pedido_id').equals(p.id)
-                .toArray()
-
-            const itemsDetallados = await Promise.all(items.map(async (it) => {
-                const art = await db.articulos.get(it.articulo_id)
-                return {
-                    ...it,
-                    descripcion: art?.descripcion || 'Artículo no encontrado',
-                    codigo: art?.codigo || '',
-                    stock: art?.stock || 0,
-                    marca: art?.marca || ''
-                }
+    // Cargar pedidos
+    const fetchPedidos = async () => {
+        setLoading(true)
+        try {
+            // 1. Pedidos Locales (Dexie)
+            let dexieQuery = db.pedidos.orderBy('id').reverse()
+            if (filtro !== 'TODOS') {
+                dexieQuery = db.pedidos.where('estado').equals(filtro).reverse()
+            }
+            const dexieResults = await dexieQuery.toArray()
+            const dexieFull = await Promise.all(dexieResults.map(async (p) => {
+                const items = await db.pedido_items.where('pedido_id').equals(p.id).toArray()
+                const itemsDetallados = await Promise.all(items.map(async (it) => {
+                    const art = await db.articulos.get(it.articulo_id)
+                    return { ...it, descripcion: art?.descripcion || 'Artículo no encontrado', codigo: art?.codigo || '', stock: art?.stock || 0 }
+                }))
+                return { ...p, items: itemsDetallados, origen: 'LOCAL' }
             }))
 
-            return { ...p, items: itemsDetallados }
-        }))
+            // 2. Pedidos Supabase
+            let sbQuery = supabase.from('pedidos_web').select('*').order('created_at', { ascending: false })
+            if (filtro !== 'TODOS') {
+                sbQuery = sbQuery.eq('estado', filtro)
+            }
+            const { data: sbResults, error: sbError } = await sbQuery
+            if (sbError) throw sbError
 
-        return full
+            const sbFull = (sbResults || []).map(p => ({
+                ...p,
+                fecha: p.created_at,
+                origen: 'CLOUD',
+                items: p.items.map(it => ({
+                    ...it,
+                    qty: it.cantidad,
+                    precio: it.precio_unitario
+                }))
+            }))
+
+            // Consolidar y ordenar por fecha
+            const combined = [...dexieFull, ...sbFull].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+            setPedidos(combined)
+        } catch (err) {
+            console.error('Error fetching pedidos:', err)
+            toast('❌ Error cargando pedidos de Supabase', 'error')
+        } finally {
+            setLoading(true) // Wait, should be false
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchPedidos()
+
+        // Suscripción en tiempo real a pedidos nuevos
+        const channel = supabase
+            .channel('pedidos_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_web' }, () => {
+                fetchPedidos()
+            })
+            .subscribe()
+
+        return () => { supabase.removeChannel(channel) }
     }, [filtro])
 
     const handleImportarAVenta = async (pedido) => {
-        // Advertir si ya hay productos en el carrito
         if (cart.length > 0) {
-            const ok = confirm(
-                `⚠️ Ya tienes ${cart.length} producto(s) en el carrito de venta.\n\nSi continúas, se reemplazará el carrito actual con este pedido.\n\n¿Deseas continuar?`
-            )
+            const ok = confirm(`⚠️ El carrito tiene productos. ¿Reemplazar?`)
             if (!ok) return
         }
 
         clearCart()
         for (const item of pedido.items) {
-            const art = await db.articulos.get(item.articulo_id)
+            let art = null
+            if (item.articulo_id) art = await db.articulos.get(item.articulo_id)
+            if (!art && item.codigo) art = await db.articulos.where('codigo').equals(item.codigo).first()
+
             if (art) {
                 addToCart(art, item.qty)
+            } else {
+                toast(`⚠️ Producto ${item.codigo} no encontrado en inventario local`, 'warn')
             }
         }
         if (pedido.cliente_nombre) setClienteFact(pedido.cliente_nombre)
 
-        // Marcar pedido como EN PROCESO
-        await db.pedidos.update(pedido.id, { estado: 'EN_PROCESO' })
-        toast(`📦 Pedido #${pedido.id} importado al carrito de venta`, 'ok')
+        if (pedido.origen === 'CLOUD') {
+            await supabase.from('pedidos_web').update({ estado: 'EN_PROCESO' }).eq('id', pedido.id)
+        } else {
+            await db.pedidos.update(pedido.id, { estado: 'EN_PROCESO' })
+        }
+
+        fetchPedidos()
+        toast(`📦 Pedido #${pedido.id} importado`, 'ok')
         navigate('/facturacion')
     }
 
@@ -94,23 +139,24 @@ export default function PedidosWeb() {
     }
 
     const handleMarcarContactado = async (pedido) => {
-        await db.pedidos.update(pedido.id, { estado: 'CONTACTADO' })
-        toast(`📞 Pedido #${pedido.id} marcado como CONTACTADO`, 'ok')
+        if (pedido.origen === 'CLOUD') {
+            await supabase.from('pedidos_web').update({ estado: 'CONTACTADO' }).eq('id', pedido.id)
+        } else {
+            await db.pedidos.update(pedido.id, { estado: 'CONTACTADO' })
+        }
+        fetchPedidos()
+        toast(`📞 Pedido marcado como CONTACTADO`, 'ok')
     }
 
     const handleRechazar = async (pedido) => {
         if (!confirm('¿Seguro que deseas rechazar este pedido?')) return
-        try {
-            const updated = await db.pedidos.update(pedido.id, { estado: 'RECHAZADO' })
-            if (!updated) {
-                toast('⚠️ No se pudo marcar el pedido como RECHAZADO (no se encontró en la base local)', 'error')
-                return
-            }
-            toast(`❌ Pedido #${pedido.id} rechazado`, 'warn')
-        } catch (err) {
-            console.error('Error al rechazar pedido', err)
-            toast('❌ Error al rechazar el pedido', 'error')
+        if (pedido.origen === 'CLOUD') {
+            await supabase.from('pedidos_web').update({ estado: 'RECHAZADO' }).eq('id', pedido.id)
+        } else {
+            await db.pedidos.update(pedido.id, { estado: 'RECHAZADO' })
         }
+        fetchPedidos()
+        toast(`❌ Pedido rechazado`, 'warn')
     }
 
     const handleWhatsApp = (pedido) => {
@@ -123,15 +169,25 @@ export default function PedidosWeb() {
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank')
     }
 
-    const contadores = useLiveQuery(async () => {
-        const pendientes = await db.pedidos.where('estado').equals('PENDIENTE').count()
-        const contactados = await db.pedidos.where('estado').equals('CONTACTADO').count()
-        const enProceso = await db.pedidos.where('estado').equals('EN_PROCESO').count()
-        const completados = await db.pedidos.where('estado').equals('PROCESADO').count()
-        const rechazados = await db.pedidos.where('estado').equals('RECHAZADO').count()
-        const total = await db.pedidos.count()
-        return { pendientes, contactados, enProceso, completados, rechazados, total }
-    })
+    const [contadores, setContadores] = useState({ pendientes: 0, total: 0 })
+
+    useEffect(() => {
+        const fetchCounters = async () => {
+            // Local
+            const dPending = await db.pedidos.where('estado').equals('PENDIENTE').count()
+            const dTotal = await db.pedidos.count()
+
+            // Supabase
+            const { count: sPending } = await supabase.from('pedidos_web').select('*', { count: 'exact', head: true }).eq('estado', 'PENDIENTE')
+            const { count: sTotal } = await supabase.from('pedidos_web').select('*', { count: 'exact', head: true })
+
+            setContadores({
+                pendientes: (dPending || 0) + (sPending || 0),
+                total: (dTotal || 0) + (sTotal || 0)
+            })
+        }
+        fetchCounters()
+    }, [pedidos])
 
     const filtros = [
         { key: 'PENDIENTE', label: 'PENDIENTES', icon: 'pending', color: 'bg-orange-500', count: contadores?.pendientes },
@@ -206,8 +262,14 @@ export default function PedidosWeb() {
 
             {/* CONTENIDO */}
             <div className="flex-1 overflow-y-auto p-4">
-                {!pedidos || pedidos.length === 0 ? (
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 py-20">
+                        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[10px] font-black uppercase text-[var(--text3)] tracking-widest">Sincronizando con la nube...</p>
+                    </div>
+                ) : !pedidos || pedidos.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center">
+
                         <span className="material-icons-round text-6xl text-slate-300 mb-4">inbox</span>
                         <h3 className="font-black text-lg text-slate-400 uppercase tracking-widest mb-2">
                             Sin Pedidos {filtro !== 'TODOS' ? filtro.replace('_', ' ') + 'S' : ''}
@@ -240,6 +302,9 @@ export default function PedidosWeb() {
                                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[8px] font-black uppercase border ${badge.bg}`}>
                                                         <span className="material-icons-round text-xs">{badge.icon}</span>
                                                         {badge.label}
+                                                    </span>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 text-[8px] font-black border ${pedido.origen === 'CLOUD' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                        {pedido.origen}
                                                     </span>
                                                 </div>
                                                 <div className="text-[9px] text-[var(--text3)] font-mono mt-0.5">
