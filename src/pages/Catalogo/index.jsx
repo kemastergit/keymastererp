@@ -14,6 +14,7 @@ export default function Catalogo() {
     const [checkoutData, setCheckoutData] = useState({ nombre: '', telefono: '' })
     const [isSending, setIsSending] = useState(false)
     const [orderSuccess, setOrderSuccess] = useState(false)
+    const { tasa, loadTasa } = useStore()
     const [articulos, setArticulos] = useState([])
     const [deptos, setDeptos] = useState(['TODOS'])
     const [loadingData, setLoadingData] = useState(true)
