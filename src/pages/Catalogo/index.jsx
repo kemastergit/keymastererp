@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react'
-import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '../../db/db'
+import { supabase } from '../../lib/supabase'
 import { fmtUSD, fmtBS } from '../../utils/format'
 import useStore from '../../store/useStore'
 import { ShoppingCart, Search, ChevronRight, X, Package, MessageCircle } from 'lucide-react'
@@ -15,27 +14,52 @@ export default function Catalogo() {
     const [checkoutData, setCheckoutData] = useState({ nombre: '', telefono: '' })
     const [isSending, setIsSending] = useState(false)
     const [orderSuccess, setOrderSuccess] = useState(false)
-    const { tasa, loadTasa } = useStore()
+    const [articulos, setArticulos] = useState([])
+    const [deptos, setDeptos] = useState(['TODOS'])
+    const [loadingData, setLoadingData] = useState(true)
 
     useEffect(() => {
         loadTasa()
+        fetchCatalog()
     }, [])
 
-    const articulos = useLiveQuery(() =>
-        db.articulos
-            .filter(a => {
-                const matchesSearch = a.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
-                const matchesDepto = selectedDepto === 'TODOS' || a.departamento === selectedDepto
-                return a.stock > 0 && matchesSearch && matchesDepto
-            })
-            .limit(50)
-            .toArray()
-        , [searchTerm, selectedDepto])
+    const fetchCatalog = async () => {
+        setLoadingData(true)
+        try {
+            // Leer configuración pública
+            const { data: config } = await supabase.from('config_negocio').select('tasa_bcv').single()
+            if (config && config.tasa_bcv) {
+                // Podríamos usar esta tasa o la de Zustand, dejamos la de Zustand por ahora
+            }
 
-    const deptos = useLiveQuery(async () => {
-        const items = await db.articulos.offset(0).toArray()
-        const unique = [...new Set(items.map(i => i.departamento))].filter(Boolean)
-        return ['TODOS', ...unique]
+            // Leer productos activos y con stock
+            const { data: productos, error } = await supabase
+                .from('catalogo_productos')
+                .select('*')
+                .eq('activo', true)
+                .gt('stock', 0)
+
+            if (error) throw error
+
+            setArticulos(productos || [])
+
+            // Extraer categorías únicas
+            const uniqueCats = [...new Set((productos || []).map(p => p.categoria || p.departamento))].filter(Boolean)
+            setDeptos(['TODOS', ...uniqueCats])
+
+        } catch (error) {
+            console.error('Error cargando catálogo:', error)
+        } finally {
+            setLoadingData(false)
+        }
+    }
+
+    // Filtrar localmente según la búsqueda
+    const filteredArticulos = articulos.filter(a => {
+        const matchesSearch = a.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) || a.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
+        const deptoProducto = a.categoria || a.departamento
+        const matchesDepto = selectedDepto === 'TODOS' || deptoProducto === selectedDepto
+        return matchesSearch && matchesDepto
     })
 
     const addToCart = (art) => {
@@ -63,33 +87,36 @@ export default function Catalogo() {
 
         setIsSending(true)
         try {
-            // Guardar localmente en la tabla pedidos
-            const pedidoId = await db.pedidos.add({
-                fecha: new Date(),
-                cliente_nombre: checkoutData.nombre,
-                cliente_telefono: checkoutData.telefono,
-                total_usd: total,
-                estado: 'PENDIENTE'
-            })
-
-            // Guardar los items del pedido
-            const itemsPromises = cart.map(item => db.pedido_items.add({
-                pedido_id: pedidoId,
+            // Formatear items para JSONB (Supabase)
+            const itemsParaSupabase = cart.map(item => ({
                 articulo_id: item.id,
-                qty: item.qty,
-                precio: item.precio
+                codigo: item.codigo,
+                descripcion: item.descripcion || item.nombre,
+                cantidad: item.qty,
+                precio_unitario: item.precio || item.precio_usd
             }))
-            await Promise.all(itemsPromises)
 
-            const itemsList = cart.map(i => `• ${i.qty}x ${i.descripcion} (${fmtUSD(i.precio)})`).join('\n')
-            const msg = `*NUEVO PEDIDO - GUAICAIPURO*\n\n*Cliente:* ${checkoutData.nombre}\n\n*Productos:*\n${itemsList}\n\n*Total:* ${fmtUSD(total)}\n\n_Tu pedido ha sido tomado en proceso, se te avisará pronto._`
+            // Insertar en Supabase
+            const { data, error } = await supabase
+                .from('pedidos_web')
+                .insert([{
+                    cliente_nombre: checkoutData.nombre,
+                    cliente_telefono: checkoutData.telefono,
+                    total_usd: total,
+                    items: itemsParaSupabase,
+                    estado: 'PENDIENTE'
+                }])
+                .select()
+                .single()
 
-            setLastPedidoId(pedidoId)
+            if (error) throw error
+
+            // Solo marcamos éxito
+            setLastPedidoId(data.numero || 'WEB')
             setOrderSuccess(true)
-            window.open(`https://wa.me/584121234567?text=${encodeURIComponent(msg)}`, '_blank')
         } catch (e) {
-            console.error("Error al guardar pedido:", e)
-            alert("Error al procesar el pedido. Intenta de nuevo.")
+            console.error("Error al guardar pedido en Supabase:", e)
+            alert("Error de conexión al procesar el pedido. Intenta de nuevo.")
         } finally {
             setIsSending(false)
         }
