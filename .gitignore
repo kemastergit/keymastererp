@@ -32,3 +32,6 @@ extract_excel.js
 
 # Local Netlify folder
 .netlify
+
+.vercel
+.env*.local

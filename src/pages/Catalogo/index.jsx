@@ -14,25 +14,19 @@ export default function Catalogo() {
     const [checkoutData, setCheckoutData] = useState({ nombre: '', telefono: '' })
     const [isSending, setIsSending] = useState(false)
     const [orderSuccess, setOrderSuccess] = useState(false)
-    const { tasa, loadTasa } = useStore()
+    const { tasa = 0, loadTasa } = useStore()
     const [articulos, setArticulos] = useState([])
     const [deptos, setDeptos] = useState(['TODOS'])
     const [loadingData, setLoadingData] = useState(true)
 
     useEffect(() => {
-        loadTasa()
+        if (loadTasa) loadTasa()
         fetchCatalog()
     }, [])
 
     const fetchCatalog = async () => {
         setLoadingData(true)
         try {
-            // Leer configuración pública
-            const { data: config } = await supabase.from('config_negocio').select('tasa_bcv').single()
-            if (config && config.tasa_bcv) {
-                // Podríamos usar esta tasa o la de Zustand, dejamos la de Zustand por ahora
-            }
-
             // Leer productos activos y con stock
             const { data: productos, error } = await supabase
                 .from('catalogo_productos')
@@ -40,26 +34,34 @@ export default function Catalogo() {
                 .eq('activo', true)
                 .gt('stock', 0)
 
-            if (error) throw error
-
-            setArticulos(productos || [])
+            if (error) {
+                console.warn('Filtro de Supabase falló, trayendo todos para fallback:', error)
+                // Reintento sin filtros si falla algo de columnas
+                const { data: fallback } = await supabase.from('catalogo_productos').select('*')
+                setArticulos(fallback || [])
+            } else {
+                setArticulos(productos || [])
+            }
 
             // Extraer categorías únicas
-            const uniqueCats = [...new Set((productos || []).map(p => p.categoria || p.departamento))].filter(Boolean)
+            const rawCats = (productos || []).map(p => p.categoria || p.departamento)
+            const uniqueCats = [...new Set(rawCats)].filter(Boolean)
             setDeptos(['TODOS', ...uniqueCats])
 
         } catch (error) {
-            console.error('Error cargando catálogo:', error)
+            console.error('Error fatal cargando catálogo:', error)
         } finally {
             setLoadingData(false)
         }
     }
 
     // Filtrar localmente según la búsqueda
-    const filteredArticulos = articulos.filter(a => {
-        const desc = a.descripcion || ''
-        const nom = a.nombre || ''
-        const matchesSearch = desc.toLowerCase().includes(searchTerm.toLowerCase()) || nom.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredArticulos = (articulos || []).filter(a => {
+        const desc = (a.descripcion || a.nombre || '').toLowerCase()
+        const nom = (a.nombre || a.descripcion || '').toLowerCase()
+        const term = searchTerm.toLowerCase()
+        const matchesSearch = desc.includes(term) || nom.includes(term)
+
         const deptoProducto = a.categoria || a.departamento || 'VARIOS'
         const matchesDepto = selectedDepto === 'TODOS' || deptoProducto === selectedDepto
         return matchesSearch && matchesDepto
@@ -96,7 +98,7 @@ export default function Catalogo() {
                 codigo: item.codigo,
                 descripcion: item.descripcion || item.nombre,
                 cantidad: item.qty,
-                precio_unitario: item.precio || item.precio_usd
+                precio_unitario: item.precio_usd || item.precio || 0
             }))
 
             // Insertar en Supabase
@@ -114,8 +116,7 @@ export default function Catalogo() {
 
             if (error) throw error
 
-            // Solo marcamos éxito
-            setLastPedidoId(data.numero || 'WEB')
+            setLastPedidoId(data.numero || data.id || 'WEB')
             setOrderSuccess(true)
         } catch (e) {
             console.error("Error al guardar pedido en Supabase:", e)
@@ -133,6 +134,7 @@ export default function Catalogo() {
         setCheckoutData({ nombre: '', telefono: '' })
     }
 
+    // Render principal
     return (
         <div className="min-h-screen bg-[var(--bg)] font-inter pb-32 text-[var(--text-main)] overflow-x-hidden">
             {/* HEADER */}
@@ -148,10 +150,10 @@ export default function Catalogo() {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        {tasa > 0 && (
+                        {(tasa || 0) > 0 && (
                             <div className="bg-[var(--surface2)] border border-[var(--border2)] px-3 py-2 rounded-xl">
                                 <p className="text-[8px] font-black text-[var(--text2)] uppercase tracking-widest">Tasa BCV</p>
-                                <p className="text-[var(--teal)] font-mono font-black text-sm">{tasa.toFixed(2)} Bs</p>
+                                <p className="text-[var(--teal)] font-mono font-black text-sm">{(tasa || 0).toFixed(2)} Bs</p>
                             </div>
                         )}
                         <button
@@ -201,80 +203,93 @@ export default function Catalogo() {
 
             {/* PRODUCT LIST */}
             <div className="p-4 mt-2">
-                <div className="flex items-center justify-between mb-4 px-1">
-                    <h2 className="font-black text-sm uppercase tracking-wider text-[var(--text2)]">Catálogo</h2>
-                    <div className="flex items-center gap-2 bg-[var(--surface2)] border border-[var(--border2)] px-3 py-1.5 rounded-lg">
-                        <div className="w-1.5 h-1.5 bg-[var(--teal)] rounded-full"></div>
-                        <span className="text-[9px] font-black text-[var(--text2)] uppercase tracking-wider">
-                            {filteredArticulos?.length || 0} ítems
-                        </span>
+                {loadingData ? (
+                    <div className="flex flex-col items-center justify-center py-24 gap-4 animate-pulse">
+                        <div className="w-12 h-12 bg-[var(--surface2)] rounded-full border-4 border-t-[var(--teal)] border-[var(--surface2)] animate-spin"></div>
+                        <p className="text-[10px] font-black uppercase text-[var(--text3)] tracking-widest">Cargando Catálogo...</p>
                     </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3">
-                    {filteredArticulos?.map(art => (
-                        <div
-                            key={art.id}
-                            className="group bg-[var(--surface)] border border-[var(--border-var)] p-4 rounded-card flex items-center gap-4 active:scale-[0.98] transition-all hover:border-[var(--teal)]"
-                        >
-                            <div className="w-16 h-16 bg-[var(--teal4)] border border-[var(--border2)] rounded-xl flex items-center justify-center shrink-0">
-                                <Package size={28} className="text-[var(--teal)] opacity-70" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[8px] font-black text-[var(--teal)] bg-[var(--teal4)] px-2 py-0.5 rounded-full uppercase">
-                                        {art.categoria || art.departamento || 'VARIOS'}
-                                    </span>
-                                </div>
-                                <h3 className="font-black text-[12px] leading-tight text-[var(--text-main)] line-clamp-1 mb-1">
-                                    {art.nombre || art.descripcion}
-                                </h3>
-                                <p className="text-[9px] text-[var(--text3)] font-mono leading-tight line-clamp-1">
-                                    {art.descripcion || `REF: ${art.codigo}`}
-                                </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-2 shrink-0">
-                                <div className="text-right">
-                                    <p className="font-black text-lg text-[var(--teal)] leading-none">
-                                        {fmtUSD(art.precio_usd || art.precio)}
-                                    </p>
-                                    <p className="text-[9px] font-mono text-[var(--text3)] mt-1">
-                                        ~ {fmtBS((art.precio_usd || art.precio) * tasa)}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => addToCart(art)}
-                                    className="relative bg-[var(--teal)] text-white w-10 h-10 rounded-button flex items-center justify-center active:scale-90 transition-all hover:bg-[var(--tealDark)] shadow-[0_4px_12px_rgba(15,23,42,0.3)]"
-                                >
-                                    <ShoppingCart size={16} />
-                                    {cart.find(i => i.id === art.id) && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-[var(--surface)] text-[var(--teal)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[var(--border2)]">
-                                            {cart.find(i => i.id === art.id).qty}
-                                        </span>
-                                    )}
-                                </button>
+                ) : (
+                    <>
+                        <div className="flex items-center justify-between mb-4 px-1">
+                            <h2 className="font-black text-sm uppercase tracking-wider text-[var(--text2)]">Catálogo</h2>
+                            <div className="flex items-center gap-2 bg-[var(--surface2)] border border-[var(--border2)] px-3 py-1.5 rounded-lg">
+                                <div className="w-1.5 h-1.5 bg-[var(--teal)] rounded-full"></div>
+                                <span className="text-[9px] font-black text-[var(--text2)] uppercase tracking-wider">
+                                    {(filteredArticulos || []).length} ítems
+                                </span>
                             </div>
                         </div>
-                    ))}
 
-                    {articulos?.length === 0 && (
-                        <div className="text-center py-24 px-10">
-                            <div className="w-20 h-20 bg-[var(--surface)] border border-[var(--border2)] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <Search size={32} className="text-[var(--text3)]" />
-                            </div>
-                            <h3 className="font-black text-lg text-[var(--text2)] uppercase tracking-widest">
-                                Sin Resultados
-                            </h3>
-                            <p className="text-[10px] font-bold text-[var(--text3)] uppercase mt-1">
-                                Intenta con otra palabra o categoría
-                            </p>
+                        <div className="grid grid-cols-1 gap-3">
+                            {(filteredArticulos || []).map(art => {
+                                const currentInCart = cart.find(i => i.id === art.id)
+                                const precioUsd = art.precio_usd || art.precio || 0
+                                return (
+                                    <div
+                                        key={art.id}
+                                        className="group bg-[var(--surface)] border border-[var(--border-var)] p-4 rounded-card flex items-center gap-4 active:scale-[0.98] transition-all hover:border-[var(--teal)]"
+                                    >
+                                        <div className="w-16 h-16 bg-[var(--teal4)] border border-[var(--border2)] rounded-xl flex items-center justify-center shrink-0">
+                                            <Package size={28} className="text-[var(--teal)] opacity-70" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-[8px] font-black text-[var(--teal)] bg-[var(--teal4)] px-2 py-0.5 rounded-full uppercase">
+                                                    {art.categoria || art.departamento || 'VARIOS'}
+                                                </span>
+                                            </div>
+                                            <h3 className="font-black text-[12px] leading-tight text-[var(--text-main)] line-clamp-1 mb-1">
+                                                {art.nombre || art.descripcion}
+                                            </h3>
+                                            <p className="text-[9px] text-[var(--text3)] font-mono leading-tight line-clamp-1">
+                                                {art.descripcion || `REF: ${art.codigo}`}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                            <div className="text-right">
+                                                <p className="font-black text-lg text-[var(--teal)] leading-none">
+                                                    {fmtUSD(precioUsd)}
+                                                </p>
+                                                <p className="text-[9px] font-mono text-[var(--text3)] mt-1">
+                                                    ~ {fmtBS(precioUsd * (tasa || 0))}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => addToCart(art)}
+                                                className="relative bg-[var(--teal)] text-white w-10 h-10 rounded-button flex items-center justify-center active:scale-90 transition-all hover:bg-[var(--tealDark)] shadow-[0_4px_12px_rgba(15,23,42,0.3)]"
+                                            >
+                                                <ShoppingCart size={16} />
+                                                {currentInCart && (
+                                                    <span className="absolute -top-1.5 -right-1.5 bg-[var(--surface)] text-[var(--teal)] text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[var(--border2)]">
+                                                        {currentInCart.qty}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+
+                            {(filteredArticulos || []).length === 0 && (
+                                <div className="text-center py-24 px-10">
+                                    <div className="w-20 h-20 bg-[var(--surface)] border border-[var(--border2)] rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                        <Search size={32} className="text-[var(--text3)]" />
+                                    </div>
+                                    <h3 className="font-black text-lg text-[var(--text2)] uppercase tracking-widest">
+                                        Sin Resultados
+                                    </h3>
+                                    <p className="text-[10px] font-bold text-[var(--text3)] uppercase mt-1">
+                                        Intenta con otra palabra o categoría
+                                    </p>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </>
+                )}
             </div>
 
             {/* FLOATING CART BAR */}
-            {cart.length > 0 && (
+            {cart.length > 0 && !showCheckout && (
                 <div className="fixed bottom-6 left-4 right-4 z-50">
                     <button
                         onClick={() => setShowCheckout(true)}
@@ -305,9 +320,7 @@ export default function Catalogo() {
             {showCheckout && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex flex-col justify-end transition-all">
                     {orderSuccess ? (
-                        /* ── PANTALLA DE CONFIRMACIÓN ESTILO STITCH ── */
-                        <div className="bg-[#0d1117] rounded-t-[3rem] p-8 max-h-[92vh] flex flex-col items-center animate-in slide-in-from-bottom-full duration-500 shadow-[-10px_-10px_50px_rgba(0,0,0,0.4)] text-center overflow-y-auto">
-                            {/* Header */}
+                        <div className="bg-[#0d1117] rounded-t-[3rem] p-8 max-h-[92vh] flex flex-col items-center animate-in slide-in-from-bottom-full duration-500 shadow-[-10px_-10px_50px_rgba(0,0,0,0.4)] text-center overflow-y-auto w-full">
                             <div className="flex items-center gap-3 mb-10 self-start">
                                 <div className="w-10 h-10 bg-[#0d968b]/20 border border-[#0d968b]/30 rounded-xl flex items-center justify-center">
                                     <span className="font-bebas text-[#0d968b] text-lg">KM</span>
@@ -318,29 +331,21 @@ export default function Catalogo() {
                                 </div>
                             </div>
 
-                            {/* Check Icon */}
-                            <div className="relative mb-8">
-                                <div className="w-28 h-28 bg-[#0d968b]/10 border-2 border-[#0d968b]/20 rounded-3xl flex items-center justify-center shadow-[0_0_60px_rgba(13,150,139,0.2)]">
-                                    <span className="material-icons-round text-[#0d968b] text-5xl">verified</span>
-                                </div>
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#0d968b] rounded-full animate-ping opacity-30"></div>
-                                <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-[#0d968b] rounded-full animate-ping opacity-20 delay-300"></div>
+                            <div className="w-28 h-28 bg-[#0d968b]/10 border-2 border-[#0d968b]/20 rounded-3xl flex items-center justify-center shadow-[0_0_60px_rgba(13,150,139,0.2)] mb-8">
+                                <span className="material-icons-round text-[#0d968b] text-5xl">verified</span>
                             </div>
 
-                            {/* Status Badge */}
                             <div className="inline-flex items-center gap-2 bg-[#0d968b]/10 border border-[#0d968b]/30 px-5 py-2 rounded-full mb-6">
                                 <span className="w-2 h-2 bg-[#0d968b] rounded-full animate-pulse"></span>
                                 <span className="text-[10px] font-black text-[#0d968b] uppercase tracking-[0.2em]">Pedido en Puerta</span>
                             </div>
 
-                            {/* Title */}
                             <h2 className="text-white font-black text-3xl mb-3">¡Pedido Recibido!</h2>
                             <p className="text-slate-400 text-sm leading-relaxed mb-10 max-w-xs">
-                                Tu pedido está en espera de confirmación por nuestro equipo. Te notificaremos pronto.
+                                Tu pedido está en espera de confirmación. Te notificaremos pronto.
                             </p>
 
-                            {/* Order Number */}
-                            <div className="bg-[#161b22] border border-slate-700/50 rounded-2xl p-5 w-full max-w-xs mb-10">
+                            <div className="bg-[#161b22] border border-slate-700/50 rounded-2xl p-5 w-full max-w-xs mb-10 text-left">
                                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Número de Pedido</p>
                                 <div className="flex items-center justify-between">
                                     <p className="text-[#0d968b] font-mono font-black text-xl">#KM-{lastPedidoId || '0000'}</p>
@@ -348,112 +353,77 @@ export default function Catalogo() {
                                 </div>
                             </div>
 
-                            {/* Buttons */}
                             <button
                                 onClick={handleBackToCatalog}
                                 className="w-full max-w-xs bg-[#0d968b] text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-[#0b8276] transition-all shadow-[0_10px_30px_rgba(13,150,139,0.3)] mb-3"
                             >
-                                <span className="material-icons-round text-sm">storefront</span>
                                 Volver al Catálogo
                             </button>
-                            <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest mt-4">
-                                Automotores Guaicaipuro C.A.
-                            </p>
                         </div>
                     ) : (
-                        /* ── FORMULARIO DE CHECKOUT ── */
-                        <div className="bg-[#161b22] rounded-t-[3rem] p-8 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-full duration-500 shadow-[-10px_-10px_50px_rgba(0,0,0,0.4)]">
+                        <div className="bg-[#161b22] rounded-t-[3rem] p-8 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-full duration-500 shadow-[-10px_-10px_50px_rgba(0,0,0,0.4)] w-full">
                             <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-8 opacity-50"></div>
 
                             <div className="flex justify-between items-start mb-6">
-                                <div>
+                                <div className="text-left">
                                     <h2 className="font-black text-2xl text-white leading-none">Tu Carrito</h2>
                                     <p className="text-[10px] font-black text-[#0d968b] tracking-[0.2em] uppercase mt-2">Revisa y confirma</p>
                                 </div>
                                 <button
                                     onClick={() => setShowCheckout(false)}
-                                    className="bg-white/5 border border-white/10 p-3 rounded-xl hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400 text-slate-400 transition-colors"
+                                    className="bg-white/5 border border-white/10 p-3 rounded-xl text-slate-400"
                                 >
                                     <X size={20} />
                                 </button>
                             </div>
 
-                            {/* PRODUCT LIST SUMMARY */}
-                            <div className="flex-1 overflow-y-auto min-h-0 space-y-3 mb-6 pr-2 no-scrollbar">
+                            <div className="flex-1 overflow-y-auto space-y-3 mb-6 no-scrollbar">
                                 {cart.map(item => (
                                     <div key={item.id} className="flex justify-between items-center bg-[#0d1117] p-4 rounded-xl border border-slate-700/20">
-                                        <div className="flex-1 min-w-0 pr-4">
-                                            <p className="font-black text-[11px] uppercase truncate text-white">{item.descripcion}</p>
-                                            <p className="text-[10px] font-bold text-slate-500 mt-1">CANT: {item.qty} × {fmtUSD(item.precio)}</p>
+                                        <div className="flex-1 min-w-0 pr-4 text-left">
+                                            <p className="font-black text-[11px] uppercase truncate text-white">{item.nombre || item.descripcion}</p>
+                                            <p className="text-[10px] font-bold text-slate-500 mt-1">CANT: {item.qty} × {fmtUSD(item.precio_usd || item.precio || 0)}</p>
                                         </div>
                                         <div className="flex items-center gap-4">
-                                            <span className="font-black text-sm text-[#0d968b]">{fmtUSD(item.precio * item.qty)}</span>
-                                            <button
-                                                onClick={() => removeFromCart(item.id)}
-                                                className="bg-white/5 p-2 rounded-lg text-slate-600 hover:text-red-400 border border-slate-700/20"
-                                            >
-                                                <X size={14} />
-                                            </button>
+                                            <span className="font-black text-sm text-[#0d968b]">{fmtUSD((item.precio_usd || item.precio || 0) * item.qty)}</span>
+                                            <button onClick={() => removeFromCart(item.id)} className="text-slate-600"><X size={14} /></button>
                                         </div>
                                     </div>
                                 ))}
+                            </div>
 
-                                <div className="pt-5 border-t border-slate-700/30 flex justify-between items-end">
-                                    <span className="font-black text-[10px] text-slate-500 uppercase tracking-widest">Total a Pagar</span>
-                                    <div className="text-right">
-                                        <p className="text-3xl font-black text-white leading-none">{fmtUSD(total)}</p>
-                                        <p className="text-[11px] font-mono font-bold text-[#0d968b] mt-1">~ {fmtBS(total * tasa)}</p>
-                                    </div>
+                            <div className="mb-6 pt-4 border-t border-slate-700/30 flex justify-between items-end">
+                                <span className="font-black text-[10px] text-slate-500 uppercase tracking-widest">Total</span>
+                                <div className="text-right">
+                                    <p className="text-3xl font-black text-white leading-none">{fmtUSD(total)}</p>
+                                    <p className="text-[11px] font-mono font-bold text-[#0d968b] mt-1">~ {fmtBS(total * (tasa || 0))}</p>
                                 </div>
                             </div>
 
-                            {/* FORM */}
                             <div className="space-y-3 mb-6">
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        placeholder=" "
-                                        className="peer w-full bg-[#0d1117] p-5 pt-7 rounded-xl border border-slate-700/30 outline-none text-sm font-black text-white focus:border-[#0d968b] transition-all placeholder:text-transparent"
-                                        value={checkoutData.nombre}
-                                        onChange={(e) => setCheckoutData({ ...checkoutData, nombre: e.target.value })}
-                                        id="nom_c"
-                                    />
-                                    <label htmlFor="nom_c" className="absolute left-5 top-2 text-[9px] font-black text-slate-500 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-5 peer-focus:top-2 peer-focus:text-[9px] peer-focus:text-[#0d968b]">Nombre Completo</label>
-                                </div>
-
-                                <div className="relative">
-                                    <input
-                                        type="tel"
-                                        placeholder=" "
-                                        className="peer w-full bg-[#0d1117] p-5 pt-7 rounded-xl border border-slate-700/30 outline-none text-sm font-black text-white focus:border-[#0d968b] transition-all placeholder:text-transparent"
-                                        value={checkoutData.telefono}
-                                        id="tel_c"
-                                        onChange={(e) => setCheckoutData({ ...checkoutData, telefono: e.target.value })}
-                                    />
-                                    <label htmlFor="tel_c" className="absolute left-5 top-2 text-[9px] font-black text-slate-500 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-5 peer-focus:top-2 peer-focus:text-[9px] peer-focus:text-[#0d968b]">Teléfono WhatsApp</label>
-                                </div>
-                            </div>
-
-                            {/* ALERT BOX */}
-                            <div className="bg-[#0d968b]/10 border border-[#0d968b]/20 p-4 rounded-xl flex gap-3 mb-6 items-center">
-                                <div className="bg-[#0d968b]/20 p-2 rounded-lg shrink-0">
-                                    <MessageCircle size={18} className="text-[#0d968b]" />
-                                </div>
-                                <p className="text-[9px] font-bold text-[#0d968b] leading-relaxed uppercase tracking-wider">
-                                    Al confirmar, recibirás un reporte por WhatsApp y un vendedor te atenderá.
-                                </p>
+                                <input
+                                    type="text"
+                                    placeholder="Nombre Completo"
+                                    className="w-full bg-[#0d1117] p-5 rounded-xl border border-slate-700/30 outline-none text-sm font-black text-white focus:border-[#0d968b]"
+                                    value={checkoutData.nombre}
+                                    onChange={(e) => setCheckoutData({ ...checkoutData, nombre: e.target.value })}
+                                />
+                                <input
+                                    type="tel"
+                                    placeholder="Teléfono WhatsApp"
+                                    className="w-full bg-[#0d1117] p-5 rounded-xl border border-slate-700/30 outline-none text-sm font-black text-white focus:border-[#0d968b]"
+                                    value={checkoutData.telefono}
+                                    onChange={(e) => setCheckoutData({ ...checkoutData, telefono: e.target.value })}
+                                />
                             </div>
 
                             <button
                                 onClick={handleSendOrder}
                                 disabled={isSending}
-                                className="w-full py-5 rounded-2xl font-black text-xs tracking-[0.2em] shadow-[0_10px_30px_rgba(13,150,139,0.3)] flex items-center justify-center gap-3 active:scale-95 transition-all bg-[#0d968b] text-white hover:bg-[#0b8276]"
+                                className="w-full py-5 rounded-2xl font-black text-xs tracking-[0.2em] bg-[#0d968b] text-white shadow-lg"
                             >
-                                {isSending ? 'PROCESANDO...' : <>FINALIZAR PEDIDO <ChevronRight size={18} /></>}
+                                {isSending ? 'PROCESANDO...' : 'FINALIZAR PEDIDO'}
                             </button>
-                            <p className="text-center text-[9px] font-bold text-slate-600 mt-5 uppercase tracking-widest">
-                                Automotores Guaicaipuro C.A.
-                            </p>
                         </div>
                     )}
                 </div>
