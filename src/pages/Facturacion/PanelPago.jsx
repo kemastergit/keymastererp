@@ -18,13 +18,13 @@ export default function PanelPago({
             try {
                 const { data, error } = await supabase
                     .from('cuentas_por_cobrar')
-                    .select('monto_total, monto_cobrado')
-                    .eq('cliente_nombre', clienteFact)
+                    .select('monto')
+                    .eq('cliente', clienteFact)
                     .neq('estado', 'COBRADA')
                     .neq('estado', 'ANULADA')
 
                 if (!error && data) {
-                    const total = data.reduce((acc, curr) => acc + (curr.monto_total - (curr.monto_cobrado || 0)), 0)
+                    const total = data.reduce((acc, curr) => acc + (curr.monto || 0), 0)
                     setDeuda(total)
                 }
             } catch (e) { console.error("Error deuda:", e) }
