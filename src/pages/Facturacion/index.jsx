@@ -283,51 +283,56 @@ export default function Facturacion() {
       await useStore.getState().loadSession()
       logAction(currentUser, 'VENTA_PROCESADA', { nro, cliente: clienteFact, total })
 
-      // ☁️ SINCRONIZACIÓN A LA BANDEJA DE SALIDA (NUBE)
+      // ☁️ SINCRONIZACIÓN A LA BANDEJA DE SALIDA (NUBE) - MEJORADA
       try {
-        const itemsNube = cart.map(i => ({
-          articulo_id: i.id,
-          codigo: i.codigo,
-          descripcion: i.descripcion,
-          cantidad: i.qty,
-          precio: i.precio
-        }))
+        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
 
+        // 1. Guardar Factura en la cola nube
         const ventaNube = {
-          id: `factura-${nro}-${Date.now()}`, // ID idempotente para evitar duplicados en Supabase
+          id: `factura-${nro}-${activeSession.id}-${Date.now()}`,
           numero: nro,
           cliente_nombre: clienteFact,
           total_usd: total,
           total_bs: total * tasa,
           tasa_bcv: tasa,
-          vendedor: currentUser?.username || 'VENDEDOR',
+          vendedor: currentUser?.nombre || 'VENDEDOR',
           metodo_pago: payments.map(p => p.metodo).join(', '),
-          items: itemsNube,
+          items: cart.map(i => ({
+            articulo_id: i.id, codigo: i.codigo,
+            descripcion: i.descripcion, cantidad: i.qty, precio: i.precio
+          })),
           created_at: new Date().toISOString()
         }
-
-        const { addToSyncQueue } = await import('../../utils/syncManager')
-
-        // 1. Guardar Factura en la cola nube
         await addToSyncQueue('facturas', 'INSERT', ventaNube)
 
-        // 2. Guardar Stock en la cola de cada item
+        // 2. Guardar Cuentas por Cobrar (Si aplica)
+        const localDebt = await db.ctas_cobrar.where('venta_id').equals(ventaId).first()
+        if (localDebt) {
+          await addToSyncQueue('cuentas_por_cobrar', 'INSERT', {
+            ...localDebt,
+            id: `cxc-${ventaId}-${Date.now()}` // ID Global
+          })
+        }
+
+        // 3. Guardar Abonos/Pagos
+        const localAbonos = await db.abonos.where('cuenta_id').anyOf([ventaId, localDebt?.id].filter(Boolean)).toArray()
+        for (const ab of localAbonos) {
+          await addToSyncQueue('abonos', 'INSERT', {
+            ...ab,
+            id: `abono-${ab.id}-${Date.now()}`
+          })
+        }
+
+        // 4. Actualizar Stock en la nube por cada item
         for (const i of cart) {
           const freshArticle = await db.articulos.get(i.id)
           await addToSyncQueue('articulos', 'UPDATE_STOCK', {
-            id: i.id,
-            codigo: i.codigo,
-            stock: freshArticle.stock
+            id: i.id, codigo: i.codigo, stock: freshArticle.stock
           })
         }
 
         toast('🛰️ Venta en cola de sincronización', 'info')
-
-        // Intentar procesar la cola de inmediato
-        const { processSyncQueue } = await import('../../utils/syncManager')
-        processSyncQueue().then(okCount => {
-          if (okCount > 0) toast('☁️ Sincronizado con Maestra de Ventas', 'ok')
-        })
+        processSyncQueue() // Intento inmediato sin esperar al timer
 
       } catch (cloudErr) {
         console.error("Error encolando venta:", cloudErr)

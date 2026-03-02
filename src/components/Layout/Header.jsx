@@ -101,12 +101,12 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
         <div className="flex items-center gap-4">
           {/* BANDEJA DE SALIDA (PENDIENTES NUBE) */}
           {pendingSyncCount > 0 && (
-            <div className="hidden md:flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl animate-pulse">
-              <span className="material-icons-round text-amber-500 text-sm">cloud_upload</span>
+            <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 px-2 md:px-3 py-1 md:py-1.5 rounded-xl animate-pulse">
+              <span className="material-icons-round text-amber-500 text-xs md:text-sm">cloud_upload</span>
               <div className="flex flex-col">
-                <span className="text-[8px] font-black text-amber-600 uppercase tracking-widest leading-none">Pendientes</span>
-                <span className="text-[10px] font-bold text-amber-500 leading-none">
-                  {pendingSyncCount} registros
+                <span className="text-[7px] md:text-[8px] font-black text-amber-600 uppercase tracking-widest leading-none">Pendientes</span>
+                <span className="text-[9px] md:text-[10px] font-bold text-amber-500 leading-none">
+                  {pendingSyncCount}
                 </span>
               </div>
             </div>

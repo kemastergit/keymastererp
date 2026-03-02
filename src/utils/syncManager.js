@@ -35,8 +35,13 @@ export async function processSyncQueue() {
                     .update({ stock: item.data.stock })
                     .eq('codigo', item.data.codigo)
                 error = err
+            } else if (item.table === 'cuentas_por_cobrar' && item.operation === 'INSERT') {
+                const { error: err } = await supabase.from('cuentas_por_cobrar').upsert([item.data], { onConflict: 'id' })
+                error = err
+            } else if (item.table === 'abonos' && item.operation === 'INSERT') {
+                const { error: err } = await supabase.from('abonos').upsert([item.data], { onConflict: 'id' })
+                error = err
             } else if (item.table === 'auditoria' && item.operation === 'INSERT') {
-                // Auditoria asume que también le pasaremos un ID único para evitar repetidos
                 const { error: err } = await supabase.from('auditoria').upsert([item.data], { onConflict: 'id' })
                 error = err
             }
