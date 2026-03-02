@@ -25,8 +25,9 @@ export default function SupabaseListener() {
                 toast(`🔔 NUEVO PEDIDO de ${nombreCliente.toUpperCase()}`, 'info')
                 incrementUnread()
                 try {
-                    new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play()
-                } catch (e) { }
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3')
+                    audio.play().catch(e => console.warn('Silenciado por política del navegador:', e.message))
+                } catch (e) { console.warn(e) }
             })
             .subscribe()
 

@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'logoguaicaipuro.jpeg'],
       manifest: {
-        name: 'Guaicaipuro Retail POS',
-        short_name: 'Guaicaipuro',
-        description: 'Sistema de Invoicing e Inventario Inteligente',
+        name: 'KEMASTER',
+        short_name: 'KEMASTER',
+        description: 'Tecnología de Gestión Avanzada',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',

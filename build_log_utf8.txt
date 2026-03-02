@@ -1,0 +1,72 @@
+﻿
+> guaicaipuro@1.0.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32mÔ£ô[39m 2705 modules transformed.
+rendering chunks...
+node.exe : [1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+En línea: 1 Carácter: 1
++ & "C:\Program Files\nodejs/node.exe" "C:\Users\juan luis\AppData\Roam ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([1m[33m[plugi...vite:reporter] :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(!) C:/Users/juan luis/Downloads/guaicaipuro-react - copia/src/utils/audit.js is dynamically imported by 
+C:/Users/juan luis/Downloads/guaicaipuro-react - copia/src/components/UI/AdminModal.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/components/UI/AdminModal.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/CierreDia/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/store/useStore.js but also statically imported by C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/components/Layout/Header.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Admin/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Caja/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Compras/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Devoluciones/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Facturacion/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Inventario/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Login/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Reportes/index.jsx, C:/Users/juan 
+luis/Downloads/guaicaipuro-react - copia/src/pages/Usuarios/index.jsx, dynamic import will not move module 
+into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mmanifest.webmanifest                        [39m[1m[2m    0.39 kB[22m[1m[22m
+[2mdist/[22m[32mindex.html                                  [39m[1m[2m    1.09 kB[22m[1m[22m[2m Ôöé gzip:   0.53 kB[22m
+[2mdist/[22m[35massets/index-BYY_mg4G.css                   [39m[1m[2m   80.75 kB[22m[1m[22m[2m Ôöé gzip:  14.11 kB[22m
+[2mdist/[22m[36massets/comisiones-Wt88iN1E.js               [39m[1m[2m    1.03 kB[22m[1m[22m[2m Ôöé gzip:   0.57 kB[22m
+[2mdist/[22m[36massets/syncManager-r0Ai3TSH.js              [39m[1m[2m    1.09 kB[22m[1m[22m[2m Ôöé gzip:   0.54 kB[22m
+[2mdist/[22m[36massets/workbox-window.prod.es5-vqzQaGvo.js  [39m[1m[2m    5.72 kB[22m[1m[22m[2m Ôöé gzip:   2.35 kB[22m
+[2mdist/[22m[36massets/xlsx-D_0l8YDs.js                     [39m[1m[2m  429.03 kB[22m[1m[22m[2m Ôöé gzip: 143.08 kB[22m
+[2mdist/[22m[36massets/index-DrO7Vlwp.js                    [39m[1m[33m2,104.31 kB[39m[22m[2m Ôöé gzip: 485.51 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: 
+https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32mÔ£ô built in 19.34s[39m
+[31merror during build:
+Error: 
+  Configure "workbox.maximumFileSizeToCacheInBytes" to change the limit: the default value is 2 MiB.
+  Check https://vite-pwa-org.netlify.app/guide/faq.html#missing-assets-from-sw-precache-manifest for more 
+information.
+  Assets exceeding the limit:
+  - assets/index-DrO7Vlwp.js is 2.11 MB, and won't be precached.
+
+    at logWorkboxResult (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modules/vi
+te-plugin-pwa/dist/chunk-G4TAN34B.js:44:13)
+    at generateServiceWorker (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modul
+es/vite-plugin-pwa/dist/index.js:209:3)
+    at async _generateSW (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modules/v
+ite-plugin-pwa/dist/index.js:234:5)
+    at async Object.handler (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_module
+s/vite-plugin-pwa/dist/index.js:427:13)
+    at async PluginDriver.hookParallel (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/
+node_modules/rollup/dist/es/shared/node-entry.js:22452:17)
+    at async Object.close (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modules/
+rollup/dist/es/shared/node-entry.js:23471:13)
+    at async build (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modules/vite/di
+st/node/chunks/dep-BK3b2jBa.js:65732:17)
+    at async CAC.<anonymous> (file:///C:/Users/juan%20luis/Downloads/guaicaipuro-react%20-%20copia/node_modul
+es/vite/dist/node/cli.js:829:5)[39m
