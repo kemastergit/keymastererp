@@ -173,57 +173,37 @@ export default function Facturacion() {
     const nro = await nextNro('nro_nota')
 
     // --- 📡 1. PRE-VALIDACIÓN DE STOCK GLOBAL (SUPABASE) ---
-    // Consultamos la realidad maestra antes de tocar lo local para evitar sobreventa entre terminales
     try {
       const ids = cart.map(i => i.id)
       const { data: cloudArticulos, error: cloudError } = await supabase
         .from('articulos')
-        .select('id, descripcion, stock, precio')
+        .select('id, codigo, stock,descripcion')
         .in('id', ids)
 
       if (!cloudError && cloudArticulos) {
         for (const item of cart) {
-          const cloudArt = cloudArticulos.find(a => a.id === item.id)
-
-          // A. VALIDACIÓN DE PRECIO
-          if (cloudArt && Math.abs(cloudArt.precio - item.precio) > 0.001) {
-            const msg = `⚠️ CAMBIO DE PRECIO: ${item.descripcion}\n` +
-              `En Carrito: ${fmtUSD(item.precio)}\n` +
-              `Precio Nuevo: ${fmtUSD(cloudArt.precio)}\n\n` +
-              `¿Deseas aplicar el PRECIO NUEVO? (Aceptar) o ¿MANTENER EL VIEJO? (Cancelar)`
-
-            if (window.confirm(msg)) {
-              updateItem(item.id, { precio: cloudArt.precio })
-              await db.articulos.update(item.id, { precio: cloudArt.precio })
-              toast(`✅ Precio actualizado. Revise el total y cierre la venta de nuevo.`, 'ok')
-              setLoading(false); return // Detenemos para que el total se recalcule en el UI
-            }
-          }
-
-          // B. VALIDACIÓN DE STOCK
+          const cloudArt = cloudArticulos.find(ca => ca.id === item.id)
           if (cloudArt && (cloudArt.stock || 0) < item.qty) {
-            // Sincronizamos localmente para que el vendedor vea la corrección
             await db.articulos.update(item.id, { stock: cloudArt.stock })
-            toast(`🚫 STOCK GLOBAL INSUFICIENTE para: ${item.descripcion}. Disponible: ${cloudArt.stock}. Probablemente otro vendedor lo facturó hace poco.`, 'error')
+            toast(`🚫 STOCK GLOBAL INSUFICIENTE para: ${item.descripcion}. Disponible: ${cloudArt.stock}.`, 'error')
             setLoading(false); return
           }
         }
       }
     } catch (e) {
-      console.warn("⚠️ Fallo consulta stock global (Offline/Error), procediendo con stock local", e)
-      // En modo offline permitimos facturar con stock local para no detener la tienda
+      console.warn("⚠️ Fallo consulta stock global, procediendo con local", e)
     }
 
     let ventaId = null
     let ventaCalculada = null
 
     try {
+      // 💾 A. GUARDADO LOCAL (DEXIE)
       await db.transaction('rw', [
         db.ventas, db.venta_items, db.articulos,
         db.ctas_cobrar, db.abonos, db.sesiones_caja, db.config
       ], async () => {
-
-        // 1. VALIDACIÓN DE STOCK EN TIEMEPO REAL
+        // Validación de stock local final
         for (const item of cart) {
           const freshArticle = await db.articulos.get(item.id)
           if (!freshArticle || freshArticle.stock < item.qty) {
@@ -240,122 +220,87 @@ export default function Facturacion() {
         }
         ventaId = await db.ventas.add(ventaCalculada)
 
-        // 2. Items y Actualización de Stock Atómica
         for (const item of cart) {
-          const freshArticle = await db.articulos.get(item.id)
+          const freshArt = await db.articulos.get(item.id)
           await db.venta_items.add({
             venta_id: ventaId, articulo_id: item.id,
             codigo: item.codigo, descripcion: item.descripcion,
-            marca: item.marca || '',
-            precio: item.precio,
-            costo: freshArticle?.costo || 0,
-            qty: item.qty
+            marca: item.marca || '', precio: item.precio, costo: freshArt?.costo || 0, qty: item.qty
           })
-          await db.articulos.update(item.id, {
-            stock: Math.max(0, (freshArticle.stock || 0) - item.qty)
-          })
+          await db.articulos.update(item.id, { stock: Math.max(0, (freshArt.stock || 0) - item.qty) })
         }
 
-        // 3. Pagos y Cuentas
-        let cuentaCobrarId = null
+        let cxcId = null
         if (tipoPago === 'CREDITO' || total > pTotal + 0.01) {
-          cuentaCobrarId = await db.ctas_cobrar.add({
-            venta_id: ventaId, cliente: clienteFact,
-            monto: total, fecha: new Date(),
+          cxcId = await db.ctas_cobrar.add({
+            venta_id: ventaId, cliente: clienteFact, monto: total, fecha: new Date(),
             vencimiento: vencFact, estado: pTotal >= total - 0.01 ? 'COBRADA' : pTotal > 0 ? 'PARCIAL' : 'PENDIENTE'
           })
         }
 
         for (const p of payments) {
           await db.abonos.add({
-            cuenta_id: cuentaCobrarId || ventaId,
-            tipo_cuenta: cuentaCobrarId ? 'COBRAR' : 'VENTA',
+            cuenta_id: cxcId || ventaId, tipo_cuenta: cxcId ? 'COBRAR' : 'VENTA',
             fecha: new Date(), monto: p.monto, metodo: p.metodo
           })
         }
 
-        // 4. Vincular a sesión activa
         const nuevasNotas = [...(activeSession.notas_del_dia || []), ventaId]
         await db.sesiones_caja.update(activeSession.id, { notas_del_dia: nuevasNotas })
       })
 
-      // FUERA DE LA TRANSACCIÓn (Efectos secundarios)
-      await useStore.getState().loadSession()
-      logAction(currentUser, 'VENTA_PROCESADA', { nro, cliente: clienteFact, total })
-
-      // ☁️ SINCRONIZACIÓN A LA BANDEJA DE SALIDA (NUBE) - MEJORADA
+      // ☁️ B. SINCRONIZACIÓN NUBE (INSTANTÁNEA COMO EL CATÁLOGO)
       try {
-        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
-
-        // 1. Guardar Factura en la cola nube
+        const { addToSyncQueue } = await import('../../utils/syncManager')
         const ventaNube = {
           id: `factura-${nro}-${activeSession.id}-${Date.now()}`,
-          numero: nro,
-          cliente_nombre: clienteFact,
-          total_usd: total,
-          total_bs: total * tasa,
-          tasa_bcv: tasa,
-          vendedor: currentUser?.nombre || 'VENDEDOR',
+          numero: nro, cliente_nombre: clienteFact, total_usd: total,
+          total_bs: total * tasa, tasa_bcv: tasa, vendedor: currentUser?.nombre || 'VENDEDOR',
           metodo_pago: payments.map(p => p.metodo).join(', '),
-          items: cart.map(i => ({
-            articulo_id: i.id, codigo: i.codigo,
-            descripcion: i.descripcion, cantidad: i.qty, precio: i.precio
-          })),
+          items: cart.map(i => ({ articulo_id: i.id, codigo: i.codigo, descripcion: i.descripcion, cantidad: i.qty, precio: i.precio })),
           created_at: new Date().toISOString()
         }
-        await addToSyncQueue('facturas', 'INSERT', ventaNube)
 
-        // 2. Guardar Cuentas por Cobrar (Si aplica)
-        const localDebt = await db.ctas_cobrar.where('venta_id').equals(ventaId).first()
-        if (localDebt) {
-          await addToSyncQueue('cuentas_por_cobrar', 'INSERT', {
-            ...localDebt,
-            id: `cxc-${ventaId}-${Date.now()}` // ID Global
-          })
-        }
+        // 🚀 DISPARO DIRECTO A LA NUBE
+        const { error: errFact } = await supabase.from('facturas').insert([ventaNube])
 
-        // 3. Guardar Abonos/Pagos
-        const localAbonos = await db.abonos.where('cuenta_id').anyOf([ventaId, localDebt?.id].filter(Boolean)).toArray()
-        for (const ab of localAbonos) {
-          await addToSyncQueue('abonos', 'INSERT', {
-            ...ab,
-            id: `abono-${ab.id}-${Date.now()}`
-          })
-        }
+        if (errFact) throw new Error("FALLO_NUBE_DIRECTO")
 
-        // 4. Actualizar Stock en la nube por cada item
+        // 💨 ACTUALIZACIÓN STOCK INSTANTÁNEA
         for (const i of cart) {
-          const freshArticle = await db.articulos.get(i.id)
-          await addToSyncQueue('articulos', 'UPDATE_STOCK', {
-            id: i.id, codigo: i.codigo, stock: freshArticle.stock
-          })
+          const fresh = await db.articulos.get(i.id)
+          await supabase.from('articulos').update({ stock: fresh.stock }).eq('codigo', i.codigo)
         }
 
-        toast('🛰️ Venta en cola de sincronización', 'info')
-        processSyncQueue() // Intento inmediato sin esperar al timer
+        toast('☁️ Venta y Stock sincronizado YA', 'ok')
 
-      } catch (cloudErr) {
-        console.error("Error encolando venta:", cloudErr)
-        toast('⚠️ Error al encolar respaldo en nube', 'warn')
+      } catch (errSync) {
+        console.warn("⚠️ Nube falló (Offline), encolando para después...", errSync)
+        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
+
+        // Encolado de respaldo
+        await addToSyncQueue('facturas', 'INSERT', {
+          id: `factura-${nro}-${Date.now()}`, numero: nro, cliente_nombre: clienteFact, total_usd: total,
+          vendedor: currentUser?.nombre || 'VENDEDOR', items: cart, created_at: new Date().toISOString()
+        })
+
+        for (const i of cart) {
+          const fresh = await db.articulos.get(i.id)
+          await addToSyncQueue('articulos', 'UPDATE_STOCK', { codigo: i.codigo, stock: fresh.stock })
+        }
+        toast('🛰️ Guardado local (se enviará al conectar)', 'info')
+        processSyncQueue()
       }
 
-      // PROCESAR COMISIONES (Si aplica)
+      // 🏆 C. FINALIZAR PROCESO
       const { processSaleCommissions } = await import('../../utils/comisiones')
       await processSaleCommissions(ventaId, ventaCalculada, cart.map(i => ({ ...i, costo: i.costo || 0 })))
 
       toast(`✅ Nota #${nro} procesada — Total: ${fmtUSD(total)}`)
       setLoading(false)
 
-      // Preparar para impresión
-      const ventaFull = {
-        nro, fecha: new Date(), cliente: clienteFact,
-        tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(),
-        igtf: cartIgtf(),
-        total, payments, items: cart
-      }
-      setLastVenta(ventaFull)
+      setLastVenta({ nro, fecha: new Date(), cliente: clienteFact, tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(), igtf: cartIgtf(), total, payments, items: cart })
       setShowPrintModal(true)
-
       clearCart()
       setStep(1)
 
@@ -363,8 +308,7 @@ export default function Facturacion() {
       setLoading(false)
       if (err.message.startsWith('STOCK_INSUFICIENTE')) {
         const [_, desc, stock] = err.message.split(':')
-        toast(`🚫 Stock insuficiente para: ${desc}. Disponible: ${stock}`, 'error')
-        logAction(currentUser, 'INTENTO_VENTA_SIN_STOCK', { producto: desc, solicitado: cart.find(i => i.descripcion === desc)?.qty })
+        toast(`🚫 Stock insuficiente: ${desc} (${stock})`, 'error')
       } else {
         toast('❌ Error al procesar la venta', 'error')
         console.error(err)
