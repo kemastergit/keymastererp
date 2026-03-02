@@ -12,6 +12,14 @@ if (!isValidUrl) {
     console.error('❌ ERROR CRÍTICO: VITE_SUPABASE_URL no está configurada en Vercel/Ambiente.')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        storageKey: 'guaicaipuro-auth-token',
+        storage: window.localStorage
+    }
+})
 
 
