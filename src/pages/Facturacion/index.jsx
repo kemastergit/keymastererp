@@ -263,6 +263,7 @@ export default function Facturacion() {
 
         // 🚀 DISPARO DIRECTO A LA NUBE
         const { error: errFact } = await supabase.from('facturas').insert([ventaNube])
+        console.log('SUPABASE INSERT resultado:', errFact)
 
         if (errFact) throw new Error("FALLO_NUBE_DIRECTO")
 
