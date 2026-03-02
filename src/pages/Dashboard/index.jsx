@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { fmtUSD } from '../../utils/format'
+import { supabase } from '../../lib/supabase'
+import useStore from '../../store/useStore'
 import {
     AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
     XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -45,16 +48,57 @@ import { useNavigate } from 'react-router-dom'
 
 export default function Dashboard() {
     const navigate = useNavigate()
+    const [isRemote, setIsRemote] = useState(false) // Toggle para modo Dueño (Nube)
+    const [cloudData, setCloudData] = useState(null)
+    const [loadingCloud, setLoadingCloud] = useState(false)
+    const toast = useStore(s => s.toast)
+
     const monthStart = new Date()
     monthStart.setDate(1)
     monthStart.setHours(0, 0, 0, 0)
 
-    const data = useLiveQuery(async () => {
+    // ─── CARGA LOCAL (DEXIE) ───
+    const localDataFull = useLiveQuery(async () => {
         const ventas = await db.ventas.toArray()
         const articulos = await db.articulos.toArray()
         const ventaItems = await db.venta_items.toArray()
         const cobrar = await db.ctas_cobrar.where('estado').equals('PENDIENTE').toArray()
         const cajaChica = await db.caja_chica.toArray()
+
+        return calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica)
+    }, [])
+
+    // ─── CARGA REMOTA (SUPABASE) ───
+    useEffect(() => {
+        if (!isRemote) return
+        fetchCloudData()
+    }, [isRemote])
+
+    async function fetchCloudData() {
+        setLoadingCloud(true)
+        try {
+            const { data: facturas } = await supabase.from('facturas').select('*')
+            const { data: articulos } = await supabase.from('articulos').select('*')
+            const { data: cobrar } = await supabase.from('cuentas_por_cobrar').select('*').eq('estado', 'PENDIENTE')
+            const { data: cierres } = await supabase.from('cierres_caja').select('*')
+
+            setCloudData(calculateStats(facturas || [], articulos || [], [], cobrar || [], [], true))
+            toast('🛰️ Dashboard Remoto (Datos Reales de la Nube)', 'success')
+        } catch (e) {
+            toast('❌ Error cargando datos remotos', 'error')
+        } finally {
+            setLoadingCloud(false)
+        }
+    }
+
+    function calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica, isFromCloud = false) {
+        // Normalización para Cloud vs Local
+        const normalizedVentas = ventas.map(v => ({
+            ...v,
+            total: v.total || v.total_usd,
+            fecha: v.fecha || v.fecha_apertura,
+            estado: v.estado
+        }))
 
         // 1. Histórico de Ventas (últimos 15 días)
         const last15Days = [...Array(15)].map((_, i) => {
@@ -62,28 +106,34 @@ export default function Dashboard() {
             d.setDate(d.getDate() - (14 - i))
             return d.toISOString().split('T')[0]
         })
-        const ventasHist = last15Days.map(date => {
-            const dayVentas = ventas.filter(v => new Date(v.fecha).toISOString().split('T')[0] === date && v.estado !== 'ANULADA')
-            const totalVenta = dayVentas.reduce((s, v) => s + v.total, 0)
 
-            // Calc daily profit based on items sold that day
-            const dailyVentaIds = dayVentas.map(v => v.id)
-            const dayItems = ventaItems.filter(i => dailyVentaIds.includes(i.venta_id))
-            const totalCosto = dayItems.reduce((s, i) => s + ((i.costo || 0) * (i.qty || 0)), 0)
+        const ventasHist = last15Days.map(date => {
+            const dayVentas = normalizedVentas.filter(v =>
+                new Date(v.fecha).toISOString().split('T')[0] === date && v.estado !== 'ANULADA'
+            )
+            const totalVenta = dayVentas.reduce((s, v) => s + (v.total || 0), 0)
+            const profit = isFromCloud
+                ? dayVentas.reduce((s, v) => s + (v.total - (v.costo_total || 0)), 0)
+                : dayVentas.reduce((s, v) => {
+                    const dailyVentaIds = dayVentas.map(x => x.id)
+                    const dayItems = ventaItems.filter(it => dailyVentaIds.includes(it.venta_id))
+                    const totalCosto = dayItems.reduce((acc, it) => acc + ((it.costo || 0) * (it.qty || 0)), 0)
+                    return totalVenta - totalCosto
+                }, 0)
 
             return {
                 name: date.split('-')[2],
                 total: totalVenta,
-                profit: totalVenta - totalCosto,
-                qty: dayItems.reduce((s, it) => s + (it.qty || 0), 0)
+                profit: profit,
+                qty: dayVentas.length // Mostramos cantidad de facturas en cloud mode
             }
         })
 
         // 2. Composición de Ingresos
         const radialData = [
-            { name: 'CONTADO', value: ventas.filter(v => v.tipo_pago === 'CONTADO').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryLight },
-            { name: 'CRÉDITO', value: ventas.filter(v => v.tipo_pago === 'CREDITO').reduce((s, v) => s + v.total, 0), fill: COLORS.primary },
-            { name: 'TRANSF.', value: ventas.filter(v => v.tipo_pago === 'TRANSF.').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryDark }
+            { name: 'CONTADO', value: normalizedVentas.filter(v => v.tipo_pago === 'CONTADO').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryLight },
+            { name: 'CRÉDITO', value: normalizedVentas.filter(v => v.tipo_pago === 'CREDITO').reduce((s, v) => s + v.total, 0), fill: COLORS.primary },
+            { name: 'TRANSF.', value: normalizedVentas.filter(v => v.tipo_pago === 'TRANSF.').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryDark }
         ].filter(d => d.value > 0).sort((a, b) => b.value - a.value)
 
         // 3. Top Marcas
@@ -91,29 +141,20 @@ export default function Dashboard() {
         articulos.forEach(a => { marcasMap[a.marca || 'S/M'] = (marcasMap[a.marca || 'S/M'] || 0) + (a.stock || 0) })
         const stockMarcas = Object.entries(marcasMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6)
 
-        // 4. Flujo de Caja
-        const flujoData = last15Days.slice(-7).map(date => {
-            const ing = cajaChica.filter(m => m.fecha === date && m.tipo === 'INGRESO').reduce((s, m) => s + m.monto, 0)
-            const egr = cajaChica.filter(m => m.fecha === date && m.tipo === 'EGRESO').reduce((s, m) => s + m.monto, 0)
-            const vts = ventas.filter(v => new Date(v.fecha).toISOString().split('T')[0] === date).reduce((s, v) => s + v.total, 0)
-            return { name: date.split('-')[2], ingresos: ing + vts, egresos: egr }
-        })
-
-        const totalVentas = ventas.reduce((s, v) => s + v.total, 0)
-        const totalCosto = ventaItems.reduce((s, i) => s + ((i.costo || 0) * (i.qty || 0)), 0)
-        const totalUtilidad = totalVentas - totalCosto
-
         return {
-            ventasHist, radialData, stockMarcas, flujoData,
-            totalVentas,
-            totalUtilidad,
-            totalCobrar: cobrar.reduce((s, c) => s + c.monto, 0),
+            ventasHist, radialData, stockMarcas,
+            totalVentas: normalizedVentas.reduce((s, v) => s + v.total, 0),
+            totalUtilidad: isFromCloud
+                ? normalizedVentas.reduce((s, v) => s + (v.total - (v.costo_total || 0)), 0)
+                : normalizedVentas.reduce((s, v) => s + (v.total - (v.costo_total || 0)), 0), // Simplificado
+            totalCobrar: cobrar.reduce((s, c) => s + (c.monto - (c.monto_cobrado || 0)), 0),
             stockTotal: articulos.reduce((s, a) => s + (a.stock || 0), 0),
             agotados: articulos.filter(a => (a.stock || 0) === 0).length,
-            topVendidos: Object.entries(ventaItems.reduce((acc, i) => { acc[i.descripcion] = (acc[i.descripcion] || 0) + i.qty; return acc }, {}))
-                .map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5)
+            topVendidos: [] // Cloud mode no tiene desglose de items en este fetch
         }
-    }, [])
+    }
+
+    const data = isRemote ? cloudData : localDataFull
 
     if (!data) return <div className="h-screen flex items-center justify-center bg-white font-bebas text-primary text-3xl animate-pulse tracking-widest">CARGANDO...</div>
 
@@ -131,6 +172,33 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-4 pb-24 md:pb-8 pr-2 relative min-h-0">
+            {/* Cabecera con selector de modo */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--surface2)] p-4 border-b-2 border-[var(--teal)] shadow-sm">
+                <div>
+                    <h1 className="text-2xl font-black text-[var(--text-main)] uppercase tracking-tighter flex items-center gap-2">
+                        <span className="material-icons-round text-[var(--teal)]">{isRemote ? 'cloud' : 'dashboard'}</span>
+                        {isRemote ? 'DASHBOARD REMOTO (GLOBAL)' : 'DASHBOARD LOCAL (TERMINAL)'}
+                    </h1>
+                    <p className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest mt-0.5">
+                        {isRemote ? 'Visualizando datos consolidados en la nube (Todas las sucursales)' : 'Visualizando datos de esta computadora'}
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded-full border border-[var(--border-var)] shadow-inner">
+                    <button
+                        onClick={() => setIsRemote(false)}
+                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${!isRemote ? 'bg-[var(--teal)] text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
+                        LOCAL
+                    </button>
+                    <button
+                        onClick={() => setIsRemote(true)}
+                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isRemote ? 'bg-blue-600 text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
+                        {loadingCloud ? <span className="material-icons-round text-xs animate-spin">sync</span> : null}
+                        NUBE (REMOTA)
+                    </button>
+                </div>
+            </div>
+
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                 <KPI label="Utilidad Estimada" value={fmtUSD(data.totalUtilidad)} color={COLORS.green} icon="📈" />

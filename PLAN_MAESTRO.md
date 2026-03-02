@@ -1,17 +1,17 @@
 # GUAICAIPURO POS — PLAN MAESTRO DE IMPLEMENTACIÓN
 
 > Documento de referencia para cualquier IA o desarrollador que trabaje en este sistema.
-> Última actualización: 2026-02-21
-> Estado: Fase 0 completada (cambio de tema visual). Fases 1-4 pendientes.
+> Última actualización: 2026-03-02
+> Estado: Fase de Hibridación Supabase EN PROCESO (Fase 6 adelantada).
 
 ---
 
 ## 1. CONTEXTO DEL PROYECTO
 
 **Nombre:** Sistema de Gestión Comercial — Automotores Guaicaipuro C.A.
-**Stack:** React 18 + Vite + Zustand + Dexie.js (IndexedDB) + Tailwind CSS + Recharts
-**Almacenamiento:** 100% local (IndexedDB). Migración a Supabase planificada para fase futura.
-**Tema visual actual:** Azul/Blanco estilo Windows 11 Fluent (recién migrado de rojo/negro).
+**Stack:** React 18 + Vite + Zustand + Dexie.js (IndexedDB) + Supabase (Nube) + Tailwind CSS
+**Almacenamiento:** Híbrido "Offline-First". Dexie.js (Velocidad/Local) + Supabase (Nube/Backup/Auditoría).
+**Tema visual actual:** Slate-900 Command Center (Premium).
 
 ---
 

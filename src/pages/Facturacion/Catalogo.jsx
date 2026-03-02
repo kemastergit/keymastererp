@@ -1,8 +1,10 @@
 import { fmtUSD } from '../../utils/format'
 
 export default function Catalogo({
-    busq, setBusq, showDrop, setShowDrop, articulos, addToCart, addGeneric
+    busq, setBusq, showDrop, setShowDrop, articulos, addToCart, addGeneric, cart = []
 }) {
+    const isInCart = (id) => cart.some(item => item.id === id)
+
     return (
         <div className="col-catalogo bg-[var(--surface)] border border-[var(--border-var)] flex flex-col overflow-hidden h-full relative min-h-0 w-full lg:flex-[1.5]">
             <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col gap-3 shrink-0">
@@ -51,10 +53,13 @@ export default function Catalogo({
                                         </div>
                                         <div className="font-bold text-[var(--text-main)] text-sm truncate">{a.descripcion}</div>
                                     </div>
-                                    <div className="text-right whitespace-nowrap">
-                                        <div className="text-sm font-black text-[var(--text-main)]">{fmtUSD(a.precio)}</div>
-                                        <div className={`text-[9px] font-bold uppercase ${a.stock <= 0 ? 'text-[var(--red-var)]' : 'text-[var(--green-var)]'}`}>
-                                            Stock: {a.stock ?? 0}
+                                    <div className="text-right whitespace-nowrap flex items-center gap-3">
+                                        {isInCart(a.id) && <span className="material-icons-round text-[var(--green-var)] text-base">check_circle</span>}
+                                        <div>
+                                            <div className="text-sm font-black text-[var(--text-main)]">{fmtUSD(a.precio)}</div>
+                                            <div className={`text-[9px] font-bold uppercase ${a.stock <= 0 ? 'text-[var(--red-var)]' : 'text-[var(--green-var)]'}`}>
+                                                Stock: {a.stock ?? 0}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -76,39 +81,50 @@ export default function Catalogo({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-var)]">
-                        {articulos.map(a => (
-                            <tr key={a.id} className="group/tr hover:bg-[var(--surfaceDark)] transition-none">
-                                <td className="p-3 font-mono text-[var(--teal)] font-bold text-[11px] whitespace-nowrap">{a.codigo}</td>
-                                <td className="p-3 min-w-[200px]">
-                                    <div className="font-bold text-[var(--text-main)] leading-tight text-sm">{a.descripcion}</div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-[var(--text2)] font-medium uppercase tracking-tighter">{a.marca}</span>
-                                        {a.ubicacion && (
-                                            <span className="bg-[var(--surface2)] text-[var(--text2)] border border-[var(--border-var)] text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-0.5">
-                                                <span className="material-icons-round text-[9px]">place</span>
-                                                {a.ubicacion}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="p-3 text-center">
-                                    <span className={`badge ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)]' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)]' : 'bg-[var(--green-var)]'} text-white shadow-sm !px-2.5 font-mono font-bold inline-block`}>
-                                        {a.stock ?? 0}
-                                    </span>
-                                </td>
-                                <td className="p-3 font-mono text-right font-black text-[var(--text-main)] whitespace-nowrap">{fmtUSD(a.precio)}</td>
-                                <td className="p-3 text-right whitespace-nowrap">
-                                    <button className={`w-8 h-8 border border-[var(--border-var)] transition-none inline-flex items-center justify-center shadow-[var(--win-shadow)]
-                    ${(a.stock ?? 0) === 0
-                                            ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none'
-                                            : 'bg-[var(--teal)] text-white hover:bg-[var(--tealDark)]'}`}
-                                        onClick={() => addToCart(a)}
-                                        disabled={(a.stock ?? 0) === 0}>
-                                        <span className="material-icons-round text-sm">add</span>
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                        {articulos.map(a => {
+                            const q = cart.find(i => i.id === a.id)?.qty || 0
+                            return (
+                                <tr key={a.id} className="group/tr hover:bg-[var(--surfaceDark)] transition-none">
+                                    <td className="p-3 font-mono text-[var(--teal)] font-bold text-[11px] whitespace-nowrap">{a.codigo}</td>
+                                    <td className="p-3 min-w-[200px]">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <div className="font-bold text-[var(--text-main)] leading-tight text-sm">{a.descripcion}</div>
+                                            {q > 0 && (
+                                                <div className="flex items-center gap-1 bg-[var(--green-var)]/10 px-1.5 py-0.5 rounded border border-[var(--green-var)]/20 shadow-sm transition-all whitespace-nowrap">
+                                                    <span className="material-icons-round text-[var(--green-var)] text-[10px]">shopping_cart</span>
+                                                    <span className="text-[var(--green-var)] font-black text-[9px]">{q}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-[var(--text2)] font-medium uppercase tracking-tighter">{a.marca}</span>
+                                            {a.ubicacion && (
+                                                <span className="bg-[var(--surface2)] text-[var(--text2)] border border-[var(--border-var)] text-[8px] px-1.5 py-0.5 rounded font-black uppercase flex items-center gap-0.5">
+                                                    <span className="material-icons-round text-[9px]">place</span>
+                                                    {a.ubicacion}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                        <span className={`badge ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)]' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)]' : 'bg-[var(--green-var)]'} text-white shadow-sm !px-2.5 font-mono font-bold inline-block`}>
+                                            {a.stock ?? 0}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 font-mono text-right font-black text-[var(--text-main)] whitespace-nowrap">{fmtUSD(a.precio)}</td>
+                                    <td className="p-3 text-right whitespace-nowrap">
+                                        <button className={`w-8 h-8 border border-[var(--border-var)] transition-none inline-flex items-center justify-center shadow-[var(--win-shadow)]
+                                            ${(a.stock ?? 0) === 0
+                                                ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none'
+                                                : 'bg-[var(--teal)] text-white hover:bg-[var(--tealDark)] active:scale-90'}`}
+                                            onClick={() => addToCart(a)}
+                                            disabled={(a.stock ?? 0) === 0}>
+                                            <span className="material-icons-round text-sm">add</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>

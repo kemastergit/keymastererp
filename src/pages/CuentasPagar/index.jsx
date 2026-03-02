@@ -139,17 +139,17 @@ export default function CuentasPagar() {
         <div className="overflow-x-auto min-h-[200px]">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)] sticky top-0 z-10">
-                <th className="py-3 px-4">Proveedor</th>
-                <th className="py-3 px-4">Concepto</th>
-                <th className="py-3 px-4 text-right">Total</th>
-                <th className="py-3 px-4 text-right">Pendiente</th>
-                <th className="py-3 px-4">Vencimiento</th>
-                <th className="py-3 px-4">Estado</th>
-                <th className="py-3 px-4 text-right">Acción</th>
+              <tr className="bg-slate-800 text-white">
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Proveedor</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Concepto</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Pendiente</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Vencimiento</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Estado</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acción</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-var)]">
+            <tbody className="divide-y divide-slate-100">
               {cuentas?.map(c => {
                 const pagos = abonos.filter(a => a.cuenta_id === c.id)
                 const abonado = pagos.reduce((s, x) => s + x.monto, 0)

@@ -22,34 +22,43 @@ export default function Catalogo() {
     useEffect(() => {
         if (loadTasa) loadTasa()
         fetchCatalog()
+
+        // 📡 RADAR EN TIEMPO REAL: Escucha cambios en el inventario
+        const channel = supabase
+            .channel('radar-inventario')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'articulos'
+            }, () => {
+                fetchCatalog() // Recargar datos si algo cambia en el ERP
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
     }, [])
 
     const fetchCatalog = async () => {
         setLoadingData(true)
         try {
-            // Leer productos activos y con stock
             const { data: productos, error } = await supabase
-                .from('catalogo_productos')
+                .from('articulos')
                 .select('*')
                 .eq('activo', true)
+                .eq('mostrar_en_web', true)
                 .gt('stock', 0)
 
-            if (error) {
-                console.warn('Filtro de Supabase falló, trayendo todos para fallback:', error)
-                // Reintento sin filtros si falla algo de columnas
-                const { data: fallback } = await supabase.from('catalogo_productos').select('*')
-                setArticulos(fallback || [])
-            } else {
-                setArticulos(productos || [])
-            }
+            if (error) throw error
+            setArticulos(productos || [])
 
-            // Extraer categorías únicas
-            const rawCats = (productos || []).map(p => p.categoria || p.departamento)
+            const rawCats = (productos || []).map(p => p.departamento)
             const uniqueCats = [...new Set(rawCats)].filter(Boolean)
             setDeptos(['TODOS', ...uniqueCats])
 
         } catch (error) {
-            console.error('Error fatal cargando catálogo:', error)
+            console.error('Error cargando la nube:', error)
         } finally {
             setLoadingData(false)
         }
@@ -57,12 +66,11 @@ export default function Catalogo() {
 
     // Filtrar localmente según la búsqueda
     const filteredArticulos = (articulos || []).filter(a => {
-        const desc = (a.descripcion || a.nombre || '').toLowerCase()
-        const nom = (a.nombre || a.descripcion || '').toLowerCase()
+        const desc = (a.descripcion || '').toLowerCase()
         const term = searchTerm.toLowerCase()
-        const matchesSearch = desc.includes(term) || nom.includes(term)
+        const matchesSearch = desc.includes(term) || a.codigo?.toLowerCase().includes(term)
 
-        const deptoProducto = a.categoria || a.departamento || 'VARIOS'
+        const deptoProducto = a.departamento || 'GENERAL'
         const matchesDepto = selectedDepto === 'TODOS' || deptoProducto === selectedDepto
         return matchesSearch && matchesDepto
     })
@@ -232,30 +240,31 @@ export default function Catalogo() {
                                         <div className="w-16 h-16 bg-[var(--teal4)] border border-[var(--border2)] rounded-xl flex items-center justify-center shrink-0">
                                             <Package size={28} className="text-[var(--teal)] opacity-70" />
                                         </div>
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 text-left">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-[8px] font-black text-[var(--teal)] bg-[var(--teal4)] px-2 py-0.5 rounded-full uppercase">
-                                                    {art.categoria || art.departamento || 'VARIOS'}
+                                                    {art.departamento || 'GENERAL'}
                                                 </span>
+                                                <span className="text-[8px] font-black text-slate-400 font-mono">#{art.codigo}</span>
                                             </div>
-                                            <h3 className="font-black text-[12px] leading-tight text-[var(--text-main)] line-clamp-1 mb-1">
-                                                {art.nombre || art.descripcion}
+                                            <h3 className="font-black text-[12px] leading-tight text-[var(--text-main)] line-clamp-1 mb-1 uppercase">
+                                                {art.descripcion}
                                             </h3>
-                                            <p className="text-[9px] text-[var(--text3)] font-mono leading-tight line-clamp-1">
-                                                {art.descripcion || `REF: ${art.codigo}`}
+                                            <p className="text-[9px] text-[var(--text3)] font-mono leading-tight line-clamp-1 uppercase">
+                                                MARCA: {art.marca || 'S/M'}
                                             </p>
                                         </div>
                                         <div className="flex flex-col items-end gap-2 shrink-0">
                                             <div className="text-right">
                                                 <p className="font-black text-lg text-[var(--teal)] leading-none">
-                                                    {fmtUSD(precioUsd)}
+                                                    {fmtUSD(art.precio || 0)}
                                                 </p>
                                                 <p className="text-[9px] font-mono text-[var(--text3)] mt-1">
-                                                    ~ {fmtBS(precioUsd * (tasa || 0))}
+                                                    ~ {fmtBS((art.precio || 0) * (tasa || 0))}
                                                 </p>
                                             </div>
                                             <button
-                                                onClick={() => addToCart(art)}
+                                                onClick={() => addToCart({ ...art, precio_usd: art.precio, nombre: art.descripcion })}
                                                 className="relative bg-[var(--teal)] text-white w-10 h-10 rounded-button flex items-center justify-center active:scale-90 transition-all hover:bg-[var(--tealDark)] shadow-[0_4px_12px_rgba(15,23,42,0.3)]"
                                             >
                                                 <ShoppingCart size={16} />

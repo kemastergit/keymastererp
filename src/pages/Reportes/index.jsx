@@ -1,15 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useSearchParams } from 'react-router-dom'
 import { db } from '../../db/db'
 import { fmtUSD, fmtDate, today } from '../../utils/format'
-import { printReporte } from '../../utils/print'
+import { printReporte, printLibroVentas, printLibroCompras, printLibroInventarioValorado } from '../../utils/print'
 import { useReactToPrint } from 'react-to-print'
 import TicketTermico from '../../components/Ticket/TicketTermico'
 import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
 import { logAction } from '../../utils/audit'
+import { supabase } from '../../lib/supabase'
 
 
 const primerDiaMes = () => {
@@ -48,8 +49,70 @@ export default function Reportes() {
   const { configEmpresa, loadConfigEmpresa, currentUser, btStatus, setBtStatus, toast } = useStore()
   const ticketRef = useRef()
 
+  const [cloudVentas, setCloudVentas] = useState([])
+  const [loadingCloud, setLoadingCloud] = useState(false)
+  const [highlightedIds, setHighlightedIds] = useState(new Set())
+
+  // ☁️ Escuchar Ventas de TODOS los Vendedores en Tiempo Real
+  useEffect(() => {
+    const fetchCloud = async () => {
+      setLoadingCloud(true)
+      const { data, error } = await supabase
+        .from('facturas')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error && data) setCloudVentas(data)
+      setLoadingCloud(false)
+    }
+
+    fetchCloud()
+
+    const channel = supabase.channel('radar-facturas-reporte')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facturas' }, payload => {
+        const newSale = payload.new
+        setCloudVentas(prev => [newSale, ...prev])
+
+        // ✨ Efecto Radar: Resaltar la fila
+        setHighlightedIds(prev => new Set(prev).add(newSale.id))
+
+        // Quitar el brillo después de 10 segundos
+        setTimeout(() => {
+          setHighlightedIds(prev => {
+            const next = new Set(prev)
+            next.delete(newSale.id)
+            return next
+          })
+        }, 10000)
+
+        toast(`🔥 Nueva venta de ${newSale.vendedor || 'un vendedor'}: ${fmtUSD(newSale.total_usd)}`, 'ok')
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [])
+
   useEffect(() => {
     loadConfigEmpresa()
+  }, [])
+
+  // ✨ Efecto Glow para el Radar
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.innerHTML = `
+      @keyframes radar-pulse {
+        0% { background-color: var(--surface2); }
+        20% { background-color: rgba(34, 197, 94, 0.2); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.15); }
+        50% { background-color: rgba(34, 197, 94, 0.1); }
+        100% { background-color: var(--surface2); }
+      }
+      .radar-glow {
+        animation: radar-pulse 3s ease-in-out infinite;
+        border-left: 4px solid var(--green-var) !important;
+        position: relative;
+      }
+    `
+    document.head.appendChild(style)
+    return () => document.head.removeChild(style)
   }, [])
 
   const handlePrintTicket = useReactToPrint({
@@ -129,29 +192,58 @@ export default function Reportes() {
   const abonos = useLiveQuery(() => db.abonos.toArray(), [], [])
   const cierres = useLiveQuery(() => db.sesiones_caja.where('estado').equals('CERRADA').toArray().then(arr => [...arr].reverse()), [], [])
 
-  // P&L Data
-  const ventaIds = ventas.filter(v => v.estado !== 'ANULADA').map(v => v.id)
-  const allVentaItems = useLiveQuery(
-    () => ventaIds.length > 0
-      ? db.venta_items.where('venta_id').anyOf(ventaIds).toArray()
-      : Promise.resolve([]),
-    [ventaIds.join(',')], []
-  )
+  // 📊 Datos para P&L (Estado de Resultados)
   const devolucionesPeriodo = useLiveQuery(
-    () => db.devoluciones.filter(d => {
-      const f = new Date(d.fecha).toISOString().split('T')[0]
-      return f >= desde && f <= hasta
-    }).toArray(),
-    [desde, hasta], []
-  )
-  const gastosPeriodo = useLiveQuery(
-    () => db.caja_chica.filter(m => {
-      return m.tipo === 'EGRESO' && m.fecha >= desde && m.fecha <= hasta
+    () => db.ventas.filter(v => {
+      const d = new Date(v.fecha).toISOString().split('T')[0]
+      return v.estado === 'ANULADA' && d >= desde && d <= hasta
     }).toArray(),
     [desde, hasta], []
   )
 
-  const totalVentas = ventas.filter(v => v.estado !== 'ANULADA').reduce((s, v) => s + (v.total || 0), 0)
+  const gastosPeriodo = useLiveQuery(
+    () => db.caja_chica.filter(g => {
+      const d = (g.fecha instanceof Date ? g.fecha : new Date(g.fecha)).toISOString().split('T')[0]
+      return d >= desde && d <= hasta
+    }).toArray(),
+    [desde, hasta], []
+  )
+
+  const allVentaItems = useLiveQuery(
+    async () => {
+      const currentVentas = await db.ventas.filter(v => {
+        const d = new Date(v.fecha).toISOString().split('T')[0]
+        return v.estado !== 'ANULADA' && d >= desde && d <= hasta
+      }).toArray()
+      const ids = currentVentas.map(v => v.id)
+      return db.venta_items.where('venta_id').anyOf(ids).toArray()
+    },
+    [desde, hasta], []
+  )
+
+  const allVentas = useMemo(() => {
+    const merged = [...ventas]
+    cloudVentas.forEach(cv => {
+      // Evitar duplicados si ya está en local (por número de factura)
+      if (!merged.find(mv => mv.nro === cv.numero || mv.id === cv.id)) {
+        merged.push({
+          id: cv.id,
+          nro: cv.numero,
+          fecha: cv.created_at,
+          cliente: cv.cliente_nombre,
+          tipo_pago: cv.metodo_pago,
+          total: cv.total_usd,
+          items: cv.items,
+          vendedor: cv.vendedor,
+          estado: 'REALTIME',
+          isCloud: true
+        })
+      }
+    })
+    return merged.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+  }, [ventas, cloudVentas])
+
+  const totalVentas = allVentas.filter(v => v.estado !== 'ANULADA').reduce((s, v) => s + (v.total || 0), 0)
 
   const porCobrarTotal = ctas_cobrar.reduce((s, c) => {
     const pagos = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'COBRAR').reduce((sum, a) => sum + a.monto, 0)
@@ -234,25 +326,48 @@ export default function Reportes() {
   }
 
   const exportLibroVentas = () => {
-    const data = ventas.filter(v => v.estado !== 'ANULADA').map(v => {
-      const base = v.subtotal || (v.total / 1.16)
-      const iva = v.iva || (v.total - base)
-      return [
-        fmtDate(v.fecha),
-        `#${v.nro}`,
-        v.cliente || 'CONTADO',
-        'J-00000000-0', // Default RIF
-        fmtUSD(base),
-        fmtUSD(iva),
-        fmtUSD(v.igtf || 0),
-        fmtUSD(v.total)
-      ]
-    })
-    printReporte(`Libro de Ventas (${desde} a ${hasta})`,
-      ['FECHA', 'NOTA', 'CLIENTE', 'RIF', 'BASE', 'IVA (16%)', 'IGTF (3%)', 'TOTAL'],
-      data,
-      { 'TOTAL VENTAS $': fmtUSD(totalVentas) }
-    )
+    const ventasFiltradas = ventas.filter(v => v.estado !== 'ANULADA')
+    const periodo = `${desde} al ${hasta}`
+    printLibroVentas(ventasFiltradas, periodo, configEmpresa)
+  }
+
+  const exportLibroCompras = async () => {
+    const compras = await db.compras.filter(c => {
+      const d = new Date(c.fecha).toISOString().split('T')[0]
+      return d >= desde && d <= hasta
+    }).toArray()
+    const periodo = `${desde} al ${hasta}`
+    printLibroCompras(compras, periodo, configEmpresa)
+  }
+
+  const exportLibroInventario = () => {
+    const periodo = `${desde} al ${hasta}`
+    printLibroInventarioValorado(articulos, periodo, configEmpresa)
+  }
+
+  const exportToCSV = () => {
+    const headers = ['FECHA', 'NOTA', 'CLIENTE', 'FORMA', 'TOTAL $', 'VENDEDOR', 'ESTADO']
+    const rows = allVentas.map(v => [
+      new Date(v.fecha).toLocaleString(),
+      v.nro,
+      v.cliente,
+      v.tipo_pago,
+      v.total.toFixed(2),
+      v.vendedor || 'SISTEMA',
+      v.estado
+    ])
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n")
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `Ventas_${desde}_al_${hasta}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast('📂 CSV descargado con éxito', 'ok')
   }
 
   const sendWhatsappStatement = (c) => {
@@ -286,9 +401,27 @@ export default function Reportes() {
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           {tab === 'ventas' && (
-            <button onClick={exportLibroVentas} className="btn bg-[var(--teal)] text-white hover:bg-[var(--tealDark)] transition-none shadow-[var(--win-shadow)] w-full sm:w-auto cursor-pointer">
-              <span className="material-icons-round text-base">file_download</span>
-              <span>Libro de Ventas</span>
+            <>
+              <button onClick={exportToCSV} className="btn bg-white text-slate-600 border border-slate-200 hover:border-emerald-600 hover:text-emerald-700 transition-all shadow-sm w-full sm:w-auto cursor-pointer">
+                <span className="material-icons-round text-base text-emerald-600">grid_on</span>
+                <span>Exportar CSV</span>
+              </button>
+              <button onClick={exportLibroVentas} className="btn bg-[#0d9488] text-white hover:bg-[#0b7a6f] transition-all shadow-lg w-full sm:w-auto cursor-pointer font-black">
+                <span className="material-icons-round text-base">file_download</span>
+                <span>Libro Ventas</span>
+              </button>
+            </>
+          )}
+          {tab === 'inventario' && (
+            <button onClick={exportLibroInventario} className="btn bg-[#0d9488] text-white hover:bg-[#0b7a6f] transition-all shadow-lg w-full sm:w-auto cursor-pointer font-black">
+              <span className="material-icons-round text-base">inventory</span>
+              <span>Exportar Valorado</span>
+            </button>
+          )}
+          {tab === 'pyl' && (
+            <button onClick={exportLibroCompras} className="btn bg-[#0d9488] text-white hover:bg-[#0b7a6f] transition-all shadow-lg w-full sm:w-auto cursor-pointer font-black">
+              <span className="material-icons-round text-base">shopping_cart</span>
+              <span>Libro Compras</span>
             </button>
           )}
           <button onClick={handlePrint} className="btn btn-r w-full sm:w-auto cursor-pointer">
@@ -330,12 +463,12 @@ export default function Reportes() {
           <div className="panel overflow-hidden flex flex-col p-0">
             <div className="flex justify-between items-center p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
               <div className="panel-title mb-0">Detalle de Ventas</div>
-              <div className="text-[10px] text-[var(--text2)] font-bold uppercase tracking-widest">{ventas.length} registros</div>
+              <div className="text-[10px] text-[var(--text2)] font-bold uppercase tracking-widest">{allVentas.length} registros</div>
             </div>
             {/* Mobile cards */}
             <div className="block md:hidden divide-y divide-[var(--border-var)]">
-              {ventas.map(v => (
-                <div key={v.id} className="p-4 active:bg-[var(--surfaceDark)] hover:bg-[var(--surface2)] transition-none cursor-pointer">
+              {allVentas.map(v => (
+                <div key={v.id} className={`p-4 active:bg-[var(--surfaceDark)] hover:bg-[var(--surface2)] transition-none cursor-pointer ${highlightedIds.has(v.id) ? 'radar-glow' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -343,6 +476,7 @@ export default function Reportes() {
                         <span className={`badge ${v.estado === 'ANULADA' ? 'badge-r' : v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>
                           {v.estado === 'ANULADA' ? 'ANULADA' : v.tipo_pago}
                         </span>
+                        {v.isCloud && <span className="text-[8px] bg-[var(--teal)] text-white px-1 rounded font-black">NUBE</span>}
                       </div>
                       <p className="font-bold text-[var(--text-main)] text-sm">{v.cliente}</p>
                       <p className="text-[10px] text-[var(--text2)]">{fmtDate(v.fecha)}</p>
@@ -354,33 +488,53 @@ export default function Reportes() {
                   </div>
                 </div>
               ))}
-              {ventas.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No se encontraron ventas</div>}
+              {allVentas.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No se encontraron ventas</div>}
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
-              <table>
-                <thead><tr className="bg-[var(--surface2)]"><th>N° Nota</th><th>Fecha</th><th>Cliente</th><th>Forma</th><th className="text-right">Total</th><th className="text-right">Acciones</th></tr></thead>
-                <tbody>
-                  {ventas.map(v => (
-                    <tr key={v.id}>
-                      <td className="font-mono text-[var(--teal)] font-bold">#{v.nro}</td>
-                      <td className="text-[11px] text-[var(--text2)]">{fmtDate(v.fecha)}</td>
-                      <td className="font-bold text-[var(--text-main)]">{v.cliente}</td>
-                      <td>
-                        <span className={`badge ${v.estado === 'ANULADA' ? 'badge-r' : v.tipo_pago === 'CREDITO' ? 'badge-y' : 'badge-g'}`}>
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">N° Nota</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Fecha</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cliente</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Forma</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allVentas.map(v => (
+                    <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${highlightedIds.has(v.id) ? 'radar-glow shadow-inner' : ''}`}>
+                      <td className="p-4 font-mono text-[#0d9488] font-black">#{v.nro}</td>
+                      <td className="p-4 text-[11px] text-slate-500 font-bold">{fmtDate(v.fecha)}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-700">{v.cliente}</span>
+                          {v.isCloud && <span className="text-[8px] bg-[#0d9488] text-white px-1.5 py-0.5 rounded font-black shadow-sm">NUBE</span>}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`inline-flex px-2 py-1 text-[9px] font-black uppercase rounded border ${v.estado === 'ANULADA' ? 'bg-red-50 text-red-600 border-red-100' : v.tipo_pago === 'CREDITO' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
                           {v.estado === 'ANULADA' ? 'ANULADA' : v.tipo_pago}
                         </span>
                       </td>
-                      <td className="font-mono text-[var(--text-main)] text-right font-bold">{fmtUSD(v.total)}</td>
-                      <td className="text-right flex gap-1 justify-end">
-                        <button onClick={() => reimprimirVenta(v)} className="bg-[var(--surface)] hover:bg-[var(--teal)] hover:text-white text-[var(--text2)] border border-[var(--border-var)] px-2 py-1 rounded-none text-[9px] font-black tracking-tighter transition-none shadow-[var(--win-shadow)] cursor-pointer">🖨️ REIMPRIMIR</button>
-                        {v.estado !== 'ANULADA' && ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) && (
-                          <button onClick={() => { setVentaParaAnular(v); setShowAnularModal(true) }} className="bg-[var(--surface)] hover:bg-[var(--red-var)] hover:text-white text-[var(--text2)] border border-[var(--border-var)] px-2 py-1 rounded-none text-[9px] font-black tracking-tighter transition-none shadow-[var(--win-shadow)] cursor-pointer">🚫 ANULAR</button>
+                      <td className="p-4 font-mono text-slate-800 text-right font-black text-sm">{fmtUSD(v.total)}</td>
+                      <td className="p-4 text-right flex gap-2 justify-end">
+                        <button onClick={() => reimprimirVenta(v)} className="bg-white hover:bg-[#0d9488] hover:text-white text-slate-500 border border-slate-200 p-2 rounded transition-all shadow-sm flex items-center gap-1 text-[9px] font-black cursor-pointer">
+                          <span className="material-icons-round text-sm">print</span>
+                          REIMPRIMIR
+                        </button>
+                        {v.estado !== 'ANULADA' && ['ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) && !v.isCloud && (
+                          <button onClick={() => { setVentaParaAnular(v); setShowAnularModal(true) }} className="bg-white hover:bg-red-600 hover:text-white text-slate-500 border border-slate-200 p-2 rounded transition-all shadow-sm flex items-center gap-1 text-[9px] font-black cursor-pointer">
+                            <span className="material-icons-round text-sm">block</span>
+                            ANULAR
+                          </button>
                         )}
                       </td>
                     </tr>
                   ))}
-                  {ventas.length === 0 && <tr><td colSpan={6} className="text-center text-[var(--text2)] py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">No se encontraron ventas</td></tr>}
+                  {allVentas.length === 0 && <tr><td colSpan={6} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No se encontraron ventas</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -460,24 +614,36 @@ export default function Reportes() {
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
-              <table className="w-full">
-                <thead><tr className="bg-[var(--surface2)]"><th>Cód.</th><th>Descripción</th><th>Marca</th><th className="text-center">Stock</th><th>Precio</th><th className="text-right">Valor Total</th></tr></thead>
-                <tbody>
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cód.</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Descripción</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
+                    <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Precio</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                   {articulos.map(a => (
-                    <tr key={a.id}>
-                      <td className="font-mono text-[var(--teal)] font-bold">{a.codigo}</td>
-                      <td className="font-bold text-[var(--text-main)] text-sm">{a.descripcion}</td>
-                      <td className="text-[var(--text2)] text-[11px] font-bold uppercase">{a.marca}</td>
-                      <td className="text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`badge ${(a.stock ?? 0) === 0 ? 'badge-r' : (a.stock ?? 0) <= 3 ? 'badge-y' : 'badge-g'}`}>{a.stock ?? 0}</span>
-                          <div className="w-10 h-1 bg-[var(--surface2)] rounded-none border border-[var(--border-var)] overflow-hidden">
-                            <div className={`h-full ${a.stock > 10 ? 'bg-[var(--green-var)]' : a.stock > 3 ? 'bg-[var(--orange-var)]' : 'bg-[var(--red-var)]'}`} style={{ width: `${Math.min(100, (a.stock / 20) * 100)}%` }} />
+                    <tr key={a.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4 font-mono text-[#0d9488] font-black">{a.codigo}</td>
+                      <td className="p-4 font-bold text-slate-700 text-sm">{a.descripcion}</td>
+                      <td className="p-4 text-slate-500 text-[11px] font-black uppercase">{a.marca}</td>
+                      <td className="p-4">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className={`inline-flex px-2 py-0.5 text-[9px] font-black rounded border ${a.stock > 10 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : a.stock > 3 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                            {a.stock ?? 0} UNIDADES
+                          </span>
+                          <div className="w-16 h-1 bg-slate-100 rounded-full border border-slate-200 overflow-hidden shadow-inner">
+                            <div className={`h-full transition-all duration-500 ${a.stock > 10 ? 'bg-emerald-500' : a.stock > 3 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              style={{ width: `${Math.min(100, (a.stock / 20) * 100)}%` }} />
                           </div>
                         </div>
                       </td>
-                      <td className="font-mono text-[11px] text-[var(--text2)] font-bold">{fmtUSD(a.precio)}</td>
-                      <td className="font-mono text-[var(--text-main)] text-right font-bold">{fmtUSD((a.stock || 0) * a.precio)}</td>
+                      <td className="p-4 font-mono text-[11px] text-slate-500 font-bold">{fmtUSD(a.precio)}</td>
+                      <td className="p-4 font-mono text-slate-800 text-right font-black">{fmtUSD((a.stock || 0) * a.precio)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -519,29 +685,40 @@ export default function Reportes() {
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
-              <table className="w-full">
-                <thead><tr className="bg-[var(--surface2)]"><th>Cliente</th><th className="text-right">Total</th><th className="text-right">Pendiente</th><th>Vencimiento</th><th className="text-right">Estado</th></tr></thead>
-                <tbody>
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cliente</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Pendiente</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Vencimiento</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                   {ctas_cobrar.map(c => {
                     const pagado = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'COBRAR').reduce((s, x) => s + x.monto, 0)
                     const pendiente = c.monto - pagado
                     const dias = Math.ceil((new Date(c.vencimiento) - new Date()) / (1000 * 60 * 60 * 24))
                     return (
-                      <tr key={c.id}>
-                        <td className="font-bold text-[var(--text-main)]">{c.cliente}</td>
-                        <td className="font-mono text-[var(--text2)] text-xs text-right">{fmtUSD(c.monto)}</td>
-                        <td className="font-mono text-[var(--text-main)] font-bold text-right">{fmtUSD(pendiente)}</td>
-                        <td className="text-[var(--text2)] text-[11px] font-bold">{fmtDate(c.vencimiento)}</td>
-                        <td className="text-right flex justify-end gap-1">
-                          <button onClick={() => sendWhatsappStatement(c)} className="bg-[var(--surface2)] text-[var(--text2)] p-1.5 rounded-none border border-[var(--border-var)] hover:bg-[var(--green-var)] hover:text-white flex items-center gap-1 text-[10px] font-bold cursor-pointer transition-none shadow-[var(--win-shadow)]">
-                            📲 WHATSAPP
+                      <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-black text-slate-700">{c.cliente}</td>
+                        <td className="p-4 font-mono text-slate-400 text-xs text-right">{fmtUSD(c.monto)}</td>
+                        <td className="p-4 font-mono text-slate-800 font-black text-right text-lg">{fmtUSD(pendiente)}</td>
+                        <td className="p-4 text-slate-500 text-[11px] font-black">{fmtDate(c.vencimiento)}</td>
+                        <td className="p-4 text-right flex justify-end items-center gap-3">
+                          <button onClick={() => sendWhatsappStatement(c)} className="bg-emerald-50 text-emerald-600 p-2 rounded hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1 text-[9px] font-black cursor-pointer border border-emerald-100 shadow-sm">
+                            <span className="material-icons-round text-sm">message</span>
+                            WHATSAPP
                           </button>
-                          <span className={`badge ${pendiente <= 0 ? 'badge-g' : dias < 0 ? 'badge-r' : 'badge-y'}`}>{pendiente <= 0 ? 'COBRADA' : dias < 0 ? 'VENCIDA' : c.estado}</span>
+                          <span className={`inline-flex px-2 py-1 text-[9px] font-black uppercase rounded border ${pendiente <= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : dias < 0 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                            {pendiente <= 0 ? 'COBRADA' : dias < 0 ? 'VENCIDA' : c.estado}
+                          </span>
                         </td>
                       </tr>
                     )
                   })}
-                  {ctas_cobrar.length === 0 && <tr><td colSpan={5} className="text-center text-[var(--text2)] py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin cuentas pendientes ✅</td></tr>}
+                  {ctas_cobrar.length === 0 && <tr><td colSpan={5} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">Sin cuentas pendientes ✅</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -580,23 +757,31 @@ export default function Reportes() {
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
-              <table className="w-full">
-                <thead><tr className="bg-[var(--surface2)]"><th>Proveedor</th><th>Concepto</th><th className="text-right">Total</th><th className="text-right">Pendiente</th><th className="text-right">Vencimiento</th></tr></thead>
-                <tbody>
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Proveedor</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Concepto</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Pendiente</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Vencimiento</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                   {ctas_pagar.map(c => {
                     const pagado = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'PAGAR').reduce((s, x) => s + x.monto, 0)
                     const pendiente = c.monto - pagado
                     return (
-                      <tr key={c.id}>
-                        <td className="font-bold text-[var(--text-main)]">{c.proveedor}</td>
-                        <td className="text-[var(--text2)] text-[10px] font-bold uppercase tracking-tighter">{c.concepto}</td>
-                        <td className="font-mono text-[var(--text2)] text-xs text-right">{fmtUSD(c.monto)}</td>
-                        <td className="font-mono text-[var(--red-var)] font-bold text-right">{fmtUSD(pendiente)}</td>
-                        <td className="text-[var(--text2)] text-[11px] font-bold text-right">{fmtDate(c.vencimiento)}</td>
+                      <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-black text-slate-700">{c.proveedor}</td>
+                        <td className="p-4 text-slate-500 text-[10px] font-black uppercase tracking-tighter">{c.concepto}</td>
+                        <td className="p-4 font-mono text-slate-400 text-xs text-right">{fmtUSD(c.monto)}</td>
+                        <td className="p-4 font-mono text-red-600 font-black text-right text-lg">{fmtUSD(pendiente)}</td>
+                        <td className="p-4 text-slate-500 text-[11px] font-black text-right">{fmtDate(c.vencimiento)}</td>
                       </tr>
                     )
                   })}
-                  {ctas_pagar.length === 0 && <tr><td colSpan={5} className="text-center text-[var(--text2)] py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">Sin cuentas pendientes ✅</td></tr>}
+                  {ctas_pagar.length === 0 && <tr><td colSpan={5} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">Sin cuentas pendientes ✅</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -635,21 +820,42 @@ export default function Reportes() {
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
-              <table className="w-full">
-                <thead><tr className="bg-[var(--surface2)]"><th>Fecha</th><th>Cajero</th><th className="text-center">Notas</th><th className="text-right">Total USD</th><th className="text-right">Total BS</th><th className="text-right">Diferencia $</th><th className="text-right">Acción</th></tr></thead>
-                <tbody>
+              <table className="w-full border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Fecha</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cajero</th>
+                    <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Notas</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total USD</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total BS</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Diferencia $</th>
+                    <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                   {cierres.map(c => (
-                    <tr key={c.id}>
-                      <td className="font-bold text-[var(--text-main)]">{fmtDate(c.fecha_apertura)}</td>
-                      <td className="text-[var(--text2)] text-[11px] font-bold uppercase">{c.usuario}</td>
-                      <td className="text-center"><span className="badge badge-g">{c.notas_del_dia?.length || 0}</span></td>
-                      <td className="font-mono text-[var(--text-main)] font-bold text-right">{fmtUSD(c.cierre_z?.esperadoUsd || 0)}</td>
-                      <td className="font-mono text-[var(--text-main)] font-bold text-right">Bs {(c.cierre_z?.esperadoBs || 0).toFixed(2)}</td>
-                      <td className={`font-mono font-bold text-right ${c.diferencia_usd < -0.01 ? 'text-[var(--red-var)]' : c.diferencia_usd > 0.01 ? 'text-[var(--green-var)]' : 'text-[var(--text2)]'}`}>{fmtUSD(c.diferencia_usd)}</td>
-                      <td className="text-right"><button className="btn btn-gr !py-1 !px-3 text-[10px]" onClick={() => { setSelectedCierre(c); setShowCierreModal(true) }}>VER DETALLE</button></td>
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4 font-black text-slate-700">{fmtDate(c.fecha_apertura)}</td>
+                      <td className="p-4 text-slate-500 text-[11px] font-black uppercase">{c.usuario}</td>
+                      <td className="p-4 text-center">
+                        <span className="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black border border-indigo-100">
+                          {c.notas_del_dia?.length || 0} ITEMS
+                        </span>
+                      </td>
+                      <td className="p-4 font-mono text-slate-800 font-black text-right">{fmtUSD(c.cierre_z?.esperadoUsd || 0)}</td>
+                      <td className="p-4 font-mono text-slate-500 font-bold text-right text-[11px]">Bs {(c.cierre_z?.esperadoBs || 0).toFixed(2)}</td>
+                      <td className={`p-4 font-mono font-black text-right ${Math.abs(c.diferencia_usd || 0) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {fmtUSD(c.diferencia_usd || 0)}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button className="bg-white hover:bg-slate-800 hover:text-white text-slate-600 border border-slate-200 px-3 py-1.5 rounded text-[9px] font-black shadow-sm transition-all cursor-pointer"
+                          onClick={() => { setSelectedCierre(c); setShowCierreModal(true) }}>
+                          VER DETALLE
+                        </button>
+                      </td>
                     </tr>
                   ))}
-                  {cierres.length === 0 && <tr><td colSpan={7} className="text-center text-[var(--text2)] py-12 tracking-widest text-[10px] font-bold uppercase opacity-50">No hay cierres registrados</td></tr>}
+                  {cierres.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No hay cierres registrados</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -880,65 +1086,98 @@ export default function Reportes() {
       </Modal>
 
       {/* Modal Detalle de Cierre */}
-      <Modal open={showCierreModal} onClose={() => setShowCierreModal(false)} title="RESUMEN DE CIERRE DE CAJA">
-        {selectedCierre && (
-          <div className="space-y-4">
-            <div className="bg-[var(--surface2)] p-4 rounded-none border border-[var(--border-var)]">
-              <div className="grid grid-cols-2 gap-4">
+      <Modal open={showCierreModal} onClose={() => setShowCierreModal(false)} title="INFORME DE CIERRE Z" wide>
+        {selectedCierre && (() => {
+          const dif = selectedCierre.diferencia_usd || 0
+          const cuadrado = Math.abs(dif) < 0.10
+          return (
+            <div className="space-y-0 overflow-hidden rounded-none -m-2">
+
+              {/* Header Command */}
+              <div className="bg-slate-900 px-6 py-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <p className="text-[10px] font-black text-[var(--text2)] uppercase">Cajero</p>
-                  <p className="text-sm font-bold text-[var(--text-main)]">{selectedCierre.usuario}</p>
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">SESIÓN DE CAJA CERTIFICADA</div>
+                  <div className="text-2xl font-black text-white uppercase tracking-tighter">{selectedCierre.usuario}</div>
+                  <div className="text-xs font-bold text-slate-400 mt-1 font-mono">{fmtDate(selectedCierre.fecha_apertura)}</div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black text-[var(--text2)] uppercase">Fecha</p>
-                  <p className="text-sm font-bold text-[var(--text-main)]">{fmtDate(selectedCierre.fecha_apertura)}</p>
+                <div className={`px-4 py-2 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2 border ${cuadrado ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
+                  <span className={`w-2 h-2 rounded-full ${cuadrado ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                  {cuadrado ? 'CAJA CUADRADA' : 'DESCUADRE DETECTADO'}
                 </div>
+              </div>
+
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3">
+
+                {/* USD Column */}
+                <div className="bg-emerald-950/50 border-r border-slate-800 p-5 space-y-3">
+                  <div className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.25em] flex items-center gap-2">
+                    <span className="material-icons-round text-sm">attach_money</span>
+                    OPERACIONES USD
+                  </div>
+                  <CierreRow label="Fondo Inicial" val={selectedCierre.monto_inicial_usd} />
+                  <CierreRow label="Efectivo Recibido" val={selectedCierre.cierre_z?.efectivoUsd} />
+                  <CierreRow label="Zelle / Otros" val={(selectedCierre.cierre_z?.zelle || 0) + (selectedCierre.cierre_z?.otros || 0)} />
+                  <CierreRow label="Ingresos C.C." val={selectedCierre.cierre_z?.ingresosCC || 0} />
+                  <CierreRow label="Egresos C.C." val={-(selectedCierre.cierre_z?.egresosCC || 0)} negative />
+                  <div className="pt-3 border-t border-emerald-900 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">ESPERADO</span>
+                    <span className="text-xl font-mono font-black text-emerald-400">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd)}</span>
+                  </div>
+                </div>
+
+                {/* BS Column */}
+                <div className="bg-indigo-950/50 border-r border-slate-800 p-5 space-y-3">
+                  <div className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.25em] flex items-center gap-2">
+                    <span className="material-icons-round text-sm">currency_exchange</span>
+                    OPERACIONES BS
+                  </div>
+                  <CierreRow label="Fondo Inicial" val={selectedCierre.monto_inicial_bs} isBs />
+                  <CierreRow label="Efectivo Bs" val={selectedCierre.cierre_z?.efectivoBs} isBs />
+                  <CierreRow label="Pago Móvil / P.Venta" val={(selectedCierre.cierre_z?.pagoMovil || 0) + (selectedCierre.cierre_z?.punto || 0)} isBs />
+                  <div className="pt-3 border-t border-indigo-900 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">ESPERADO</span>
+                    <span className="text-xl font-mono font-black text-indigo-400">Bs {(selectedCierre.cierre_z?.esperadoBs || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Discrepancy Column */}
+                <div className={`p-5 space-y-3 ${cuadrado ? 'bg-emerald-950/30' : 'bg-red-950/30'}`}>
+                  <div className={`text-[9px] font-black uppercase tracking-[0.25em] flex items-center gap-2 ${cuadrado ? 'text-emerald-500' : 'text-red-500'}`}>
+                    <span className="material-icons-round text-sm">{cuadrado ? 'task_alt' : 'report_problem'}</span>
+                    ARQUEO FINAL
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-black text-slate-400 uppercase">Contado Físico</div>
+                    <div className="text-2xl font-mono font-black text-white">{fmtUSD(selectedCierre.monto_fisico_usd || 0)}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-black text-slate-400 uppercase">Sistema Esperaba</div>
+                    <div className="text-lg font-mono font-bold text-slate-300">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd || 0)}</div>
+                  </div>
+                  <div className={`pt-3 border-t flex justify-between items-center ${cuadrado ? 'border-emerald-900' : 'border-red-900'}`}>
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">DIFERENCIA</span>
+                    <span className={`text-2xl font-mono font-black ${cuadrado ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {fmtUSD(dif)}
+                    </span>
+                  </div>
+                  <div className="pt-2">
+                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FACTURAS DEL PERÍODO</div>
+                    <div className="text-3xl font-black text-white">{selectedCierre.notas_del_dia?.length || 0}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-900 px-6 py-4 flex justify-end">
+                <button className="bg-slate-700 hover:bg-slate-600 text-white px-8 py-3 font-black text-xs uppercase tracking-widest transition-colors cursor-pointer"
+                  onClick={() => setShowCierreModal(false)}>
+                  CERRAR INFORME
+                </button>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] font-black text-[var(--teal)] uppercase tracking-widest px-1">Desglose de Operaciones</p>
-              <div className="panel bg-[var(--surface)] space-y-3 transition-none">
-                <CierreRow label="Inicial en Caja ($)" val={selectedCierre.monto_inicial_usd} />
-                <CierreRow label="Efectivo Recibido ($)" val={selectedCierre.cierre_z?.efectivoUsd} />
-                <CierreRow label="Zelle / Otros ($)" val={(selectedCierre.cierre_z?.zelle || 0) + (selectedCierre.cierre_z?.otros || 0)} />
-                <CierreRow label="Ingresos Extra C.C. ($)" val={selectedCierre.cierre_z?.ingresosCC || 0} />
-                <CierreRow label="Egresos / Gastos C.C. ($)" val={-(selectedCierre.cierre_z?.egresosCC || 0)} />
-                <div className="pt-2 border-t border-[var(--border-var)] flex justify-between">
-                  <span className="text-xs font-black text-[var(--text-main)]">TOTAL ESPERADO ($)</span>
-                  <span className="text-sm font-mono font-black text-[var(--green-var)]">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd)}</span>
-                </div>
-              </div>
-
-              <div className="panel bg-[var(--surface)] space-y-3 transition-none">
-                <CierreRow label="Inicial en Caja (Bs)" val={selectedCierre.monto_inicial_bs} isBs />
-                <CierreRow label="Efectivo Recibido (Bs)" val={selectedCierre.cierre_z?.efectivoBs} isBs />
-                <CierreRow label="Pago Móvil / Punto (Bs)" val={(selectedCierre.cierre_z?.pagoMovil || 0) + (selectedCierre.cierre_z?.punto || 0)} isBs />
-                <div className="pt-2 border-t border-[var(--border-var)] flex justify-between">
-                  <span className="text-xs font-black text-[var(--text-main)]">TOTAL ESPERADO (BS)</span>
-                  <span className="text-sm font-mono font-black text-[var(--teal)]">Bs {(selectedCierre.cierre_z?.esperadoBs || 0).toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="bg-[var(--orange-var)] bg-opacity-10 p-4 rounded-none border border-[var(--orange-var)]">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] font-black text-[var(--text-main)] uppercase">Contado Físico</span>
-                  <span className="text-sm font-mono font-black text-[var(--text-main)]">{fmtUSD(selectedCierre.monto_fisico_usd)}</span>
-                </div>
-                <div className="flex justify-between items-center pt-1 border-t border-[var(--border-var)] mt-1">
-                  <span className="text-[10px] font-black text-[var(--text-main)] uppercase">Diferencia Final</span>
-                  <span className={`text-sm font-mono font-black ${selectedCierre.diferencia_usd < 0 ? 'text-[var(--red-var)]' : 'text-[var(--green-var)]'}`}>
-                    {fmtUSD(selectedCierre.diferencia_usd)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <button className="btn btn-gr w-full py-4 font-black cursor-pointer transition-none shadow-[var(--win-shadow)]" onClick={() => setShowCierreModal(false)}>
-              CERRAR VISTA
-            </button>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Modal Anulación */}
@@ -982,11 +1221,13 @@ export default function Reportes() {
   )
 }
 
-function CierreRow({ label, val, isBs }) {
+function CierreRow({ label, val, isBs, negative }) {
   return (
-    <div className="flex justify-between items-center text-[11px]">
-      <span className="text-[var(--text2)] font-bold uppercase">{label}</span>
-      <span className="font-mono text-[var(--text-main)] font-bold">{isBs ? `Bs ${(val || 0).toFixed(2)}` : fmtUSD(val || 0)}</span>
+    <div className="flex justify-between items-center text-[11px] py-1">
+      <span className="text-slate-400 font-bold uppercase tracking-wider">{label}</span>
+      <span className={`font-mono font-black ${negative && val !== 0 ? 'text-red-400' : 'text-slate-200'}`}>
+        {isBs ? `Bs ${(val || 0).toFixed(2)}` : fmtUSD(val || 0)}
+      </span>
     </div>
   )
 }

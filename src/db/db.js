@@ -3,7 +3,7 @@ import { seedArticulos } from './seed_data'
 
 export const db = new Dexie('Guaicaipuro_Retail')
 
-db.version(12).stores({
+db.version(13).stores({
   articulos: '++id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad',
   clientes: '++id, rif, nombre',
   proveedores: '++id, rif, nombre',
@@ -28,6 +28,7 @@ db.version(12).stores({
   auditoria: '++id, fecha, usuario_id, accion, table_name, record_id',
   comisiones_config: '++id, user_id, active',
   comisiones_log: '++id, user_id, invoice_id, period_month, period_year, paid',
+  sync_queue: '++id, table, operation, status', // Bandeja de Salida
   config: 'clave',
   config_empresa: 'clave'
 })

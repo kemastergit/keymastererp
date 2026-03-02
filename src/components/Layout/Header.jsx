@@ -6,7 +6,7 @@ import { menu } from './menu'
 import MobileSidebar from './MobileSidebar'
 
 export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders }) {
-  const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb } = useStore()
+  const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount } = useStore()
   const { check } = usePermiso()
   const [showDrawer, setShowDrawer] = useState(false)
 
@@ -85,10 +85,33 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
                 <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">Cerrada</span>
               </div>
             )}
+
+            <div className="w-[1px] h-6 bg-white/10 mx-1" />
+
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-xs text-cyan-400 animate-pulse">radar</span>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Radar</span>
+                <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter leading-none">Cloud</span>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
+          {/* BANDEJA DE SALIDA (PENDIENTES NUBE) */}
+          {pendingSyncCount > 0 && (
+            <div className="hidden md:flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl animate-pulse">
+              <span className="material-icons-round text-amber-500 text-sm">cloud_upload</span>
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black text-amber-600 uppercase tracking-widest leading-none">Pendientes</span>
+                <span className="text-[10px] font-bold text-amber-500 leading-none">
+                  {pendingSyncCount} registros
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Acceso directo a Pedidos en Línea - solo desktop */}
           <a
             href="/pedidos-web"

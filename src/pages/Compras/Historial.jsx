@@ -77,17 +77,17 @@ export default function ComprasHistorial() {
                 <div className="overflow-x-auto overflow-y-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="text-[10px] uppercase text-[var(--text2)] font-black border-b border-[var(--border-var)] bg-[var(--surface2)]">
-                                <th className="py-3 px-4">Fecha</th>
-                                <th className="py-3 px-4 uppercase">Proveedor</th>
-                                <th className="py-3 px-4 uppercase">Nº Factura</th>
-                                <th className="py-3 px-4 uppercase text-right">Total ($)</th>
-                                <th className="py-3 px-4 uppercase text-center">Estado</th>
-                                <th className="py-3 px-4 uppercase text-right">Tasa</th>
-                                <th className="py-3 px-4 uppercase text-center">Detalle</th>
+                            <tr className="bg-slate-800 text-white">
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Fecha</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Proveedor</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Nº Factura</th>
+                                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total ($)</th>
+                                <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Estado</th>
+                                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Tasa</th>
+                                <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest">Detalle</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-[var(--border-var)]">
+                        <tbody className="divide-y divide-slate-100">
                             {compras?.map(c => (
                                 <tr key={c.id} className="text-[11px] hover:bg-[var(--surfaceDark)] transition-none">
                                     <td className="py-3 px-4 font-mono font-bold text-[var(--text2)]">{fmtDate(c.fecha)}</td>

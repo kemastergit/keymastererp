@@ -35,3 +35,6 @@ extract_excel.js
 
 .vercel
 .env*.local
+
+.env
+.env.local

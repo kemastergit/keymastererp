@@ -4,6 +4,7 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { hashPin } from '../../utils/security'
 import { logAction } from '../../utils/audit'
+import { supabase } from '../../lib/supabase'
 import Modal from '../../components/UI/Modal'
 
 export default function Usuarios() {
@@ -20,9 +21,10 @@ export default function Usuarios() {
         if (form.pin.length < 4) return toast('PIN debe ser de al menos 4 dígitos', 'warn')
 
         try {
-            const hashedPin = await hashPin(form.pin)
             const userData = { ...form, pin: hashedPin }
             const currentUser = useStore.getState().currentUser
+
+            let userId = editing?.id;
 
             if (editing) {
                 const oldUser = await db.usuarios.get(editing.id)
@@ -40,25 +42,34 @@ export default function Usuarios() {
                 if (oldUser?.rol !== form.rol) action = 'CAMBIO_ROL'
 
                 logAction(currentUser, action, {
-                    table_name: 'usuarios',
-                    record_id: editing.id,
-                    old_value: oldUser,
-                    new_value: { ...userData, id: editing.id }
+                    table_name: 'usuarios', record_id: editing.id, old_value: oldUser, new_value: { ...userData, id: editing.id }
                 })
-                toast('✅ Usuario actualizado')
+                toast('✅ Usuario actualizado localmente')
             } else {
-                const id = await db.usuarios.add({ ...userData, fecha_creacion: new Date() })
+                userId = await db.usuarios.add({ ...userData, fecha_creacion: new Date() })
 
                 // Crear configuración de comisión para el nuevo usuario
-                await db.comisiones_config.add({ ...commissionForm, user_id: id })
+                await db.comisiones_config.add({ ...commissionForm, user_id: userId })
 
                 logAction(currentUser, 'USUARIO_CREADO', {
-                    table_name: 'usuarios',
-                    record_id: id,
-                    new_value: { ...userData, id, fecha_creacion: new Date() }
+                    table_name: 'usuarios', record_id: userId, new_value: { ...userData, id: userId, fecha_creacion: new Date() }
                 })
-                toast('✅ Usuario creado')
+                toast('✅ Usuario creado localmente')
             }
+
+            // SINCRONIZACIÓN EN TIEMPO REAL CON SUPABASE
+            const { error: syncError } = await supabase
+                .from('usuarios')
+                .upsert({
+                    nombre: userData.nombre.trim(),
+                    pin: userData.pin,
+                    rol: userData.rol,
+                    activo: userData.activo
+                }, { onConflict: 'nombre' })
+
+            if (syncError) throw syncError
+            toast('🛰️ Credenciales sincronizadas en la Nube', 'success')
+
             setShowModal(false)
             setEditing(null)
             setForm({ nombre: '', rol: 'CAJERO', pin: '', activo: true })
@@ -73,7 +84,17 @@ export default function Usuarios() {
         if (u.rol === 'ADMIN' && u.activo && admins.length <= 1) {
             return toast('Debe existir al menos un ADMIN activo', 'error')
         }
-        await db.usuarios.update(u.id, { activo: !u.activo })
+
+        const nuevoEstado = !u.activo
+        await db.usuarios.update(u.id, { activo: nuevoEstado })
+
+        // Sincronizar cambio de estado en la nube
+        try {
+            await supabase.from('usuarios').update({ activo: nuevoEstado }).eq('nombre', u.nombre)
+            toast(`Operador ${nuevoEstado ? 'Activado' : 'Desactivado'} en Nube`)
+        } catch (err) {
+            console.error('Error sync estado:', err)
+        }
     }
 
     return (
@@ -83,24 +104,26 @@ export default function Usuarios() {
                     <h1 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter">GESTIÓN DE PERSONAL Y ACCESOS</h1>
                     <p className="text-[var(--text2)] font-black text-xs uppercase tracking-widest mt-1 opacity-60">ADMINISTRACIÓN DE ROLES, PERMISOS Y SEGURIDAD OPERATIVA</p>
                 </div>
-                <button className="btn bg-[var(--teal)] text-white px-8 py-4 font-black text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer rounded-none uppercase tracking-widest" onClick={() => setShowModal(true)}>
-                    <span className="material-icons-round text-base">person_add</span>
-                    <span>ALTA DE USUARIO</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <button className="btn bg-[var(--teal)] text-white px-8 py-4 font-black text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer rounded-none uppercase tracking-widest" onClick={() => setShowModal(true)}>
+                        <span className="material-icons-round text-base">person_add</span>
+                        <span>ALTA DE USUARIO</span>
+                    </button>
+                </div>
             </div>
 
             <div className="panel p-0 overflow-hidden transition-none shadow-[var(--win-shadow)]">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full border-separate border-spacing-0">
                     <thead>
-                        <tr className="bg-[var(--surface2)] text-[10px] uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                            <th className="py-3 px-4">Nombre</th>
-                            <th className="py-3 px-4">Rol / Cargo</th>
-                            <th className="py-3 px-4">Estado</th>
-                            <th className="py-3 px-4">Último Acceso</th>
-                            <th className="py-3 px-4 text-right">Acciones</th>
+                        <tr className="bg-slate-800 text-white">
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Nombre</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Rol / Cargo</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Estado</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Último Acceso</th>
+                            <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--border-var)]">
+                    <tbody className="divide-y divide-slate-100">
                         {usuarios?.map(u => (
                             <tr key={u.id} className={`${!u.activo ? 'opacity-50 italic grayscale bg-[var(--surfaceDark)]' : 'hover:bg-[var(--surfaceDark)]'} transition-none`}>
                                 <td className="font-bold text-[var(--text-main)] py-3 px-4">{u.nombre}</td>

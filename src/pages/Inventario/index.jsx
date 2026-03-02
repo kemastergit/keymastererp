@@ -5,10 +5,16 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD } from '../../utils/format'
 import { logAction } from '../../utils/audit'
+import { supabase } from '../../lib/supabase'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
 
-const empty = { codigo: '', referencia: '', descripcion: '', marca: '', departamento: '', sub_depto: '', proveedor: '', unidad: 'UNI', ubicacion: '', stock: 0, precio: 0, costo: 0 }
+const empty = {
+  codigo: '', referencia: '', descripcion: '', marca: '', departamento: '',
+  sub_depto: '', proveedor: '', unidad: 'UNI', ubicacion: '',
+  stock: 0, precio: 0, costo: 0,
+  activo: true, mostrar_en_web: true
+}
 
 export default function Inventario() {
   const toast = useStore(s => s.toast)
@@ -22,6 +28,7 @@ export default function Inventario() {
   const [showModal, setShowModal] = useState(false)
   const [delId, setDelId] = useState(null)
   const [ajuste, setAjuste] = useState(null) // { art, qty, motivo }
+  const [syncing, setSyncing] = useState(false)
 
   const articulos = useLiveQuery(
     async () => {
@@ -69,45 +76,94 @@ export default function Inventario() {
       ...form,
       precio: parseFloat(form.precio) || 0,
       stock: parseInt(form.stock) || 0,
-      costo: parseFloat(form.costo) || 0
+      costo: parseFloat(form.costo) || 0,
+      activo: form.activo !== false,
+      mostrar_en_web: form.mostrar_en_web !== false
     }
 
+    // 🚨 VALIDACIÓN DE RENTABILIDAD
+    if (processedForm.precio < processedForm.costo) {
+      const ok = confirm(`⚠️ ALERTA DE PÉRDIDA:\n\nEl precio de venta ($${processedForm.precio}) es MENOR al costo ($${processedForm.costo}).\n\n¿Desea continuar con esta pérdida?`)
+      if (!ok) return
+    }
+
+    // 1. Guardado Local (Dexie)
+    let recordId = editing;
     if (editing) {
       const oldArt = await db.articulos.get(editing)
       await db.articulos.update(editing, processedForm)
-
       let action = 'PRODUCTO_ACTUALIZADO'
       if (oldArt?.precio !== processedForm.precio) action = 'CAMBIO_PRECIO'
-
       logAction(currentUser, action, {
-        table_name: 'articulos',
-        record_id: editing,
-        old_value: oldArt,
-        new_value: { ...processedForm, id: editing }
+        table_name: 'articulos', record_id: editing,
+        old_value: oldArt, new_value: { ...processedForm, id: editing }
       })
-      toast('Producto actualizado')
     } else {
-      const id = await db.articulos.add(processedForm)
+      recordId = await db.articulos.add(processedForm)
       logAction(currentUser, 'PRODUCTO_CREADO', {
-        table_name: 'articulos',
-        record_id: id,
-        new_value: { ...processedForm, id }
+        table_name: 'articulos', record_id: recordId,
+        new_value: { ...processedForm, id: recordId }
       })
-      toast('Producto agregado')
     }
+
+    // 2. Sincronización en Vivo a la NUBE (Supabase)
+    try {
+      const { error } = await supabase
+        .from('articulos')
+        .upsert({
+          codigo: processedForm.codigo,
+          referencia: processedForm.referencia,
+          descripcion: processedForm.descripcion,
+          marca: processedForm.marca,
+          departamento: processedForm.departamento,
+          sub_depto: processedForm.sub_depto,
+          stock: processedForm.stock,
+          precio: processedForm.precio,
+          costo: processedForm.costo,
+          proveedor: processedForm.proveedor,
+          unidad: processedForm.unidad,
+          activo: processedForm.activo,
+          mostrar_en_web: processedForm.mostrar_en_web
+        }, { onConflict: 'codigo' })
+
+      if (error) throw error
+      toast(editing ? 'Producto actualizado y sincronizado' : 'Producto agregado a la nube')
+    } catch (err) {
+      console.error("Error sync:", err)
+      toast('⚠️ Guardado local, pero falló sincronización a la nube', 'warn')
+    }
+
     setShowModal(false)
   }
 
   const del = async () => {
     const art = await db.articulos.get(delId)
+    if (!art) return
+
     const currentUser = useStore.getState().currentUser
-    await db.articulos.delete(delId)
-    logAction(currentUser, 'PRODUCTO_ELIMINADO', {
-      table_name: 'articulos',
-      record_id: delId,
-      old_value: art
-    })
-    toast('Producto eliminado', 'warn')
+
+    // En lugar de borrar físicamente, desactivamos (Soft Delete)
+    // para no romper historial de ventas.
+    try {
+      await db.articulos.update(delId, { activo: false, mostrar_en_web: false })
+
+      const { error } = await supabase
+        .from('articulos')
+        .update({ activo: false, mostrar_en_web: false })
+        .eq('codigo', art.codigo)
+
+      if (error) throw error
+
+      logAction(currentUser, 'PRODUCTO_DESACTIVADO', {
+        table_name: 'articulos',
+        record_id: delId,
+        old_value: art
+      })
+      toast('Producto desactivado (No aparecerá en ventas ni catálogo)', 'warn')
+    } catch (err) {
+      toast('Error al desactivar: ' + err.message, 'error')
+    }
+
     setDelId(null)
   }
 
@@ -140,11 +196,50 @@ export default function Inventario() {
       }
     }
 
-    // Si el ajuste es mayor a 10 unidades o es una disminución, pedimos admin por seguridad
     if (Math.abs(qty) >= 10 || qty < 0) {
       useStore.getState().askAdmin(performAjuste)
     } else {
       performAjuste()
+    }
+  }
+
+  const handleSincronizarNube = async () => {
+    if (!confirm(`🚨 ¿Sincronizar ${articulos.length} productos con la NUBE?\n\nEsto actualizará el inventario global para todos los vendedores.`)) return
+
+    setSyncing(true)
+    toast('🚀 Iniciando sincronización masiva...', 'info')
+
+    try {
+      const allLocal = await db.articulos.toArray()
+      const cleanData = allLocal.map(a => ({
+        codigo: String(a.codigo || '').trim(),
+        referencia: String(a.referencia || '').trim(),
+        descripcion: String(a.descripcion || 'SIN DESCRIPCION').trim(),
+        marca: String(a.marca || 'S/M').trim(),
+        departamento: String(a.departamento || 'GENERAL').trim(),
+        sub_depto: String(a.sub_depto || '').trim(),
+        stock: parseFloat(a.stock) || 0,
+        precio: parseFloat(a.precio) || 0,
+        costo: parseFloat(a.costo) || 0,
+        proveedor: String(a.proveedor || '').trim(),
+        unidad: String(a.unidad || 'UNI').trim(),
+        activo: a.activo !== false,
+        mostrar_en_web: a.mostrar_en_web !== false
+      }))
+
+      const batchSize = 100
+      for (let i = 0; i < cleanData.length; i += batchSize) {
+        const batch = cleanData.slice(i, i + batchSize)
+        const { error } = await supabase.from('articulos').upsert(batch, { onConflict: 'codigo' })
+        if (error) throw error
+      }
+
+      toast('✅ ¡INVENTARIO SINCRONIZADO EN LA NUBE!', 'ok')
+    } catch (err) {
+      console.error('Error en sync:', err)
+      toast('❌ Error en sincronización: ' + err.message, 'error')
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -160,6 +255,16 @@ export default function Inventario() {
             <p className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS EN EL SISTEMA</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              disabled={syncing}
+              className={`px-5 py-3 rounded-none text-[10px] font-black uppercase tracking-widest transition-none flex items-center gap-2 cursor-pointer border shadow-[var(--win-shadow)]
+                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}
+              onClick={handleSincronizarNube}>
+              <span className={`material-icons-round text-sm ${syncing ? 'animate-spin' : ''}`}>
+                {syncing ? 'sync' : 'cloud_upload'}
+              </span>
+              <span>{syncing ? 'SINCRONIZANDO...' : 'SINCRONIZAR NUBE'}</span>
+            </button>
             <button className={`px-5 py-3 rounded-none text-[10px] font-black uppercase tracking-widest transition-none flex items-center gap-2 cursor-pointer border shadow-[var(--win-shadow)]
               ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)]'}`}
               onClick={() => toggleFilter('agotados')}>
@@ -229,18 +334,18 @@ export default function Inventario() {
         <div className="hidden md:block flex-1 min-h-0 overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                <th className="py-4 px-4 sticky-col !bg-[var(--surfaceDark)]">Cód Articulo</th>
-                <th className="py-4 px-4 sticky-col-2 !bg-[var(--surfaceDark)] min-w-[300px]">Descripción Detallada</th>
-                <th className="py-4 px-4">Marca</th>
-                <th className="py-4 px-4">Categoría</th>
-                <th className="py-4 px-4 text-center">Stock</th>
-                <th className="py-4 px-4 text-right">Costo $</th>
-                <th className="py-4 px-4 text-right">Precio $</th>
-                <th className="py-4 px-4 text-right pr-6">Gestionar</th>
+              <tr className="bg-slate-800 text-white">
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cód Articulo</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700 min-w-[300px]">Descripción Detallada</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Categoría</th>
+                <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Costo $</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Precio $</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Gestionar</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border-var)]">
+            <tbody className="divide-y divide-slate-100">
               {articulos.map(a => (
                 <tr key={a.id} className="hover:bg-[var(--surface2)] transition-none cursor-pointer group" onClick={() => openEdit(a)}>
                   <td className="py-3 px-4 sticky-col !bg-[var(--surface)]">
@@ -317,6 +422,38 @@ export default function Inventario() {
               <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">SUB-CATEGORÍA / GRUPO</label>
               <input className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black uppercase" value={form.sub_depto} onChange={e => f('sub_depto', e.target.value.toUpperCase())} />
             </div>
+
+            <div className="field flex items-center gap-6 bg-[var(--surfaceDark)] p-4 border border-[var(--border-var)] col-span-1 sm:col-span-2 shadow-inner">
+              <div className="flex items-center gap-3 cursor-pointer group" onClick={() => f('activo', !form.activo)}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${form.activo ? 'bg-[var(--green-var)] text-white shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[var(--red-var)] text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]'}`}>
+                  <span className="material-icons-round text-xl">
+                    {form.activo ? 'check_circle' : 'cancel'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest block leading-none">ESTADO GLOBAL</span>
+                  <span className={`text-[9px] font-bold uppercase ${form.activo ? 'text-[var(--green-var)]' : 'text-[var(--red-var)]'}`}>
+                    {form.activo ? 'PRODUCTO VIVO' : 'TOTALMENTE DESACTIVADO'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-px h-10 bg-[var(--border-var)] opacity-50"></div>
+
+              <div className="flex items-center gap-3 cursor-pointer group" onClick={() => f('mostrar_en_web', !form.mostrar_en_web)}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${form.mostrar_en_web ? 'bg-[var(--teal)] text-white shadow-[0_0_15px_rgba(13,148,136,0.3)]' : 'bg-slate-700 text-slate-400'}`}>
+                  <span className="material-icons-round text-xl">
+                    {form.mostrar_en_web ? 'visibility' : 'visibility_off'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest block leading-none">PÚBLICO WEB</span>
+                  <span className={`text-[9px] font-bold uppercase ${form.mostrar_en_web ? 'text-[var(--teal)]' : 'text-slate-500'}`}>
+                    {form.mostrar_en_web ? 'VISIBLE EN CATÁLOGO' : 'SOLO VENTA EN TIENDA'}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="bg-[var(--surfaceDark)] p-6 rounded-none border-2 border-[var(--border-var)] shadow-inner">
@@ -335,8 +472,12 @@ export default function Inventario() {
                 <input className="inp font-mono !py-3 rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black text-center" type="number" value={form.costo} onChange={e => f('costo', e.target.value)} step="0.01" inputMode="decimal" />
               </div>
               <div className="field">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--teal)]">PRECIO VENTA ($)</label>
-                <input className="inp font-mono !py-3 rounded-none border-[var(--teal)] focus:bg-[var(--teal)]/5 transition-none shadow-inner font-black text-center text-[var(--teal)] text-lg" type="number" value={form.precio} onChange={e => f('precio', e.target.value)} step="0.01" inputMode="decimal" />
+                <label className={`text-[10px] font-black uppercase tracking-widest ${parseFloat(form.precio) < parseFloat(form.costo) ? 'text-[var(--red-var)]' : 'text-[var(--teal)]'}`}>
+                  PRECIO VENTA ($)
+                  {parseFloat(form.precio) < parseFloat(form.costo) && <span className="ml-1">⚠️ PÉRDIDA</span>}
+                </label>
+                <input className={`inp font-mono !py-3 rounded-none transition-none shadow-inner font-black text-center text-lg ${parseFloat(form.precio) < parseFloat(form.costo) ? 'border-[var(--red-var)] text-[var(--red-var)] bg-[var(--red-var)]/5' : 'border-[var(--teal)] text-[var(--teal)] focus:bg-[var(--teal)]/5'}`}
+                  type="number" value={form.precio} onChange={e => f('precio', e.target.value)} step="0.01" inputMode="decimal" />
               </div>
             </div>
           </div>
@@ -397,6 +538,6 @@ export default function Inventario() {
 
       <Confirm open={!!delId} onClose={() => setDelId(null)} onConfirm={del}
         msg="¿Está seguro de eliminar este producto del inventario? Esta acción no se puede deshacer." danger />
-    </div>
+    </div >
   )
 }

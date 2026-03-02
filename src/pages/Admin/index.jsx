@@ -324,7 +324,7 @@ export default function Admin() {
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Versión</span>
-            <span className="text-xs font-bold text-slate-700">2.5.0 Amber Edition</span>
+            <span className="text-xs font-bold text-slate-700">2.6.0 Amber Cloud Edition ☁️</span>
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Motor DB</span>
@@ -332,9 +332,9 @@ export default function Admin() {
           </div>
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase">Estado</span>
-            <span className="text-xs font-bold text-green-600 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-              Operativo (Local Only)
+            <span className="text-xs font-bold text-cyan-600 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+              Operativo Híbrido (Local + Cloud Sync)
             </span>
           </div>
         </div>

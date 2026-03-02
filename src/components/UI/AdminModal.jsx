@@ -10,10 +10,19 @@ export default function AdminModal() {
   const check = async () => {
     const stored = await getConfig('clave_admin')
     if (clave === (stored || 'admin123')) {
+      const { logAction } = await import('../../utils/audit')
+      const { currentUser } = useStore.getState()
+
+      logAction(currentUser, 'AUTORIZACION_ADMIN', { detail: 'Clave de administrador ingresada correctamente' })
+
       clearAdmin()
       setClave('')
       adminCb && adminCb()
     } else {
+      const { logAction } = await import('../../utils/audit')
+      const { currentUser } = useStore.getState()
+      logAction(currentUser, 'LOGIN_FAIL', { detail: 'Intento fallido de clave de administrador' })
+
       toast('Clave incorrecta', 'error')
       setClave('')
     }

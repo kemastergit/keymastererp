@@ -6,30 +6,93 @@ import TecladoPin from '../../components/TecladoPin'
 import { hashPin } from '../../utils/security'
 import { logAction } from '../../utils/audit'
 import Header from '../../components/Layout/Header'
+import { supabase } from '../../lib/supabase'
 
 export default function Login() {
     const [selectedUser, setSelectedUser] = useState(null)
     const login = useStore(s => s.login)
     const toast = useStore(s => s.toast)
 
-    const usuarios = useLiveQuery(() => db.usuarios.toArray())
+    // 1. CARGA LOCAL DE USUARIOS (DEXIE)
+    const usuarios = useLiveQuery(() => db.usuarios.filter(u => u.activo).toArray())
+
+    // 2. REFRESCO DE USUARIOS DESDE LA NUBE (AL CARGAR)
+    useEffect(() => {
+        async function syncUsers() {
+            try {
+                const { data: cloudUsers, error } = await supabase
+                    .from('usuarios')
+                    .select('*')
+
+                if (!error && cloudUsers) {
+                    for (const u of cloudUsers) {
+                        const local = await db.usuarios.where('nombre').equals(u.nombre).first()
+                        if (local) {
+                            await db.usuarios.update(local.id, { pin: u.pin, rol: u.rol, activo: u.activo })
+                        } else {
+                            await db.usuarios.add({ ...u, id: undefined }) // Dejar que Dexie asigne ID
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log("Modo Offline: Usando lista de usuarios local.");
+            }
+        }
+        syncUsers()
+    }, [])
 
     const handleComplete = async (pin) => {
         const hashedInput = await hashPin(pin)
+        let loginSuccess = false
+        let finalUserData = { ...selectedUser }
 
-        if (selectedUser.pin === hashedInput) {
-            toast(`✅ Bienvenido, ${selectedUser.nombre}`)
-            logAction(selectedUser, 'LOGIN_EXITOSO', { table_name: 'usuarios', record_id: selectedUser.id })
-            login(selectedUser)
-            window.location.assign('/')
-            return
+        try {
+            // A. INTENTO VALIDACIÓN EN NUBE (Nivel 1)
+            const { data: cloudUser, error } = await supabase
+                .from('usuarios')
+                .select('*')
+                .eq('nombre', selectedUser.nombre)
+                .single()
+
+            if (!error && cloudUser) {
+                // Verificar PIN (Soportamos hash o texto plano en migración)
+                if (cloudUser.pin === hashedInput || cloudUser.pin === pin) {
+                    loginSuccess = true
+                    finalUserData = { ...cloudUser, id: selectedUser.id }
+
+                    // Actualizar local por si hubo cambios remotos
+                    await db.usuarios.update(selectedUser.id, {
+                        pin: cloudUser.pin,
+                        rol: cloudUser.rol,
+                        activo: cloudUser.activo
+                    })
+                }
+            } else {
+                throw new Error("Offline")
+            }
+        } catch (err) {
+            // B. FALLBACK A LOCAL (Nivel 2)
+            console.log("Login: Modo Offline activado");
+            if (selectedUser.pin === hashedInput || selectedUser.pin === pin) {
+                loginSuccess = true
+            }
         }
 
-        if (selectedUser.pin === pin) {
-            toast(`✅ Bienvenido, ${selectedUser.nombre}`)
-            logAction(selectedUser, 'LOGIN_EXITOSO_MIGRACION_HASH', { table_name: 'usuarios', record_id: selectedUser.id })
-            await db.usuarios.update(selectedUser.id, { pin: hashedInput })
-            login({ ...selectedUser, pin: hashedInput })
+        if (loginSuccess) {
+            if (!finalUserData.activo) {
+                toast('❌ Usuario Desactivado en el sistema', 'error')
+                return
+            }
+            toast(`✅ Acceso concedido: ${finalUserData.nombre}`)
+            logAction(finalUserData, 'LOGIN_HIBRIDO_EXITOSO', { table_name: 'usuarios', record_id: finalUserData.id })
+            login(finalUserData)
+
+            // Si el pin era plano, actualizar a hash local y nube discretamente
+            if (finalUserData.pin === pin) {
+                await db.usuarios.update(finalUserData.id, { pin: hashedInput })
+                await supabase.from('usuarios').update({ pin: hashedInput }).eq('nombre', finalUserData.nombre)
+            }
+
             window.location.assign('/')
             return
         }

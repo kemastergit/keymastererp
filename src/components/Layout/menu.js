@@ -61,6 +61,7 @@ export const menu = [
         sub: [
             { label: 'Gestión de Usuarios', to: '/usuarios', ico: 'manage_accounts', perm: 'CREAR_USUARIOS' },
             { label: 'Auditoría de Acciones', to: '/auditoria', ico: 'history_edu', perm: 'CONFIGURACION' },
+            { label: 'Radar de Salud', to: '/radar', ico: 'radar', perm: 'CONFIGURACION' },
             { label: 'Configuración Empresa', to: '/config', ico: 'business', perm: 'CONFIGURACION' },
             { label: 'Seguridad Sistema', to: '/admin', ico: 'admin_panel_settings', perm: 'CONFIGURACION' },
             { label: 'Planes y Soporte', to: '/planes', ico: 'help_outline' },

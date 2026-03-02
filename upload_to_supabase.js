@@ -33,13 +33,13 @@ async function startMigration() {
 
         const payload = seedArticulos.map(art => ({
             codigo: String(art.codigo).trim(),
-            nombre: String(art.descripcion).trim(),
-            descripcion: art.referencia ? `Ref: ${art.referencia} - Marca: ${art.marca}` : (art.marca ? `Marca: ${art.marca}` : ''),
-            precio_usd: Number(art.precio) || 0,
-            stock: Number(art.stock) || 10,
-            stock_visible: true,
-            categoria: art.departamento || 'VARIOS',
-            activo: true
+            descripcion: String(art.descripcion).trim(),
+            marca: art.marca || '',
+            departamento: art.departamento || 'VARIOS',
+            costo: Number(art.costo) || 0,
+            precio: Number(art.precio) || 0,
+            stock: Number(art.stock) || 0,
+            updated_at: new Date().toISOString()
         }))
 
         // Subir por trozos de 100 para no ahogar la base de datos
@@ -52,7 +52,7 @@ async function startMigration() {
             const chunk = payload.slice(i, i + chunkSize)
 
             const { error } = await supabase
-                .from('catalogo_productos')
+                .from('articulos')
                 .upsert(chunk, { onConflict: 'codigo', ignoreDuplicates: false })
 
             if (error) {

@@ -4,50 +4,61 @@ import { fmtUSD, fmtBS } from '../../utils/format'
 import useStore from '../../store/useStore'
 import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import Confirm from '../../components/UI/Confirm'
 
 
 export default function PedidosWeb() {
-    const { tasa, cart, addToCart, clearCart, setClienteFact, toast } = useStore()
+    const { tasa, cart, addToCart, clearCart, setClienteFact, toast, unreadOrders, clearUnread } = useStore()
+
+    useEffect(() => {
+        if (unreadOrders > 0) clearUnread()
+    }, [unreadOrders])
     const navigate = useNavigate()
     const [filtro, setFiltro] = useState('PENDIENTE')
     const [selectedPedido, setSelectedPedido] = useState(null)
+
+    // Estado para Modales de Confirmación
+    const [confirmCfg, setConfirmCfg] = useState({ open: false, msg: '', onConfirm: () => { }, danger: false })
+    const askConfirm = (msg, onConfirm, danger = false) => setConfirmCfg({ open: true, msg, onConfirm, danger })
 
     // Estado para pedidos consolidados (Dexie + Supabase)
     const [pedidos, setPedidos] = useState([])
     const [loading, setLoading] = useState(true)
 
-    // Cargar pedidos
-    const fetchPedidos = async () => {
-        setLoading(true)
+    // Cargar pedidos de forma paralela para máxima velocidad
+    const fetchPedidos = async (showLoader = true) => {
+        if (showLoader) setLoading(true)
         try {
-            // 1. Pedidos Locales (Dexie)
-            let dexieQuery = db.pedidos.orderBy('id').reverse()
-            if (filtro !== 'TODOS') {
-                dexieQuery = db.pedidos.where('estado').equals(filtro).reverse()
-            }
-            const dexieResults = await dexieQuery.toArray()
-            const dexieFull = await Promise.all(dexieResults.map(async (p) => {
-                const items = await db.pedido_items.where('pedido_id').equals(p.id).toArray()
-                const itemsDetallados = await Promise.all(items.map(async (it) => {
-                    const art = await db.articulos.get(it.articulo_id)
-                    return { ...it, descripcion: art?.descripcion || 'Artículo no encontrado', codigo: art?.codigo || '', stock: art?.stock || 0 }
-                }))
-                return { ...p, items: itemsDetallados, origen: 'LOCAL' }
-            }))
+            const [dexieResults, { data: sbResults, error: sbError }] = await Promise.all([
+                // 1. Pedidos Locales (Dexie)
+                (async () => {
+                    let q = db.pedidos.orderBy('id').reverse()
+                    if (filtro !== 'TODOS') q = db.pedidos.where('estado').equals(filtro).reverse()
+                    const res = await q.toArray()
+                    return Promise.all(res.map(async (p) => {
+                        const items = await db.pedido_items.where('pedido_id').equals(p.id).toArray()
+                        const itemsDetallados = await Promise.all(items.map(async (it) => {
+                            const art = await db.articulos.get(it.articulo_id)
+                            return { ...it, descripcion: art?.descripcion || 'Artículo no encontrado', codigo: art?.codigo || '', stock: art?.stock || 0 }
+                        }))
+                        return { ...p, items: itemsDetallados, origen: 'LOCAL' }
+                    }))
+                })(),
+                // 2. Pedidos Supabase
+                (async () => {
+                    let q = supabase.from('pedidos_web').select('*').order('created_at', { ascending: false })
+                    if (filtro !== 'TODOS') q = q.eq('estado', filtro)
+                    return q
+                })()
+            ])
 
-            // 2. Pedidos Supabase
-            let sbQuery = supabase.from('pedidos_web').select('*').order('created_at', { ascending: false })
-            if (filtro !== 'TODOS') {
-                sbQuery = sbQuery.eq('estado', filtro)
-            }
-            const { data: sbResults, error: sbError } = await sbQuery
             if (sbError) throw sbError
 
             const sbFull = (sbResults || []).map(p => ({
                 ...p,
                 fecha: p.created_at,
                 origen: 'CLOUD',
-                items: p.items.map(it => ({
+                items: (p.items || []).map(it => ({
                     ...it,
                     qty: it.cantidad,
                     precio: it.precio_unitario
@@ -55,81 +66,101 @@ export default function PedidosWeb() {
             }))
 
             // Consolidar y ordenar por fecha
-            const combined = [...dexieFull, ...sbFull].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+            const combined = [...dexieResults, ...sbFull].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
             setPedidos(combined)
         } catch (err) {
             console.error('Error fetching pedidos:', err)
-            toast('❌ Error cargando pedidos de Supabase', 'error')
+            toast('❌ Error cargando pedidos', 'error')
         } finally {
-            setLoading(true) // Wait, should be false
-            setLoading(false)
+            if (showLoader) setLoading(false)
         }
     }
 
     useEffect(() => {
-        fetchPedidos()
+        fetchPedidos(true)
 
-        // Suscripción en tiempo real a pedidos nuevos
+        // 1. Suscripción en tiempo real (Canal principal)
         const channel = supabase
-            .channel('pedidos_changes')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_web' }, () => {
-                fetchPedidos()
+            .channel('pedidos_realtime')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'pedidos_web'
+            }, (payload) => {
+                console.log('🔔 Cambio detectado en Supabase:', payload)
+                fetchPedidos(false)
             })
-            .subscribe()
+            .subscribe((status) => {
+                console.log('📡 Estado de suscripción:', status)
+            })
 
-        return () => { supabase.removeChannel(channel) }
+        // 2. SISTEMA DE SEGURIDAD (Polling): 
+        // Si el tiempo real falla, revisamos cada 30 segundos por si acaso.
+        const interval = setInterval(() => {
+            console.log('🔄 Verificación de seguridad (Polling)...')
+            fetchPedidos(false)
+        }, 30000)
+
+        return () => {
+            supabase.removeChannel(channel)
+            clearInterval(interval)
+        }
     }, [filtro])
 
     const handleImportarAVenta = async (pedido) => {
-        if (cart.length > 0) {
-            const ok = confirm(`⚠️ El carrito tiene productos. ¿Reemplazar?`)
-            if (!ok) return
-        }
+        const doImport = async () => {
+            clearCart()
+            for (const item of pedido.items) {
+                let art = null
+                if (item.articulo_id) art = await db.articulos.get(item.articulo_id)
+                if (!art && item.codigo) art = await db.articulos.where('codigo').equals(item.codigo).first()
 
-        clearCart()
-        for (const item of pedido.items) {
-            let art = null
-            if (item.articulo_id) art = await db.articulos.get(item.articulo_id)
-            if (!art && item.codigo) art = await db.articulos.where('codigo').equals(item.codigo).first()
-
-            if (art) {
-                addToCart(art, item.qty)
-            } else {
-                toast(`⚠️ Producto ${item.codigo} no encontrado en inventario local`, 'warn')
+                if (art) {
+                    addToCart(art, item.qty)
+                } else {
+                    toast(`⚠️ Producto ${item.codigo} no encontrado en inventario local`, 'warn')
+                }
             }
-        }
-        if (pedido.cliente_nombre) setClienteFact(pedido.cliente_nombre)
+            if (pedido.cliente_nombre) setClienteFact(pedido.cliente_nombre)
 
-        if (pedido.origen === 'CLOUD') {
-            await supabase.from('pedidos_web').update({ estado: 'EN_PROCESO' }).eq('id', pedido.id)
+            if (pedido.origen === 'CLOUD') {
+                await supabase.from('pedidos_web').update({ estado: 'EN_PROCESO' }).eq('id', pedido.id)
+            } else {
+                await db.pedidos.update(pedido.id, { estado: 'EN_PROCESO' })
+            }
+
+            fetchPedidos(false)
+            toast(`📦 Pedido #${pedido.id} importado`, 'ok')
+            navigate('/facturacion')
+        }
+
+        if (cart.length > 0) {
+            askConfirm(`⚠️ El carrito tiene productos. ¿Deseas reemplazarlos con este pedido?`, doImport)
         } else {
-            await db.pedidos.update(pedido.id, { estado: 'EN_PROCESO' })
+            doImport()
         }
-
-        fetchPedidos()
-        toast(`📦 Pedido #${pedido.id} importado`, 'ok')
-        navigate('/facturacion')
     }
 
     // Recargar pedido que ya estaba en proceso (se perdió del carrito)
     const handleRecargar = async (pedido) => {
-        if (cart.length > 0) {
-            const ok = confirm(
-                `⚠️ Ya tienes ${cart.length} producto(s) en el carrito.\n\nSi continúas, se reemplazará con el Pedido #${pedido.id}.\n\n¿Deseas continuar?`
-            )
-            if (!ok) return
+        const doRecargar = async () => {
+            clearCart()
+            for (const item of pedido.items) {
+                const art = await db.articulos.get(item.articulo_id)
+                if (art) {
+                    addToCart(art, item.qty)
+                }
+            }
+            if (pedido.cliente_nombre) setClienteFact(pedido.cliente_nombre)
+            toast(`🔄 Pedido #${pedido.id} recargado al carrito`, 'ok')
+            navigate('/facturacion')
         }
 
-        clearCart()
-        for (const item of pedido.items) {
-            const art = await db.articulos.get(item.articulo_id)
-            if (art) {
-                addToCart(art, item.qty)
-            }
+        if (cart.length > 0) {
+            askConfirm(`⚠️ Ya tienes productos en el carrito. ¿Reemplazar con el Pedido #${pedido.id}?`, doRecargar)
+        } else {
+            doRecargar()
         }
-        if (pedido.cliente_nombre) setClienteFact(pedido.cliente_nombre)
-        toast(`🔄 Pedido #${pedido.id} recargado al carrito`, 'ok')
-        navigate('/facturacion')
     }
 
     // Devolver a pendiente
@@ -149,14 +180,38 @@ export default function PedidosWeb() {
     }
 
     const handleRechazar = async (pedido) => {
-        if (!confirm('¿Seguro que deseas rechazar este pedido?')) return
-        if (pedido.origen === 'CLOUD') {
-            await supabase.from('pedidos_web').update({ estado: 'RECHAZADO' }).eq('id', pedido.id)
-        } else {
-            await db.pedidos.update(pedido.id, { estado: 'RECHAZADO' })
-        }
-        fetchPedidos()
-        toast(`❌ Pedido rechazado`, 'warn')
+        askConfirm(`¿Seguro que deseas rechazar este pedido?`, async () => {
+            if (pedido.origen === 'CLOUD') {
+                await supabase.from('pedidos_web').update({ estado: 'RECHAZADO' }).eq('id', pedido.id)
+            } else {
+                await db.pedidos.update(pedido.id, { estado: 'RECHAZADO' })
+            }
+            fetchPedidos(false)
+            toast(`❌ Pedido rechazado`, 'warn')
+        }, true)
+    }
+
+    const handleEliminarDefinitivamente = async (pedido) => {
+        askConfirm('🚨 ¿ELIMINAR TOTALMENTE? Esta acción borrará el pedido de la NUBE y del sistema local.', async () => {
+            // Actualización Optimista: Quitar de la vista de inmediato
+            const prevPedidos = [...pedidos]
+            setPedidos(pedidos.filter(p => p.id !== pedido.id))
+
+            try {
+                if (pedido.origen === 'CLOUD') {
+                    const { error } = await supabase.from('pedidos_web').delete().eq('id', pedido.id)
+                    if (error) throw error
+                } else {
+                    await db.pedidos.delete(pedido.id)
+                    await db.pedido_items.where('pedido_id').equals(pedido.id).delete()
+                }
+                toast('🗑️ Pedido eliminado', 'ok')
+            } catch (err) {
+                console.error('Error eliminando pedido:', err)
+                setPedidos(prevPedidos) // Devolverlo si falló
+                toast('❌ Error al eliminar', 'error')
+            }
+        }, true)
     }
 
     const handleWhatsApp = (pedido) => {
@@ -227,12 +282,21 @@ export default function PedidosWeb() {
                             </p>
                         </div>
                     </div>
-                    {contadores?.pendientes > 0 && (
-                        <div className="flex items-center gap-2 bg-red-50 border-2 border-red-200 px-4 py-2 animate-pulse">
-                            <span className="material-icons-round text-red-600">notification_important</span>
-                            <span className="text-sm font-black text-red-700 uppercase">{contadores.pendientes} NUEVO(S)</span>
-                        </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => fetchPedidos(true)}
+                            className="w-10 h-10 bg-blue-600 hover:bg-blue-700 transition-colors flex items-center justify-center text-white shadow-lg rounded-lg"
+                            title="Recargar Pedidos"
+                        >
+                            <span className="material-icons-round">refresh</span>
+                        </button>
+                        {contadores?.pendientes > 0 && (
+                            <div className="flex items-center gap-2 bg-red-50 border-2 border-red-200 px-4 py-2 animate-pulse rounded-lg">
+                                <span className="material-icons-round text-red-600">notification_important</span>
+                                <span className="text-sm font-black text-red-700 uppercase">{contadores.pendientes} NUEVO(S)</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* FILTROS */}
@@ -417,13 +481,22 @@ export default function PedidosWeb() {
                                             )}
 
                                             {pedido.estado === 'PENDIENTE' && (
-                                                <button
-                                                    onClick={() => handleRechazar(pedido)}
-                                                    className="flex items-center justify-center gap-1 bg-red-100 text-red-700 py-3 px-4 hover:bg-red-200 transition-all font-black text-[10px] uppercase tracking-widest border border-red-200"
-                                                >
-                                                    <span className="material-icons-round text-sm">close</span>
-                                                    RECHAZAR
-                                                </button>
+                                                <div className="flex gap-2 w-full sm:w-auto">
+                                                    <button
+                                                        onClick={() => handleRechazar(pedido)}
+                                                        className="flex-1 flex items-center justify-center gap-1 bg-red-100 text-red-700 py-3 px-4 hover:bg-red-200 transition-all font-black text-[10px] uppercase tracking-widest border border-red-200"
+                                                    >
+                                                        <span className="material-icons-round text-sm">close</span>
+                                                        RECHAZAR
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEliminarDefinitivamente(pedido)}
+                                                        className="bg-slate-200 text-slate-600 p-3 hover:bg-red-600 hover:text-white transition-all border border-slate-300"
+                                                        title="Eliminar permanentemente"
+                                                    >
+                                                        <span className="material-icons-round text-sm">delete_forever</span>
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -444,6 +517,14 @@ export default function PedidosWeb() {
                     </div>
                 )}
             </div>
+
+            <Confirm
+                open={confirmCfg.open}
+                onClose={() => setConfirmCfg({ ...confirmCfg, open: false })}
+                onConfirm={confirmCfg.onConfirm}
+                msg={confirmCfg.msg}
+                danger={confirmCfg.danger}
+            />
         </div>
     )
 }

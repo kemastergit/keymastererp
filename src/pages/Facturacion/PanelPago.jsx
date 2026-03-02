@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { fmtUSD, fmtBS } from '../../utils/format'
 import ClienteSelector from '../../components/UI/ClienteSelector'
+import { supabase } from '../../lib/supabase'
 
 export default function PanelPago({
     cart, cartSubtotal, cartIva, cartIgtf, cartTotal, ivaEnabled, setIvaEnabled,
@@ -7,6 +9,28 @@ export default function PanelPago({
     removePayment, tasa, vencFact, setVencFact, procesarCotizacion, clearCart,
     procesarNota, clienteFact, setClienteFact
 }) {
+    const [deuda, setDeuda] = useState(0)
+
+    useEffect(() => {
+        if (!clienteFact) { setDeuda(0); return }
+
+        const fetchDeuda = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('cuentas_por_cobrar')
+                    .select('monto_total, monto_cobrado')
+                    .eq('cliente', clienteFact)
+                    .neq('estado', 'COBRADA')
+                    .neq('estado', 'ANULADA')
+
+                if (!error && data) {
+                    const total = data.reduce((acc, curr) => acc + (curr.monto_total - (curr.monto_cobrado || 0)), 0)
+                    setDeuda(total)
+                }
+            } catch (e) { console.error("Error deuda:", e) }
+        }
+        fetchDeuda()
+    }, [clienteFact])
     return (
         <div className="col-pago bg-[var(--surface)] border border-[var(--border-var)] flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[280px] lg:max-w-[320px]">
 
@@ -17,6 +41,17 @@ export default function PanelPago({
                     Cliente
                 </label>
                 <ClienteSelector value={clienteFact} onChange={setClienteFact} />
+
+                {deuda > 0.01 && (
+                    <div className="mt-3 p-2 bg-orange-100 border-l-4 border-orange-500 animate-pulse">
+                        <div className="flex items-center gap-2">
+                            <span className="material-icons-round text-orange-600 text-sm">warning</span>
+                            <span className="text-[10px] font-black text-orange-800 uppercase tracking-tighter">
+                                DEUDA PENDIENTE: {fmtUSD(deuda)}
+                            </span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="p-4 flex flex-col gap-4 flex-1 bg-[var(--surface)]">

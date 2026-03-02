@@ -9,6 +9,8 @@ import AdminModal from '../UI/AdminModal'
 import HelpModal from '../UI/HelpModal'
 import MdiWindow from '../UI/MdiWindow'
 import PedidosWebModal from '../UI/PedidosWebModal'
+import SupabaseListener from '../SupabaseListener'
+
 
 export default function Layout() {
   const [showWebOrders, setShowWebOrders] = useState(false)
@@ -58,6 +60,7 @@ export default function Layout() {
       <AdminModal />
       <HelpModal />
       <PedidosWebModal open={showWebOrders} onClose={() => setShowWebOrders(false)} />
+      <SupabaseListener />
     </div>
   )
 }

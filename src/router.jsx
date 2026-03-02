@@ -25,21 +25,26 @@ import Ayuda from './pages/Ayuda'
 import Compras from './pages/Compras'
 import ComprasHistorial from './pages/Compras/Historial'
 import Comisiones from './pages/Comisiones'
+import Radar from './pages/Radar'
 import Catalogo from './pages/Catalogo'
 import PedidosWeb from './pages/PedidosWeb'
+import ErrorBoundary from './components/UI/ErrorBoundary'
 
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <Login />
+    element: <Login />,
+    errorElement: <ErrorBoundary />
   },
   {
     path: '/catalogo',
-    element: <Catalogo />
+    element: <Catalogo />,
+    errorElement: <ErrorBoundary />
   },
   {
     path: '/',
     element: <Protected><Layout /></Protected>,
+    errorElement: <ErrorBoundary />,
     children: [
       { index: true, element: <Dashboard /> },
       { path: 'facturacion', element: <Facturacion /> },
@@ -62,6 +67,7 @@ export const router = createBrowserRouter([
       { path: 'planes', element: <Planes /> },
       { path: 'config', element: <Config /> },
       { path: 'etiquetas', element: <Etiquetas /> },
+      { path: 'radar', element: <Radar /> },
       { path: 'ayuda', element: <Ayuda /> },
       { path: 'comisiones', element: <Comisiones /> },
       { path: 'pedidos-web', element: <PedidosWeb /> },

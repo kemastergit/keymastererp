@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
+import { supabase } from '../../lib/supabase'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
 
@@ -31,19 +32,51 @@ export default function Clientes() {
 
   const save = async () => {
     if (!form.nombre.trim()) { toast('El nombre es requerido', 'warn'); return }
-    if (editing) {
-      await db.clientes.update(editing, { ...form, limite_credito: parseFloat(form.limite_credito) || 0 })
-      toast('Cliente actualizado')
-    } else {
-      await db.clientes.add({ ...form, limite_credito: parseFloat(form.limite_credito) || 0 })
-      toast('Cliente agregado')
+    const payload = { ...form, limite_credito: parseFloat(form.limite_credito) || 0 }
+
+    try {
+      if (editing) {
+        await db.clientes.update(editing, payload)
+        toast('Cliente actualizado localmente')
+      } else {
+        await db.clientes.add(payload)
+        toast('Cliente agregado localmente')
+      }
+
+      // SINCRONIZACIÓN AUTOMÁTICA CON SUPABASE
+      const { error } = await supabase
+        .from('clientes')
+        .upsert({
+          rif: payload.rif.trim(),
+          nombre: payload.nombre.trim(),
+          telefono: payload.telefono,
+          direccion: payload.direccion,
+          email: payload.email,
+          limite_credito: payload.limite_credito
+        }, { onConflict: 'rif' })
+
+      if (error) throw error
+      toast('✅ Sincronizado con la Nube', 'success')
+    } catch (err) {
+      console.error('Error sync cliente:', err)
+      toast('⚠️ Guardado localmente, pero error en nube: ' + err.message, 'error')
     }
+
     setShowModal(false)
   }
 
   const del = async () => {
-    await db.clientes.delete(delId)
-    toast('Cliente eliminado', 'warn')
+    try {
+      const cliente = await db.clientes.get(delId)
+      if (cliente?.rif) {
+        await supabase.from('clientes').delete().eq('rif', cliente.rif)
+      }
+      await db.clientes.delete(delId)
+      toast('Cliente eliminado en ambos niveles', 'warn')
+    } catch (err) {
+      await db.clientes.delete(delId)
+      toast('Cliente eliminado localmente (Error en nube)', 'warn')
+    }
     setDelId(null)
   }
 
@@ -58,11 +91,19 @@ export default function Clientes() {
           <input className="inp w-full focus:border-[var(--teal)] transition-none rounded-none" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
         </div>
         <div className="flex-1 overflow-auto tabla-wrap tabla-scroll pb-24">
-          <table>
-            <thead><tr className="bg-[var(--surface2)]">
-              <th>RIF</th><th>NOMBRE</th><th>CIUDAD</th><th>TELÉFONO</th><th>EMAIL</th><th>LÍM. CRÉDITO $</th><th className="text-right">ACCIONES</th>
-            </tr></thead>
-            <tbody>
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-slate-800 text-white">
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">RIF</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">NOMBRE</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CIUDAD</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TELÉFONO</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">EMAIL</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">LÍM. CRÉDITO $</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
               {clientes.map(c => (
                 <tr key={c.id} className="hover:bg-[var(--surfaceDark)] transition-none">
                   <td className="font-mono text-[var(--red-var)] font-bold">{c.rif}</td>

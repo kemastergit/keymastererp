@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import useStore from '../../store/useStore'
 import { db } from '../../db/db'
 import { btPrinter } from '../../utils/bluetoothPrinter'
+import { supabase } from '../../lib/supabase'
 
 export default function ConfigPage() {
     const { configEmpresa, loadConfigEmpresa, updateConfigEmpresa, toast, btStatus, setBtStatus } = useStore()
     const [formData, setFormData] = useState(null)
+    const [syncing, setSyncing] = useState(false)
 
     useEffect(() => {
         loadConfigEmpresa()
@@ -49,6 +51,67 @@ export default function ConfigPage() {
         } catch (error) {
             setBtStatus('DISCONNECTED')
             toast('❌ Error Bluetooth: ' + (error.message || 'No se pudo conectar'), 'error')
+        }
+    }
+
+    const handleSincronizacionMaestra = async () => {
+        if (!confirm("🚨 ¿Iniciar sincronización masiva de Clientes, Usuarios y Cierres a la Nube?")) return
+
+        setSyncing(true)
+        toast('🛰️ Iniciando Sincronización Maestra...', 'info')
+
+        try {
+            // 1. SINCRONIZAR USUARIOS (Deduplicar por nombre)
+            const usersLocal = await db.usuarios.toArray()
+            const uniqueUsers = usersLocal.filter((u, i, self) => i === self.findIndex(x => x.nombre === u.nombre))
+
+            if (uniqueUsers.length > 0) {
+                const { error: errU } = await supabase.from('usuarios').upsert(uniqueUsers.map(u => ({
+                    nombre: String(u.nombre || '').trim(),
+                    pin: u.pin,
+                    rol: u.rol || 'CAJERO',
+                    activo: u.activo !== false
+                })), { onConflict: 'nombre' })
+                if (errU) throw errU
+                toast('👥 Usuarios sincronizados', 'ok')
+            }
+
+            // 2. SINCRONIZAR CLIENTES (Deduplicar por rif)
+            const clientesLocal = await db.clientes.toArray()
+            const uniqueClientes = clientesLocal.filter((c, i, self) => i === self.findIndex(x => x.rif === c.rif))
+
+            if (uniqueClientes.length > 0) {
+                const { error: errC } = await supabase.from('clientes').upsert(uniqueClientes.map(c => ({
+                    rif: String(c.rif || '').trim(),
+                    nombre: String(c.nombre || '').trim(),
+                    telefono: c.telefono || '',
+                    direccion: c.direccion || '',
+                    email: c.email || ''
+                })), { onConflict: 'rif' })
+                if (errC) throw errC
+                toast('🏢 Clientes sincronizados', 'ok')
+            }
+
+            // 3. SINCRONIZAR CIERRES (Cierre_dia -> cierres_caja)
+            const cierresLocal = await db.cierre_dia.toArray()
+            if (cierresLocal.length > 0) {
+                const { error: errZ } = await supabase.from('cierres_caja').upsert(cierresLocal.map(c => ({
+                    fecha: c.fecha,
+                    total_usd: Number(c.total_usd) || 0,
+                    total_bs: Number(c.total_bs) || 0,
+                    desglose_pagos: c.desglose || {},
+                    observaciones: 'Migración Inicial'
+                })))
+                if (errZ) throw errZ
+                toast('📊 Historial de Cierres sincronizado', 'ok')
+            }
+
+            toast('🚀 ¡SISTEMA 100% SINCRONIZADO CON LA NUBE!', 'ok')
+        } catch (err) {
+            console.error('Error en Sync Maestro:', err)
+            toast('❌ Error: ' + err.message, 'error')
+        } finally {
+            setSyncing(false)
         }
     }
 
@@ -465,6 +528,40 @@ export default function ConfigPage() {
                     >
                         💾 GUARDAR CAMBIOS
                     </button>
+                </div>
+
+                {/* Sincronización y Nube */}
+                <div className="panel p-6 rounded-none space-y-4 shadow-[var(--win-shadow)] transition-none col-span-1 md:col-span-2 bg-slate-800 border-l-4 border-l-blue-500">
+                    <h2 className="text-xl font-black text-blue-400 mb-2 flex items-center gap-2 uppercase tracking-tight">
+                        🛰️ Status de la Nube (Supabase)
+                    </h2>
+                    <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest mb-4">
+                        Control maestro de datos externos y respaldos en tiempo real.
+                    </p>
+
+                    <div className="bg-slate-900/50 p-6 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                <span className="text-white font-black text-xs uppercase tracking-tight">Conexión Estable</span>
+                            </div>
+                            <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+                                Use esta herramienta para subir manualmente todos los registros de <strong className="text-white">Clientes, Usuarios y Cierres</strong> que existan en esta PC local hacia la nube.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            disabled={syncing}
+                            onClick={handleSincronizacionMaestra}
+                            className={`px-10 py-5 font-black uppercase text-xs tracking-[0.2em] shadow-[var(--win-shadow)] transition-all flex items-center gap-3 cursor-pointer border-2
+                            ${syncing ? 'bg-slate-700 border-slate-600 text-slate-500' : 'bg-blue-600 border-blue-400 text-white hover:bg-blue-700 hover:scale-[1.02] active:scale-95'}`}>
+                            <span className={`material-icons-round text-lg ${syncing ? 'animate-spin' : ''}`}>
+                                {syncing ? 'sync' : 'cloud_upload'}
+                            </span>
+                            <span>{syncing ? 'SINCRONIZANDO...' : 'SINCRONIZAR TODO A LA NUBE'}</span>
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>

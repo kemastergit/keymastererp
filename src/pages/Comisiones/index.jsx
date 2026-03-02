@@ -123,17 +123,17 @@ export default function Comisiones() {
             <div className="hidden md:block panel p-0 overflow-hidden shadow-[var(--win-shadow)]">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-[var(--surface2)] text-[10px] uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                            {canSeeAll && <th className="py-3 px-4">Empleado</th>}
-                            <th className="py-3 px-4">Invoice #</th>
-                            <th className="py-3 px-4">Venta ($)</th>
-                            <th className="py-3 px-4">Utilidad ($)</th>
-                            <th className="py-3 px-4">Comisión ($)</th>
-                            <th className="py-3 px-4">Estado</th>
-                            {isAdmin && <th className="py-3 px-4 text-right">Acción</th>}
+                        <tr className="bg-slate-800 text-white">
+                            {canSeeAll && <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Empleado</th>}
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Invoice #</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Venta ($)</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Utilidad ($)</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Comisión ($)</th>
+                            <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Estado</th>
+                            {isAdmin && <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acción</th>}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--border-var)]">
+                    <tbody className="divide-y divide-slate-100">
                         {logs?.map(log => (
                             <tr key={log.id} className="hover:bg-[var(--surfaceDark)] transition-none text-[11px]">
                                 {canSeeAll && <td className="font-black py-3 px-4">{log.user_name}</td>}

@@ -149,12 +149,12 @@ export default function Cotizaciones() {
           <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                  <th className="py-3 px-4">N°</th>
-                  <th className="py-3 px-4">FECHA</th>
-                  <th className="py-3 px-4">CLIENTE / TITULAR</th>
-                  <th className="py-3 px-4 text-right">TOTAL USD</th>
-                  <th className="py-3 px-4 text-right">ACCIONES</th>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">N°</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">FECHA</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CLIENTE / TITULAR</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TOTAL USD</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">ACCIONES</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-var)]">

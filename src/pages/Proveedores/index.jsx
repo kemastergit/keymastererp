@@ -55,12 +55,20 @@ export default function Proveedores() {
           <button className="btn btn-r btn-sm" onClick={openNew}>+ NUEVO</button>
         </div>
         <input className="inp mb-2" placeholder="🔍 Buscar..." value={busq} onChange={e => setBusq(e.target.value)} />
-        <div className="tabla-wrap tabla-scroll">
-          <table>
-            <thead><tr>
-              <th>RIF</th><th>NOMBRE</th><th>CONTACTO</th><th>TELÉFONO</th><th>EMAIL</th><th>CIUDAD</th><th></th>
-            </tr></thead>
-            <tbody>
+        <div className="tabla-wrap tabla-scroll overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-slate-800 text-white">
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">RIF</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">NOMBRE</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CONTACTO</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TELÉFONO</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">EMAIL</th>
+                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CIUDAD</th>
+                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
               {proveedores.map(p => (
                 <tr key={p.id}>
                   <td className="font-mono2 text-rojo-bright">{p.rif}</td>

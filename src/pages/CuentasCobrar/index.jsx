@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD, fmtDate, isVencido } from '../../utils/format'
+import { supabase } from '../../lib/supabase'
 import Modal from '../../components/UI/Modal'
 
 export default function CuentasCobrar() {
@@ -41,36 +42,58 @@ export default function CuentasCobrar() {
       toast(`⚠️ El monto excede el saldo restante (${fmtUSD(saldoRestante)})`, 'warn'); return
     }
 
-    await db.abonos.add({
-      cuenta_id: cobro.id, tipo_cuenta: 'COBRAR',
-      fecha: new Date(), monto, metodo: metodoCobro
-    })
+    try {
+      // 1. GUARDADO LOCAL (ABONO Y ESTADO)
+      await db.abonos.add({
+        cuenta_id: cobro.id, tipo_cuenta: 'COBRAR',
+        fecha: new Date(), monto, metodo: metodoCobro
+      })
 
-    const nuevoTotalAbonado = abonosActuales + monto
-    const nuevoEstado = nuevoTotalAbonado >= cobro.monto - 0.01 ? 'COBRADA' : 'PARCIAL'
+      const nuevoTotalAbonado = abonosActuales + monto
+      const nuevoEstado = nuevoTotalAbonado >= cobro.monto - 0.01 ? 'COBRADA' : 'PARCIAL'
 
-    await db.ctas_cobrar.update(cobro.id, {
-      estado: nuevoEstado,
-      monto_cobrado: nuevoTotalAbonado,
-      fecha_cobro: nuevoEstado === 'COBRADA' ? new Date() : null
-    })
+      await db.ctas_cobrar.update(cobro.id, {
+        estado: nuevoEstado,
+        monto_cobrado: nuevoTotalAbonado,
+        fecha_cobro: nuevoEstado === 'COBRADA' ? new Date() : null
+      })
 
-    if (nuevoEstado === 'COBRADA' && cobro.venta_id) {
-      try {
-        const venta = await db.ventas.get(cobro.venta_id)
-        if (venta) {
-          const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
-          const { processSaleCommissions } = await import('../../utils/comisiones')
-          // Simulamos CONTADO para que el utilitario procese la comisión al marcarse como cobrado el crédito
-          await processSaleCommissions(venta.id, { ...venta, tipo_pago: 'CONTADO' }, items)
-        }
-      } catch (err) {
-        console.error('Error al procesar comisión diferida:', err)
+      toast(`✅ Abono local registrado: ${fmtUSD(monto)}`)
+
+      // 2. SINCRONIZACIÓN EN LA NUBE (Actualizamos la cuenta principal)
+      const { error: syncError } = await supabase
+        .from('cuentas_por_cobrar')
+        .upsert({
+          id_local: cobro.id, // Referencia para evitar duplicados
+          cliente: cobro.cliente,
+          monto_total: cobro.monto,
+          monto_cobrado: nuevoTotalAbonado,
+          estado: nuevoEstado,
+          fecha_vencimiento: cobro.vencimiento,
+          ultima_actualizacion: new Date()
+        }, { onConflict: 'id_local' })
+
+      if (syncError) throw syncError
+      toast('🛰️ Saldo en Nube actualizado', 'success')
+
+      // Procesar comisiones si aplica
+      if (nuevoEstado === 'COBRADA' && cobro.venta_id) {
+        try {
+          const venta = await db.ventas.get(cobro.venta_id)
+          if (venta) {
+            const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
+            const { processSaleCommissions } = await import('../../utils/comisiones')
+            await processSaleCommissions(venta.id, { ...venta, tipo_pago: 'CONTADO' }, items)
+          }
+        } catch (err) { console.error('Error comisiones:', err) }
       }
-    }
 
-    toast(`✅ Abono registrado: ${fmtUSD(monto)}`)
-    setCobro(null); setMontoCobro(''); setMetodoCobro('EFECTIVO_USD')
+      setCobro(null); setMontoCobro(''); setMetodoCobro('EFECTIVO_USD')
+    } catch (err) {
+      console.error('Error sync abono:', err)
+      toast('⚠️ Guardado localmente, error al subir a la nube: ' + err.message, 'error')
+      setCobro(null)
+    }
   }
 
   return (
@@ -129,17 +152,17 @@ export default function CuentasCobrar() {
           <div className="overflow-x-auto min-h-[300px]">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                  <th className="py-3 px-4">Nota #</th>
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4 text-right">Venta</th>
-                  <th className="py-3 px-4 text-right">Pendiente</th>
-                  <th className="py-3 px-4">Vencimiento</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Acción</th>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Nota #</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cliente</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Pendiente</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Vencimiento</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Estado</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-var)]">
+              <tbody className="divide-y divide-slate-100">
                 {cuentas.map(c => {
                   const pagos = abonos.filter(a => a.cuenta_id === c.id)
                   const abonado = pagos.reduce((s, x) => s + x.monto, 0)

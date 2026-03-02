@@ -125,15 +125,15 @@ export default function Devoluciones() {
           <div className="overflow-x-auto min-h-[350px]">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                  <th className="py-3 px-4">Nota Ref.</th>
-                  <th className="py-3 px-4">Cliente / Comprador</th>
-                  <th className="py-3 px-4">Fecha</th>
-                  <th className="py-3 px-4 text-right">Total USD</th>
-                  <th className="py-3 px-4 text-right">Acción</th>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Nota Ref.</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cliente / Comprador</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Fecha</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Total USD</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Acción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-var)]">
+              <tbody className="divide-y divide-slate-100">
                 {ventas.map(v => (
                   <tr key={v.id} className="hover:bg-[var(--surface2)] transition-none">
                     <td className="py-3 px-4 font-mono text-[var(--teal)] font-black text-xs uppercase">#{v.nro}</td>
@@ -163,10 +163,10 @@ export default function Devoluciones() {
           <div className="overflow-x-auto min-h-[350px]">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[var(--surfaceDark)] text-[10px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)]">
-                  <th className="py-3 px-4">Ref. Venta</th>
-                  <th className="py-3 px-4">Cliente</th>
-                  <th className="py-3 px-4 text-right">Monto Dev.</th>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Ref. Venta</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cliente</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Monto Dev.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-var)]">

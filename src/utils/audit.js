@@ -12,20 +12,44 @@ export async function logAction(user, accion, metadata = {}) {
     } = metadata
 
     try {
-        await db.auditoria.add({
+        const logEntry = {
+            id: crypto.randomUUID(), // ID idempotente
             fecha: new Date(),
             usuario_id: user.id,
             usuario_nombre: user.nombre,
             rol: user.rol,
-            accion, // CREATE | UPDATE | DELETE | APPLY | CANCEL | LOGIN | LOGIN_FAIL | PRICE_CHANGE | ROLE_CHANGE
+            accion,
             table_name,
             record_id,
             old_value: old_value ? JSON.stringify(old_value) : null,
             new_value: new_value ? JSON.stringify(new_value) : null,
-            ip_address: 'LOCAL_CLIENT', // En PWA/Client no tenemos IP real fácilmente sin servicio externo
+            ip_address: 'LOCAL_CLIENT',
             user_agent: navigator.userAgent,
             metadata: JSON.stringify(rest)
-        })
+        }
+
+        // 1. Guardar Local (Dexie)
+        await db.auditoria.add(logEntry)
+
+        // 2. Encolar para la Nube (Bandeja de Salida - Seguridad Blindada)
+        // Acciones críticas que DEBEN ir a la nube para evitar borrado local malintencionado
+        const accionesCriticas = [
+            'VENTA_PROCESADA',
+            'ANULACION',
+            'CAMBIO_PRECIO',
+            'AJUSTE_INVENTARIO',
+            'LOGIN_FAIL',
+            'PRODUCTO_CREADO',
+            'PRODUCTO_DESACTIVADO',
+            'BACKUP_EXPORTADO',
+            'AUTORIZACION_ADMIN'
+        ]
+
+        if (accionesCriticas.includes(accion)) {
+            const { addToSyncQueue } = await import('./syncManager')
+            await addToSyncQueue('auditoria', 'INSERT', logEntry)
+        }
+
     } catch (err) {
         console.error('Error logging audit action:', err)
     }

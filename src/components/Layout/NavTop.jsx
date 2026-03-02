@@ -20,6 +20,7 @@ function NavItem({ item }) {
 /* ─── Dropdown nav item (click-only) ─── */
 function NavDropdown({ item, isOpen, onToggle }) {
   const loc = useLocation()
+  const unreadOrders = useStore(s => s.unreadOrders)
   const isActive = item.sub?.some(s => s.to === loc.pathname)
 
   return (
@@ -65,6 +66,11 @@ function NavDropdown({ item, isOpen, onToggle }) {
             >
               <span className="material-icons-round text-lg">{s.ico}</span>
               {s.label}
+              {s.to === '/pedidos-web' && unreadOrders > 0 && (
+                <span className="ml-auto bg-red-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse shadow-lg">
+                  {unreadOrders}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>
@@ -76,6 +82,7 @@ function NavDropdown({ item, isOpen, onToggle }) {
 /* ─── Main NavTop ─── */
 export default function NavTop() {
   const { check } = usePermiso()
+  const unreadOrders = useStore(s => s.unreadOrders)
   const [openIndex, setOpenIndex] = useState(null)
   const navRef = useRef(null)
 

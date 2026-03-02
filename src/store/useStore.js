@@ -30,14 +30,40 @@ const useStore = create(
 
         set({ activeSession: session || null })
       },
-      // Tasa BCV
+      // Tasa BCV (Global Realtime)
       tasa: 0,
       setTasa: async (val) => {
         const n = parseFloat(val) || 0
         set({ tasa: n })
-        await setConfig('tasa_bcv', n)
+        await setConfig('tasa_bcv', n) // Guardado local (respaldo offline)
+
+        try {
+          // Sincronización global con la Nube
+          await supabase
+            .from('config_global')
+            .upsert({ clave: 'tasa_bcv', valor: { monto: n }, ultima_actualizacion: new Date() })
+        } catch (e) {
+          console.error("Error al sincronizar tasa en la nube:", e);
+        }
       },
       loadTasa: async () => {
+        try {
+          // Intentar obtener la tasa maestra de la nube
+          const { data, error } = await supabase
+            .from('config_global')
+            .select('valor')
+            .eq('clave', 'tasa_bcv')
+            .single()
+
+          if (!error && data?.valor?.monto) {
+            const nMonto = parseFloat(data.valor.monto)
+            set({ tasa: nMonto })
+            await setConfig('tasa_bcv', nMonto)
+            return
+          }
+        } catch (e) { }
+
+        // Fallback local si no hay internet
         const v = await getConfig('tasa_bcv')
         set({ tasa: parseFloat(v) || 0 })
       },
@@ -214,19 +240,13 @@ const useStore = create(
             }
             await db.ventas.update(ventaId, updatedVenta)
 
-            await db.auditoria.add({
-              fecha: new Date(),
-              usuario_id: supervisor.id,
-              usuario_nombre: supervisor.nombre,
-              rol: supervisor.rol,
-              accion: 'VENTA_ANULADA',
+            const { logAction } = await import('../utils/audit')
+            await logAction(supervisor, 'ANULACION', {
               table_name: 'ventas',
               record_id: ventaId,
-              old_value: JSON.stringify(venta),
-              new_value: JSON.stringify({ ...venta, ...updatedVenta }),
-              ip_address: 'LOCAL_CLIENT',
-              user_agent: navigator.userAgent,
-              metadata: JSON.stringify({ motivo })
+              old_value: venta,
+              new_value: { ...venta, ...updatedVenta },
+              motivo
             })
           })
           get().toast(`🚫 Venta anulada exitosamente`, 'ok')
@@ -246,46 +266,65 @@ const useStore = create(
       hideNav: false,
       setHideNav: (v) => set({ hideNav: v }),
 
-      // PEDIDOS WEB (INTEGRACIÓN CATÁLOGO LOCAL)
+      // SINCRONIZACIÓN Y COLA
+      pendingSyncCount: 0,
+      setPendingSyncCount: (v) => set({ pendingSyncCount: v }),
+
+      // GESTIÓN DE NOTIFICACIONES GLOBAL
+      unreadOrders: 0,
+      incrementUnread: () => set(s => ({ unreadOrders: s.unreadOrders + 1 })),
+      clearUnread: () => set({ unreadOrders: 0 }),
+
+      // PEDIDOS WEB (INTEGRACIÓN CATÁLOGO LOCAL / CLOUD)
       pedidosWeb: [],
       loadingPedidos: false,
       fetchPedidosWeb: async () => {
         set({ loadingPedidos: true })
         try {
-          // Leer pedidos locales pendientes
-          const pedidos = await db.pedidos
+          // 1. Leer pedidos locales (Dexie)
+          const pedidosLocales = await db.pedidos
             .where('estado').equals('PENDIENTE')
             .reverse()
             .toArray()
 
-          // Para cada pedido, cargar sus items
-          const fullPedidos = await Promise.all(pedidos.map(async (p) => {
-            const items = await db.pedido_items
-              .where('pedido_id').equals(p.id)
-              .toArray()
-
-            // Mapear items a formato que espera el modal (con descripción cargada si es posible)
+          const localFull = await Promise.all(pedidosLocales.map(async (p) => {
+            const items = await db.pedido_items.where('pedido_id').equals(p.id).toArray()
             const itemsDetallados = await Promise.all(items.map(async (it) => {
               const art = await db.articulos.get(it.articulo_id)
-              return {
-                ...it,
-                descripcion: art ? art.descripcion : 'Articulo no encontrado',
-                codigo: art ? art.codigo : ''
-              }
+              return { ...it, descripcion: art ? art.descripcion : 'Articulo no encontrado', codigo: art ? art.codigo : '' }
             }))
-
-            return {
-              ...p,
-              cliente: p.cliente_nombre,
-              telefono: p.cliente_telefono,
-              items: itemsDetallados,
-              total: p.total_usd
-            }
+            return { ...p, cliente: p.cliente_nombre, telefono: p.cliente_telefono, items: itemsDetallados, total: p.total_usd, origen: 'LOCAL' }
           }))
 
-          set({ pedidosWeb: fullPedidos })
+          // 2. Leer pedidos de la Nube (Supabase)
+          const { data: cloudResults, error } = await supabase
+            .from('pedidos_web')
+            .select('*')
+            .eq('estado', 'PENDIENTE')
+            .order('created_at', { ascending: false })
+
+          const cloudFull = (cloudResults || []).map(p => ({
+            ...p,
+            cliente: p.cliente_nombre,
+            telefono: p.cliente_telefono,
+            items: (p.items || []).map(it => ({
+              ...it,
+              qty: it.cantidad,
+              precio: it.precio_unitario,
+              descripcion: it.descripcion,
+              articulo_id: it.articulo_id
+            })),
+            total: p.total_usd,
+            origen: 'CLOUD',
+            fecha: p.created_at
+          }))
+
+          // Unificar y ordenar por fecha (Nuevos arriba)
+          const final = [...localFull, ...cloudFull].sort((a, b) => new Date(b.fecha || b.created_at) - new Date(a.fecha || a.created_at))
+
+          set({ pedidosWeb: final })
         } catch (e) {
-          console.error('Error cargando pedidos locales:', e)
+          console.error('Error cargando pedidos híbridos:', e)
         } finally {
           set({ loadingPedidos: false })
         }

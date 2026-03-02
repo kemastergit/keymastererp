@@ -28,20 +28,25 @@ export default function Auditoria() {
         if (accion.includes('LOGIN')) return 'login'
         if (accion.includes('CIERRE')) return 'lock'
         if (accion.includes('APERTURA')) return 'key'
+        if (accion.includes('PRECIO')) return 'local_offer'
         if (accion.includes('PRICE')) return 'local_offer'
         if (accion.includes('DELETE')) return 'delete_forever'
         if (accion.includes('CREATE')) return 'add_circle'
         if (accion.includes('UPDATE')) return 'edit'
+        if (accion.includes('ANULACION')) return 'block'
         if (accion.includes('CANCEL')) return 'block'
+        if (accion.includes('AJUSTE')) return 'exposure'
+        if (accion.includes('AUTORIZACION')) return 'admin_panel_settings'
         return 'info'
     }
 
     const getColor = (accion) => {
-        if (accion.includes('DELETE') || accion.includes('CANCEL') || accion.includes('FAIL')) return 'text-red-600 bg-red-50 border-red-100'
-        if (accion.includes('PRICE') || accion.includes('ROLE')) return 'text-orange-600 bg-orange-50 border-orange-100'
+        if (accion.includes('DELETE') || accion.includes('CANCEL') || accion.includes('FAIL') || accion.includes('ANULACION')) return 'text-red-600 bg-red-50 border-red-100'
+        if (accion.includes('PRICE') || accion.includes('PRECIO') || accion.includes('ROLE') || accion.includes('AJUSTE')) return 'text-orange-600 bg-orange-50 border-orange-100'
         if (accion.includes('CREATE')) return 'text-emerald-600 bg-emerald-50 border-emerald-100'
         if (accion.includes('UPDATE')) return 'text-blue-600 bg-blue-50 border-blue-100'
         if (accion.includes('LOGIN')) return 'text-indigo-600 bg-indigo-50 border-indigo-100'
+        if (accion.includes('AUTORIZACION')) return 'text-cyan-600 bg-cyan-50 border-cyan-100 font-black'
         return 'text-slate-500 bg-slate-50 border-slate-100'
     }
 
@@ -75,76 +80,76 @@ export default function Auditoria() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scroll overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-white z-10 border-b border-slate-100">
-                            <tr className="text-[10px] uppercase font-black text-slate-500">
-                                <th className="py-4 px-6">Timestamp</th>
-                                <th className="py-4 px-6">Origen (Tabla)</th>
-                                <th className="py-4 px-6">Operador</th>
-                                <th className="py-4 px-6">Acción</th>
-                                <th className="py-4 px-6">Impacto / Cambios</th>
-                                <th className="py-4 px-6 text-right">Detalle</th>
+                    <table className="w-full border-separate border-spacing-0">
+                        <thead>
+                            <tr className="bg-slate-800 text-white">
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Timestamp</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Origen (Tabla)</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Operador</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Acción</th>
+                                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Impacto / Cambios</th>
+                                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Detalle</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {logs?.map(l => {
                                 const changes = (l.old_value || l.new_value)
                                 return (
-                                    <tr key={l.id} className="hover:bg-slate-50/80 transition-all border-l-4 border-transparent hover:border-[var(--teal)]">
-                                        <td className="py-4 px-6 whitespace-nowrap">
+                                    <tr key={l.id} className="hover:bg-slate-50 transition-colors border-l-4 border-transparent hover:border-[#0d9488]">
+                                        <td className="p-4 whitespace-nowrap">
                                             <div className="text-[11px] font-black text-slate-700">{fmtDate(l.fecha)}</div>
                                             <div className="text-[10px] font-mono text-slate-400 font-bold">
                                                 {new Date(l.fecha).toLocaleTimeString()}
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6">
+                                        <td className="p-4">
                                             <div className="flex flex-col">
                                                 <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight">{l.table_name || 'GENERAL'}</span>
                                                 <span className="text-[9px] font-mono text-slate-400">ID: {l.record_id || 'N/A'}</span>
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6">
+                                        <td className="p-4">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200">
+                                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200">
                                                     <span className="material-icons-round text-sm">person</span>
                                                 </div>
                                                 <div>
                                                     <div className="text-[11px] font-black text-slate-800 uppercase">{l.usuario_nombre}</div>
-                                                    <div className="text-[9px] font-bold text-[var(--teal)] uppercase tracking-widest">{l.rol}</div>
+                                                    <div className="text-[9px] font-bold text-[#0d9488] uppercase tracking-widest">{l.rol}</div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6">
-                                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border ${getColor(l.accion)}`}>
-                                                <span className="material-icons-round text-sm">{getIcon(l.accion)}</span>
-                                                <span className="text-[10px] font-black uppercase tracking-tight">{l.accion.replace(/_/g, ' ')}</span>
+                                        <td className="p-4">
+                                            <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded border ${getColor(l.accion)} shadow-sm`}>
+                                                <span className="material-icons-round text-xs">{getIcon(l.accion)}</span>
+                                                <span className="text-[9px] font-black uppercase tracking-tight">{l.accion.replace(/_/g, ' ')}</span>
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6">
+                                        <td className="p-4">
                                             <div className="flex items-center gap-2">
                                                 {changes ? (
                                                     <div className="flex gap-1">
-                                                        {l.old_value && <span className="badge bg-slate-100 text-slate-500 border border-slate-200 text-[9px]">OLD</span>}
+                                                        {l.old_value && <span className="inline-flex px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 text-[8px] font-black rounded">OLD</span>}
                                                         <span className="material-icons-round text-xs text-slate-300">double_arrow</span>
-                                                        {l.new_value && <span className="badge bg-emerald-100 text-emerald-700 border border-emerald-200 text-[9px]">NEW</span>}
+                                                        {l.new_value && <span className="inline-flex px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 text-[8px] font-black rounded">NEW</span>}
                                                     </div>
                                                 ) : (
-                                                    <span className="text-[10px] text-slate-400 italic font-medium">Informacional</span>
+                                                    <span className="text-[9px] text-slate-400 italic font-black uppercase opacity-60">Info</span>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6 text-right">
+                                        <td className="p-4 text-right">
                                             <button
                                                 onClick={() => setSelectedLog(l)}
-                                                className="btn bg-white border border-slate-200 text-slate-600 !p-2 hover:border-[var(--teal)] hover:text-[var(--teal)] transition-all">
-                                                <span className="material-icons-round text-base">visibility</span>
+                                                className="bg-white hover:bg-slate-800 hover:text-white text-slate-500 border border-slate-200 p-2 rounded transition-all shadow-sm cursor-pointer">
+                                                <span className="material-icons-round text-sm">visibility</span>
                                             </button>
                                         </td>
                                     </tr>
                                 )
                             })}
                             {logs?.length === 0 && (
-                                <tr><td colSpan={6} className="text-center py-24 text-slate-300 font-black uppercase tracking-widest text-xs opacity-50 italic">No hay registros de trazabilidad disponibles</td></tr>
+                                <tr><td colSpan={6} className="text-center py-24 text-slate-300 font-black uppercase tracking-widest text-[10px] opacity-50 italic">No hay registros de trazabilidad disponibles</td></tr>
                             )}
                         </tbody>
                     </table>

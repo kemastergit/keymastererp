@@ -9,6 +9,7 @@ import { useReactToPrint } from 'react-to-print'
 import TicketTermico from '../../components/Ticket/TicketTermico'
 import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
+import { supabase } from '../../lib/supabase'
 
 import Catalogo from './Catalogo'
 import ItemsAgregados from './ItemsAgregados'
@@ -56,6 +57,7 @@ export default function Facturacion() {
 
   // Mobile stepper state
   const [step, setStep] = useState(1) // 1: Catalogo, 2: Items, 3: Pago, 4: Smart
+  const [loading, setLoading] = useState(false)
 
   const ticketRef = useRef()
 
@@ -149,24 +151,69 @@ export default function Facturacion() {
   ) || []
 
   const procesarNota = async () => {
+    if (loading) return
+    setLoading(true)
     if (!activeSession) {
-      toast('⚠️ Debe realizar la APERTURA DE CAJA para facturar', 'error'); return
+      toast('⚠️ Debe realizar la APERTURA DE CAJA para facturar', 'error'); setLoading(false); return
     }
 
-    if (!clienteFact?.trim()) { toast('Ingresa el nombre del cliente', 'warn'); return }
-    if (cart.length === 0) { toast('El carrito está vacío', 'warn'); return }
+    if (!clienteFact?.trim()) { toast('Ingresa el nombre del cliente', 'warn'); setLoading(false); return }
+    if (cart.length === 0) { toast('El carrito está vacío', 'warn'); setLoading(false); return }
 
     const total = cartTotal()
     const pTotal = paymentsTotal()
 
     if (tipoPago === 'CONTADO' && pTotal < total - 0.01) {
-      toast('Debe completar el pago total para ventas de contado', 'warn'); return
+      toast('Debe completar el pago total para ventas de contado', 'warn'); setLoading(false); return
     }
     if (tipoPago === 'CREDITO' && !vencFact) {
-      toast('Selecciona fecha de vencimiento', 'warn'); return
+      toast('Selecciona fecha de vencimiento', 'warn'); setLoading(false); return
     }
 
     const nro = await nextNro('nro_nota')
+
+    // --- 📡 1. PRE-VALIDACIÓN DE STOCK GLOBAL (SUPABASE) ---
+    // Consultamos la realidad maestra antes de tocar lo local para evitar sobreventa entre terminales
+    try {
+      const ids = cart.map(i => i.id)
+      const { data: cloudArticulos, error: cloudError } = await supabase
+        .from('articulos')
+        .select('id, descripcion, stock, precio')
+        .in('id', ids)
+
+      if (!cloudError && cloudArticulos) {
+        for (const item of cart) {
+          const cloudArt = cloudArticulos.find(a => a.id === item.id)
+
+          // A. VALIDACIÓN DE PRECIO
+          if (cloudArt && Math.abs(cloudArt.precio - item.precio) > 0.001) {
+            const msg = `⚠️ CAMBIO DE PRECIO: ${item.descripcion}\n` +
+              `En Carrito: ${fmtUSD(item.precio)}\n` +
+              `Precio Nuevo: ${fmtUSD(cloudArt.precio)}\n\n` +
+              `¿Deseas aplicar el PRECIO NUEVO? (Aceptar) o ¿MANTENER EL VIEJO? (Cancelar)`
+
+            if (window.confirm(msg)) {
+              updateItem(item.id, { precio: cloudArt.precio })
+              await db.articulos.update(item.id, { precio: cloudArt.precio })
+              toast(`✅ Precio actualizado. Revise el total y cierre la venta de nuevo.`, 'ok')
+              setLoading(false); return // Detenemos para que el total se recalcule en el UI
+            }
+          }
+
+          // B. VALIDACIÓN DE STOCK
+          if (cloudArt && (cloudArt.stock || 0) < item.qty) {
+            // Sincronizamos localmente para que el vendedor vea la corrección
+            await db.articulos.update(item.id, { stock: cloudArt.stock })
+            toast(`🚫 STOCK GLOBAL INSUFICIENTE para: ${item.descripcion}. Disponible: ${cloudArt.stock}. Probablemente otro vendedor lo facturó hace poco.`, 'error')
+            setLoading(false); return
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Fallo consulta stock global (Offline/Error), procediendo con stock local", e)
+      // En modo offline permitimos facturar con stock local para no detener la tienda
+    }
+
     let ventaId = null
     let ventaCalculada = null
 
@@ -236,11 +283,63 @@ export default function Facturacion() {
       await useStore.getState().loadSession()
       logAction(currentUser, 'VENTA_PROCESADA', { nro, cliente: clienteFact, total })
 
+      // ☁️ SINCRONIZACIÓN A LA BANDEJA DE SALIDA (NUBE)
+      try {
+        const itemsNube = cart.map(i => ({
+          articulo_id: i.id,
+          codigo: i.codigo,
+          descripcion: i.descripcion,
+          cantidad: i.qty,
+          precio: i.precio
+        }))
+
+        const ventaNube = {
+          id: `factura-${nro}-${Date.now()}`, // ID idempotente para evitar duplicados en Supabase
+          numero: nro,
+          cliente_nombre: clienteFact,
+          total_usd: total,
+          total_bs: total * tasa,
+          tasa_bcv: tasa,
+          vendedor: currentUser?.username || 'VENDEDOR',
+          metodo_pago: payments.map(p => p.metodo).join(', '),
+          items: itemsNube,
+          created_at: new Date().toISOString()
+        }
+
+        const { addToSyncQueue } = await import('../../utils/syncManager')
+
+        // 1. Guardar Factura en la cola nube
+        await addToSyncQueue('facturas', 'INSERT', ventaNube)
+
+        // 2. Guardar Stock en la cola de cada item
+        for (const i of cart) {
+          const freshArticle = await db.articulos.get(i.id)
+          await addToSyncQueue('articulos', 'UPDATE_STOCK', {
+            id: i.id,
+            codigo: i.codigo,
+            stock: freshArticle.stock
+          })
+        }
+
+        toast('🛰️ Venta en cola de sincronización', 'info')
+
+        // Intentar procesar la cola de inmediato
+        const { processSyncQueue } = await import('../../utils/syncManager')
+        processSyncQueue().then(okCount => {
+          if (okCount > 0) toast('☁️ Sincronizado con Maestra de Ventas', 'ok')
+        })
+
+      } catch (cloudErr) {
+        console.error("Error encolando venta:", cloudErr)
+        toast('⚠️ Error al encolar respaldo en nube', 'warn')
+      }
+
       // PROCESAR COMISIONES (Si aplica)
       const { processSaleCommissions } = await import('../../utils/comisiones')
       await processSaleCommissions(ventaId, ventaCalculada, cart.map(i => ({ ...i, costo: i.costo || 0 })))
 
       toast(`✅ Nota #${nro} procesada — Total: ${fmtUSD(total)}`)
+      setLoading(false)
 
       // Preparar para impresión
       const ventaFull = {
@@ -256,6 +355,7 @@ export default function Facturacion() {
       setStep(1)
 
     } catch (err) {
+      setLoading(false)
       if (err.message.startsWith('STOCK_INSUFICIENTE')) {
         const [_, desc, stock] = err.message.split(':')
         toast(`🚫 Stock insuficiente para: ${desc}. Disponible: ${stock}`, 'error')
@@ -341,8 +441,13 @@ export default function Facturacion() {
       {/* TABS MOBILE ONLY */}
       <div className="lg:hidden flex bg-[var(--surface)] p-1 mb-1 shadow-sm border-b border-[var(--border-var)] flex-none z-20">
         <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 1 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(1)}>1. Buscar</button>
-        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none relative ${step === 2 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(2)}>
-          2. Items {cart.length > 0 && `(${cart.length})`}
+        <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none relative focus:outline-none ${step === 2 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(2)}>
+          2. Items
+          {cart.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-[var(--green-var)] text-white text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-black animate-bounce shadow-lg border-2 border-[var(--surface)]">
+              {cart.length}
+            </span>
+          )}
         </button>
         <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 3 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(3)}>3. Pago</button>
         <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 4 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(4)}>4. App</button>
@@ -362,6 +467,7 @@ export default function Facturacion() {
                 busq={busq} setBusq={setBusq}
                 showDrop={showDrop} setShowDrop={setShowDrop}
                 articulos={articulos} addToCart={addToCart} addGeneric={addGeneric}
+                cart={cart}
               />
             )}
             {step === 2 && (
@@ -393,6 +499,7 @@ export default function Facturacion() {
               busq={busq} setBusq={setBusq}
               showDrop={showDrop} setShowDrop={setShowDrop}
               articulos={articulos} addToCart={addToCart} addGeneric={addGeneric}
+              cart={cart}
             />
           </div>
 

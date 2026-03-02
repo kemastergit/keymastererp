@@ -365,3 +365,312 @@ export function printEtiquetaDespacho(venta, items) {
   w.focus()
   w.print()
 }
+
+// ─────────────────────────────────────────────────────────
+//  UTILIDADES PARA LIBROS SENIAT
+// ─────────────────────────────────────────────────────────
+
+const SENIAT_STYLES = `
+  @page { margin: 12mm 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; font-size: 11px; }
+
+  .page-header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:14px; margin-bottom:16px; border-bottom:3px solid #0d9488; }
+  .brand-icon { width:44px; height:44px; background:#0f172a; border-radius:4px; display:flex; align-items:center; justify-content:center; color:white; font-weight:900; font-size:18px; margin-right:12px; flex-shrink:0; }
+  .brand-name { font-size:15px; font-weight:900; color:#0f172a; text-transform:uppercase; letter-spacing:-0.02em; }
+  .brand-sub { font-size:9px; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; margin-top:2px; }
+  .meta { text-align:right; font-size:10px; color:#374151; }
+  .meta-label { font-size:8px; color:#9ca3af; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; }
+
+  .libro-header { background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%); color:white; padding:14px 20px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; }
+  .libro-title { font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:0.03em; }
+  .libro-sub { font-size:9px; color:#94a3b8; margin-top:4px; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; }
+  .libro-badge { background:#0d9488; color:white; padding:5px 14px; font-size:9px; font-weight:900; letter-spacing:0.15em; text-transform:uppercase; border-radius:2px; }
+
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  thead th { background:#0f172a; color:white; padding:9px 10px; font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; border-right:1px solid #1e293b; }
+  thead th:last-child { border-right:none; }
+  tbody tr:nth-child(even) { background:#f8fafc; }
+  tbody tr:hover { background:#f0fdfa; }
+  tbody td { padding:8px 10px; font-size:10px; border-bottom:1px solid #f1f5f9; color:#374151; }
+
+  .num { text-align:right; font-family:'Courier New',monospace; font-weight:600; }
+  .rif { font-family:'Courier New',monospace; font-size:9px; color:#6b7280; }
+  .nota { font-family:'Courier New',monospace; color:#0d9488; font-weight:700; }
+
+  .totales-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px; }
+  .total-card { background:#f8fafc; border:2px solid #e2e8f0; padding:12px 16px; }
+  .total-card.teal { border-color:#0d9488; background:#f0fdfa; }
+  .total-card.red { border-color:#dc2626; background:#fef2f2; }
+  .total-card.dark { border-color:#0f172a; background:#f8fafc; }
+  .tc-label { font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.12em; color:#6b7280; margin-bottom:4px; }
+  .tc-value { font-size:16px; font-weight:900; font-family:'Courier New',monospace; color:#0f172a; }
+  .tc-value.teal { color:#0d9488; }
+  .tc-value.red { color:#dc2626; }
+
+  .legal-note { background:#fefce8; border:1px solid #fbbf24; padding:10px 14px; font-size:9px; color:#78350f; margin-bottom:16px; display:flex; gap:10px; align-items:flex-start; }
+  .page-footer { margin-top:24px; padding-top:10px; border-top:1px solid #e5e7eb; display:flex; justify-content:space-between; font-size:8px; color:#9ca3af; text-transform:uppercase; letter-spacing:0.08em; }
+
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+`
+
+function seniatHeader(empresa = {}) {
+  const ahora = new Date()
+  const fechaStr = ahora.toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const horaStr = ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+  return `
+    <div class="page-header">
+      <div style="display:flex;align-items:center">
+        <div class="brand-icon">AG</div>
+        <div>
+          <div class="brand-name">${empresa.nombre || 'Automotores Guaicaipuro C.A.'}</div>
+          <div class="brand-sub">RIF: ${empresa.rif || 'J-XXXXXXXXX-X'} | ${empresa.direccion || 'Dirección del Contribuyente'}</div>
+        </div>
+      </div>
+      <div class="meta">
+        <div><span class="meta-label">Fecha impresión: </span>${fechaStr}</div>
+        <div><span class="meta-label">Hora: </span>${horaStr}</div>
+        <div style="margin-top:4px;font-weight:700;color:#0d9488">⚖️ DOCUMENTO DE USO TRIBUTARIO</div>
+      </div>
+    </div>
+  `
+}
+
+// ─── 1. LIBRO DE VENTAS SENIAT ───────────────────────────
+export function printLibroVentas(ventas, periodo, empresa = {}) {
+  const rows = ventas.map((v, idx) => {
+    const base = v.subtotal || (v.total / 1.16)
+    const iva = v.iva || (v.total - base)
+    const igtf = v.igtf || 0
+    const isEven = idx % 2 === 0
+    return `<tr style="background:${isEven ? '#fafbfc' : '#fff'}">
+      <td class="rif">${new Date(v.fecha).toLocaleDateString('es-VE')}</td>
+      <td class="nota">#${v.nro}</td>
+      <td>${(v.cliente || 'CONTADO').toUpperCase()}</td>
+      <td class="rif">${v.rif || 'V/J-00000000-0'}</td>
+      <td class="num">$${base.toFixed(2)}</td>
+      <td class="num" style="color:#0d9488">$${iva.toFixed(2)}</td>
+      <td class="num" style="color:#7c3aed">$${igtf.toFixed(2)}</td>
+      <td class="num" style="font-weight:900;color:#0f172a">$${v.total.toFixed(2)}</td>
+    </tr>`
+  }).join('')
+
+  const totalBase = ventas.reduce((s, v) => s + (v.subtotal || v.total / 1.16), 0)
+  const totalIVA = ventas.reduce((s, v) => s + (v.iva || v.total - (v.subtotal || v.total / 1.16)), 0)
+  const totalIGTF = ventas.reduce((s, v) => s + (v.igtf || 0), 0)
+  const totalFinal = ventas.reduce((s, v) => s + v.total, 0)
+
+  const html = `<!DOCTYPE html><html><head><style>${SENIAT_STYLES}</style></head><body>
+  ${seniatHeader(empresa)}
+
+  <div class="libro-header">
+    <div>
+      <div class="libro-title">📒 Libro de Ventas — Período ${periodo}</div>
+      <div class="libro-sub">Art. 70 Ley IVA — Registro de operaciones gravadas y exentas</div>
+    </div>
+    <div class="libro-badge">${ventas.length} REGISTROS</div>
+  </div>
+
+  <div class="legal-note">
+    ⚠️  <span>Este libro es de carácter obligatorio conforme al Artículo 70 de la <strong>Ley del IVA</strong> y el Artículo 72 de su Reglamento. Debe mantenerse actualizado y disponible para revisión fiscal.</span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>FECHA</th><th>NOTA / FACT.</th><th>CLIENTE / COMPRADOR</th><th>RIF</th>
+      <th style="text-align:right">BASE IMP. ($)</th>
+      <th style="text-align:right">IVA 16% ($)</th>
+      <th style="text-align:right">IGTF 3% ($)</th>
+      <th style="text-align:right">TOTAL ($)</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="totales-grid">
+    <div class="total-card dark">
+      <div class="tc-label">Total Base Imponible</div>
+      <div class="tc-value">$${totalBase.toFixed(2)}</div>
+    </div>
+    <div class="total-card teal">
+      <div class="tc-label">Total IVA Débito Fiscal (16%)</div>
+      <div class="tc-value teal">$${totalIVA.toFixed(2)}</div>
+    </div>
+    <div class="total-card dark">
+      <div class="tc-label">Total IGTF (3%)</div>
+      <div class="tc-value">$${totalIGTF.toFixed(2)}</div>
+    </div>
+  </div>
+  <div style="text-align:right;padding:14px 20px;background:#0f172a;color:white;margin-bottom:20px">
+    <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8">TOTAL GENERAL VENTAS (USD) </span>
+    <span style="font-size:22px;font-weight:900;font-family:'Courier New',monospace;margin-left:16px">$${totalFinal.toFixed(2)}</span>
+  </div>
+
+  <div class="page-footer">
+    <span>Keymaster ERP — ${empresa.nombre || 'Automotores Guaicaipuro C.A.'}</span>
+    <span>Libro de Ventas — ${periodo}</span>
+    <span>RIF: ${empresa.rif || 'J-XXXXXXXXX-X'}</span>
+  </div>
+  </body></html>`
+
+  const w = window.open('', '_blank')
+  w.document.write(html)
+  w.document.close()
+  setTimeout(() => w.print(), 400)
+}
+
+// ─── 2. LIBRO DE COMPRAS SENIAT ──────────────────────────
+export function printLibroCompras(compras, periodo, empresa = {}) {
+  const rows = compras.map((c, idx) => {
+    const base = c.base_imponible || (c.total_usd / 1.16)
+    const iva = c.iva || (c.total_usd - base)
+    const isEven = idx % 2 === 0
+    return `<tr style="background:${isEven ? '#fafbfc' : '#fff'}">
+      <td class="rif">${new Date(c.fecha).toLocaleDateString('es-VE')}</td>
+      <td class="nota">${c.nro_factura || '—'}</td>
+      <td>${(c.proveedor_nombre || c.proveedor || 'PROVEEDOR').toUpperCase()}</td>
+      <td class="rif">${c.proveedor_rif || 'J-XXXXXXXXX-X'}</td>
+      <td class="num">$${base.toFixed(2)}</td>
+      <td class="num" style="color:#0d9488">$${iva.toFixed(2)}</td>
+      <td class="num" style="font-weight:900;color:#0f172a">$${c.total_usd.toFixed(2)}</td>
+    </tr>`
+  }).join('')
+
+  const totalBase = compras.reduce((s, c) => s + (c.base_imponible || c.total_usd / 1.16), 0)
+  const totalIVA = compras.reduce((s, c) => s + (c.iva || c.total_usd - (c.base_imponible || c.total_usd / 1.16)), 0)
+  const totalFinal = compras.reduce((s, c) => s + c.total_usd, 0)
+
+  const html = `<!DOCTYPE html><html><head><style>${SENIAT_STYLES}</style></head><body>
+  ${seniatHeader(empresa)}
+
+  <div class="libro-header">
+    <div>
+      <div class="libro-title">📗 Libro de Compras — Período ${periodo}</div>
+      <div class="libro-sub">Art. 70 Ley IVA — Créditos fiscales y facturas de proveedores</div>
+    </div>
+    <div class="libro-badge">${compras.length} REGISTROS</div>
+  </div>
+
+  <div class="legal-note">
+    ⚠️  <span>Registro de créditos fiscales soportados. Conforme al Artículo 70 de la <strong>Ley del IVA</strong>. Solo son deducibles las facturas que cumplan los requisitos formales exigidos por el SENIAT.</span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>FECHA</th><th>Nº FACTURA</th><th>PROVEEDOR</th><th>RIF PROVEEDOR</th>
+      <th style="text-align:right">BASE IMP. ($)</th>
+      <th style="text-align:right">IVA SOPORT. 16% ($)</th>
+      <th style="text-align:right">TOTAL ($)</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="totales-grid">
+    <div class="total-card dark">
+      <div class="tc-label">Total Base Imponible</div>
+      <div class="tc-value">$${totalBase.toFixed(2)}</div>
+    </div>
+    <div class="total-card teal">
+      <div class="tc-label">Total IVA Crédito Fiscal (16%)</div>
+      <div class="tc-value teal">$${totalIVA.toFixed(2)}</div>
+    </div>
+    <div class="total-card dark">
+      <div class="tc-label">Total Compras Período</div>
+      <div class="tc-value">$${totalFinal.toFixed(2)}</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Keymaster ERP — ${empresa.nombre || 'Automotores Guaicaipuro C.A.'}</span>
+    <span>Libro de Compras — ${periodo}</span>
+    <span>RIF: ${empresa.rif || 'J-XXXXXXXXX-X'}</span>
+  </div>
+  </body></html>`
+
+  const w = window.open('', '_blank')
+  w.document.write(html)
+  w.document.close()
+  setTimeout(() => w.print(), 400)
+}
+
+// ─── 3. LIBRO DE INVENTARIO VALORADO ─────────────────────
+export function printLibroInventarioValorado(articulos, periodo, empresa = {}) {
+  const rows = articulos.map((a, idx) => {
+    const valorCosto = (a.stock || 0) * (a.costo || 0)
+    const valorPrecio = (a.stock || 0) * (a.precio || 0)
+    const margen = a.precio > 0 ? (((a.precio - a.costo) / a.precio) * 100).toFixed(1) : '0.0'
+    const isEven = idx % 2 === 0
+    return `<tr style="background:${isEven ? '#fafbfc' : '#fff'}">
+      <td class="nota">${a.codigo || '—'}</td>
+      <td style="font-weight:600">${(a.descripcion || '').toUpperCase()}</td>
+      <td style="color:#6b7280;font-size:9px">${a.marca || '—'}</td>
+      <td class="num">${a.stock || 0}</td>
+      <td class="num">$${(a.costo || 0).toFixed(2)}</td>
+      <td class="num">$${(a.precio || 0).toFixed(2)}</td>
+      <td class="num" style="color:#0d9488;font-weight:900">$${valorCosto.toFixed(2)}</td>
+      <td class="num" style="color:#374151">$${valorPrecio.toFixed(2)}</td>
+      <td class="num" style="color:${parseFloat(margen) >= 30 ? '#059669' : parseFloat(margen) >= 15 ? '#d97706' : '#dc2626'}">${margen}%</td>
+    </tr>`
+  }).join('')
+
+  const totalCosto = articulos.reduce((s, a) => s + (a.stock || 0) * (a.costo || 0), 0)
+  const totalPrecio = articulos.reduce((s, a) => s + (a.stock || 0) * (a.precio || 0), 0)
+  const totalUnidades = articulos.reduce((s, a) => s + (a.stock || 0), 0)
+  const utilidadPotencial = totalPrecio - totalCosto
+
+  const html = `<!DOCTYPE html><html><head><style>${SENIAT_STYLES}</style></head><body>
+  ${seniatHeader(empresa)}
+
+  <div class="libro-header">
+    <div>
+      <div class="libro-title">📦 Libro de Inventario Valorado — ${periodo}</div>
+      <div class="libro-sub">Valoración a costo de adquisición — Control de existencias</div>
+    </div>
+    <div class="libro-badge">${articulos.length} SKUs</div>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>CÓDIGO</th><th>DESCRIPCIÓN</th><th>MARCA</th>
+      <th style="text-align:right">EXIST.</th>
+      <th style="text-align:right">COSTO UNIT.</th>
+      <th style="text-align:right">PRECIO VENTA</th>
+      <th style="text-align:right">VALOR COSTO</th>
+      <th style="text-align:right">VALOR VENTA</th>
+      <th style="text-align:right">MARGEN</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="totales-grid">
+    <div class="total-card dark">
+      <div class="tc-label">Total Unidades en Almacén</div>
+      <div class="tc-value">${totalUnidades.toLocaleString('es-VE')}</div>
+    </div>
+    <div class="total-card teal">
+      <div class="tc-label">Valor Total a Costo (Activo)</div>
+      <div class="tc-value teal">$${totalCosto.toFixed(2)}</div>
+    </div>
+    <div class="total-card" style="border-color:#7c3aed;background:#faf5ff">
+      <div class="tc-label">Utilidad Potencial Estimada</div>
+      <div class="tc-value" style="color:#7c3aed">$${utilidadPotencial.toFixed(2)}</div>
+    </div>
+  </div>
+
+  <div style="text-align:right;padding:14px 20px;background:#0f172a;color:white;margin-bottom:20px">
+    <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#94a3b8">VALOR TOTAL INVENTARIO A PRECIO DE VENTA </span>
+    <span style="font-size:22px;font-weight:900;font-family:'Courier New',monospace;margin-left:16px">$${totalPrecio.toFixed(2)}</span>
+  </div>
+
+  <div class="page-footer">
+    <span>Keymaster ERP — ${empresa.nombre || 'Automotores Guaicaipuro C.A.'}</span>
+    <span>Inventario Valorado — ${periodo}</span>
+    <span>RIF: ${empresa.rif || 'J-XXXXXXXXX-X'}</span>
+  </div>
+  </body></html>`
+
+  const w = window.open('', '_blank')
+  w.document.write(html)
+  w.document.close()
+  setTimeout(() => w.print(), 400)
+}
+

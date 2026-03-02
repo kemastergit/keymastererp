@@ -4,7 +4,7 @@ import useStore from '../../store/useStore'
 
 export default function MobileSidebar({ open, onClose, menu, check }) {
     const [openCategory, setOpenCategory] = useState(null)
-    const { pedidosWeb } = useStore()
+    const { unreadOrders } = useStore()
 
     if (!open) return null
 
@@ -62,11 +62,11 @@ export default function MobileSidebar({ open, onClose, menu, check }) {
                                                             ${isActive ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-red-600'}`
                                                         }
                                                     >
-                                                        <span className="material-icons-round text-base">{s.ico}</span>
+                                                        <span className="material-icons-round text-lg">{s.ico}</span>
                                                         {s.label}
-                                                        {s.to === '/pedidos-web' && pedidosWeb.length > 0 && (
-                                                            <span className="ml-auto bg-red-600 text-white text-[8px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
-                                                                {pedidosWeb.length}
+                                                        {s.to === '/pedidos-web' && unreadOrders > 0 && (
+                                                            <span className="ml-auto bg-red-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse shadow-lg">
+                                                                {unreadOrders}
                                                             </span>
                                                         )}
                                                     </NavLink>

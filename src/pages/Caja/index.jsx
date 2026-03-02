@@ -4,6 +4,7 @@ import { db } from '../../db/db'
 import { fmtUSD, fmtBS, fmtDate, today } from '../../utils/format'
 import useStore from '../../store/useStore'
 import { logAction } from '../../utils/audit'
+import { supabase } from '../../lib/supabase'
 import { useReactToPrint } from 'react-to-print'
 import TicketCierre from '../../components/Ticket/TicketCierre'
 import { useRef } from 'react'
@@ -84,7 +85,7 @@ export default function Caja() {
             const diffUsd = (parseFloat(cierreForm.usdFisico) || 0) - stats.esperadoUsd
             const diffBs = (parseFloat(cierreForm.bsFisico) || 0) - stats.esperadoBs
 
-            await db.sesiones_caja.update(activeSession.id, {
+            const cierreData = {
                 estado: 'CERRADA',
                 fecha_cierre: now,
                 hora_cierre: now.toLocaleTimeString(),
@@ -93,14 +94,42 @@ export default function Caja() {
                 diferencia_usd: diffUsd,
                 diferencia_bs: diffBs,
                 cierre_z: stats
-            })
+            }
 
-            logAction(currentUser, 'CIERRE_CAJA_Z', {
-                id: activeSession.id,
-                esperado: stats.esperadoUsd,
-                fisico: cierreForm.usdFisico,
-                diferencia: diffUsd
-            })
+            try {
+                // 1. GUARDADO LOCAL EN DEXIE
+                await db.sesiones_caja.update(activeSession.id, cierreData)
+
+                logAction(currentUser, 'CIERRE_CAJA_Z', {
+                    id: activeSession.id,
+                    esperado: stats.esperadoUsd,
+                    fisico: cierreForm.usdFisico,
+                    diferencia: diffUsd
+                })
+
+                // 2. SINCRONIZACIÓN CON SUPABASE
+                const { error: syncError } = await supabase
+                    .from('cierres_caja')
+                    .upsert({
+                        id_sesion_local: activeSession.id,
+                        usuario: currentUser.nombre,
+                        fecha_apertura: activeSession.fecha_apertura,
+                        fecha_cierre: now,
+                        ventas_totales_usd: stats.efectivoUsd + stats.zelle + stats.otros + stats.credito,
+                        efectivo_usd: stats.efectivoUsd,
+                        efectivo_bs: stats.efectivoBs,
+                        diferencia_usd: diffUsd,
+                        diferencia_bs: diffBs,
+                        notas_count: stats.totalNotas,
+                        desglose: stats // Guardamos todo el objeto stats para análisis profundo
+                    }, { onConflict: 'id_sesion_local' })
+
+                if (syncError) throw syncError
+                toast('🛰️ Cierre reportado a la Nube con éxito', 'success')
+            } catch (err) {
+                console.error('Error al cerrar/sincronizar:', err)
+                toast('⚠️ Cierre local exitoso, error en nube: ' + err.message, 'error')
+            }
 
             await loadSession()
             setIsZPrinting(true)

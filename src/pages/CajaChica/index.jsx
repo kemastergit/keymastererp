@@ -129,10 +129,18 @@ export default function CajaChica() {
               <input type="date" className="inp" value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)} />
             </div>
           </div>
-          <div className="tabla-wrap tabla-scroll">
-            <table>
-              <thead><tr><th>TIPO</th><th>CATEGORÍA</th><th>CONCEPTO</th><th>MONTO $</th><th></th></tr></thead>
-              <tbody>
+          <div className="tabla-wrap tabla-scroll overflow-x-auto">
+            <table className="w-full border-separate border-spacing-0">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TIPO</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CATEGORÍA</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CONCEPTO</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">MONTO $</th>
+                  <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
                 {movimientos.map(m => {
                   const catInfo = CATEGORIAS_GASTO.find(c => c.value === m.categoria)
                   return (
