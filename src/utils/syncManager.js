@@ -32,8 +32,17 @@ export async function processSyncQueue() {
         try {
             let error = null
 
+            // Control de reintentos (Máximo 3)
+            item.intentos = (item.intentos || 0) + 1
+            if (item.intentos > 3) {
+                console.warn(`🛑 Límite de (3) intentos superado para ${item.table}. Marcado como ERROR.`);
+                await db.sync_queue.update(item.id, { status: 'ERROR', intentos: item.intentos })
+                continue
+            }
+            await db.sync_queue.update(item.id, { intentos: item.intentos })
+
             // Log para depuración
-            console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation})...`)
+            console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation}) - Intento ${item.intentos}...`)
 
             if (item.table === 'facturas' && item.operation === 'INSERT') {
                 const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'id' })
