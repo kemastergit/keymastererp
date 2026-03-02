@@ -18,6 +18,11 @@ export async function addToSyncQueue(table, operation, data) {
  * Intenta sincronizar los elementos pendientes en la cola
  */
 export async function processSyncQueue() {
+    if (!supabase) {
+        console.warn("🛰️ SyncManager: Supabase no está configurado. Postponiendo...")
+        return 0
+    }
+
     const pending = await db.sync_queue.where('status').equals('PENDING').toArray()
     if (pending.length === 0) return 0
 
@@ -26,6 +31,9 @@ export async function processSyncQueue() {
     for (const item of pending) {
         try {
             let error = null
+
+            // Log para depuración
+            console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation})...`)
 
             if (item.table === 'facturas' && item.operation === 'INSERT') {
                 const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'id' })
@@ -44,16 +52,26 @@ export async function processSyncQueue() {
             } else if (item.table === 'auditoria' && item.operation === 'INSERT') {
                 const { error: err } = await supabase.from('auditoria').upsert([item.data], { onConflict: 'id' })
                 error = err
+            } else {
+                // Si la tabla no existe o no se maneja, la eliminamos para no trabar la cola
+                console.warn(`⚠️ Tabla desconocida en SyncQueue: ${item.table}`)
+                await db.sync_queue.delete(item.id)
+                continue
             }
 
             if (!error) {
                 await db.sync_queue.delete(item.id)
                 successCount++
+                console.log(`✅ ${item.table} sincronizado correctamente.`)
             } else {
-                console.error(`Sync error for item ${item.id}:`, error)
+                console.error(`❌ Error Supabase para ${item.table}:`, error)
+                // Marcamos el error para no reintentar eternamente si es un fallo de esquema
+                if (error.code === '42P01' || error.code === 'PGRST204') { // Tabla no existe o recurso no hallado
+                    await db.sync_queue.delete(item.id)
+                }
             }
         } catch (e) {
-            console.error(`Fatal sync error for item ${item.id}:`, e)
+            console.error(`💥 Error fatal sincronizando item ${item.id}:`, e)
         }
     }
 
