@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { db, getConfig, setConfig } from '../db/db'
+import { supabase } from '../lib/supabase'
 
 const useStore = create(
   persist(
