@@ -19,7 +19,7 @@ export default function PanelPago({
                 const { data, error } = await supabase
                     .from('cuentas_por_cobrar')
                     .select('monto_total, monto_cobrado')
-                    .eq('cliente', clienteFact)
+                    .eq('cliente_nombre', clienteFact)
                     .neq('estado', 'COBRADA')
                     .neq('estado', 'ANULADA')
 
