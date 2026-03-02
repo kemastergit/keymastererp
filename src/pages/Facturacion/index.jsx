@@ -174,15 +174,15 @@ export default function Facturacion() {
 
     // --- 📡 1. PRE-VALIDACIÓN DE STOCK GLOBAL (SUPABASE) ---
     try {
-      const ids = cart.map(i => i.id)
+      const codigos = cart.map(i => i.codigo)
       const { data: cloudArticulos, error: cloudError } = await supabase
         .from('articulos')
         .select('id, codigo, stock,descripcion')
-        .in('id', ids)
+        .in('codigo', codigos)
 
       if (!cloudError && cloudArticulos) {
         for (const item of cart) {
-          const cloudArt = cloudArticulos.find(ca => ca.id === item.id)
+          const cloudArt = cloudArticulos.find(ca => ca.codigo === item.codigo)
           if (cloudArt && (cloudArt.stock || 0) < item.qty) {
             await db.articulos.update(item.id, { stock: cloudArt.stock })
             toast(`🚫 STOCK GLOBAL INSUFICIENTE para: ${item.descripcion}. Disponible: ${cloudArt.stock}.`, 'error')
