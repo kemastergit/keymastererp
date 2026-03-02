@@ -43,12 +43,11 @@ export default function SupabaseListener() {
             })
             .subscribe()
 
-        // 2. BACKGROUND SYNC (Bandeja de Salida)
+        // 2. BACKGROUND SYNC (Bandeja de Salida) - MODO ULTRA RÁPIDO
         const syncInterval = setInterval(async () => {
             const { processSyncQueue } = await import('../utils/syncManager')
-            const okCount = await processSyncQueue()
-            if (okCount > 0) toast(`☁️ ${okCount} registros sincronizados con la nube`, 'ok')
-        }, 20000) // Cada 20 segundos intenta vaciar la cola
+            await processSyncQueue() // Procesa silenciosamente cada 3 segundos
+        }, 3000)
 
         // 3. RADAR DE SALUD (Reportar mi estado al administrador)
         const healthChannel = supabase.channel('terminal-health')
