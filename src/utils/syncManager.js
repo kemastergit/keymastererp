@@ -44,7 +44,13 @@ export async function processSyncQueue() {
             // Log para depuración
             console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation}) - Intento ${item.intentos}...`)
 
-            if (item.table === 'facturas' && item.operation === 'INSERT') {
+            if (item.table === 'rpc_venta' && item.operation === 'RPC') {
+                // 🚀 Súper Función — Venta completa atómica
+                const { data: rpcResult, error: rpcError } = await supabase.rpc('procesar_venta_completa', item.data)
+                if (rpcError || !rpcResult?.ok) {
+                    error = rpcError || { message: rpcResult?.error }
+                }
+            } else if (item.table === 'facturas' && item.operation === 'INSERT') {
                 const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'id' })
                 error = err
             } else if (item.table === 'articulos' && item.operation === 'UPDATE_STOCK') {

@@ -249,46 +249,55 @@ export default function Facturacion() {
         await db.sesiones_caja.update(activeSession.id, { notas_del_dia: nuevasNotas })
       })
 
-      // ☁️ B. SINCRONIZACIÓN NUBE (INSTANTÁNEA COMO EL CATÁLOGO)
+      // ☁️ B. SINCRONIZACIÓN NUBE — SÚPER FUNCIÓN RPC (ATÓMICA)
       try {
-        const { addToSyncQueue } = await import('../../utils/syncManager')
-        const ventaNube = {
-          id: `factura-${nro}-${activeSession.id}-${Date.now()}`,
-          numero: nro, cliente_nombre: clienteFact, total_usd: total,
-          total_bs: total * tasa, tasa_bcv: tasa, vendedor: currentUser?.nombre || 'VENDEDOR',
-          metodo_pago: payments.map(p => p.metodo).join(', '),
-          items: cart.map(i => ({ articulo_id: i.id, codigo: i.codigo, descripcion: i.descripcion, cantidad: i.qty, precio: i.precio })),
-          created_at: new Date().toISOString()
-        }
+        const facturaId = `factura-${nro}-${activeSession.id}-${Date.now()}`
+        const itemsNube = cart.map(i => ({
+          codigo: i.codigo, descripcion: i.descripcion,
+          cantidad: i.qty, precio: i.precio
+        }))
 
-        // 🚀 DISPARO DIRECTO A LA NUBE
-        const { error: errFact } = await supabase.from('facturas').insert([ventaNube])
-        console.log('SUPABASE INSERT resultado:', errFact)
-
-        if (errFact) throw new Error("FALLO_NUBE_DIRECTO")
-
-        // 💨 ACTUALIZACIÓN STOCK INSTANTÁNEA
-        for (const i of cart) {
-          const fresh = await db.articulos.get(i.id)
-          await supabase.from('articulos').update({ stock: fresh.stock }).eq('codigo', i.codigo)
-        }
-
-        toast('☁️ Venta y Stock sincronizado YA', 'ok')
-
-      } catch (errSync) {
-        console.warn("⚠️ Nube falló (Offline), encolando para después...", errSync)
-        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
-
-        // Encolado de respaldo
-        await addToSyncQueue('facturas', 'INSERT', {
-          id: `factura-${nro}-${Date.now()}`, numero: nro, cliente_nombre: clienteFact, total_usd: total,
-          vendedor: currentUser?.nombre || 'VENDEDOR', items: cart, created_at: new Date().toISOString()
+        // 🚀 UN SOLO PAQUETE: Factura + Stock + CXC + Kardex + Auditoría
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('procesar_venta_completa', {
+          p_factura_id: facturaId,
+          p_numero: String(nro),
+          p_cliente: clienteFact,
+          p_vendedor: currentUser?.nombre || 'VENDEDOR',
+          p_total_usd: total,
+          p_total_bs: total * tasa,
+          p_tasa_bcv: tasa,
+          p_metodo_pago: payments.map(p => p.metodo).join(', '),
+          p_tipo_pago: tipoPago,
+          p_vencimiento: vencFact || '',
+          p_items: itemsNube,
+          p_pagos: payments
         })
 
-        for (const i of cart) {
-          const fresh = await db.articulos.get(i.id)
-          await addToSyncQueue('articulos', 'UPDATE_STOCK', { codigo: i.codigo, stock: fresh.stock })
+        if (rpcError || !rpcResult?.ok) {
+          throw new Error(rpcResult?.error || rpcError?.message || 'FALLO_RPC')
         }
+
+        toast('☁️ Venta procesada en la nube (Stock + CXC + Kardex)', 'ok')
+
+      } catch (errSync) {
+        console.warn("⚠️ Nube falló (Offline), encolando paquete completo...", errSync)
+        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
+
+        // Encolar el paquete completo para reintento posterior
+        await addToSyncQueue('rpc_venta', 'RPC', {
+          p_factura_id: `factura-${nro}-${Date.now()}`,
+          p_numero: String(nro),
+          p_cliente: clienteFact,
+          p_vendedor: currentUser?.nombre || 'VENDEDOR',
+          p_total_usd: total,
+          p_total_bs: total * tasa,
+          p_tasa_bcv: tasa,
+          p_metodo_pago: payments.map(p => p.metodo).join(', '),
+          p_tipo_pago: tipoPago,
+          p_vencimiento: vencFact || '',
+          p_items: cart.map(i => ({ codigo: i.codigo, descripcion: i.descripcion, cantidad: i.qty, precio: i.precio })),
+          p_pagos: payments
+        })
         toast('🛰️ Guardado local (se enviará al conectar)', 'info')
         processSyncQueue()
       }
