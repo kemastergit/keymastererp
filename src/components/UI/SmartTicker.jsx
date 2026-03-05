@@ -3,6 +3,7 @@ import { db } from '../../db/db'
 import { fmtUSD } from '../../utils/format'
 import { useState, useEffect } from 'react'
 import useStore from '../../store/useStore'
+import { usePermiso } from '../../hooks/usePermiso'
 
 export default function SmartTicker({ onOpenWebOrders }) {
     const { configEmpresa, pedidosWeb, fetchPedidosWeb } = useStore()
@@ -19,13 +20,17 @@ export default function SmartTicker({ onOpenWebOrders }) {
         }
     }, [])
 
+    const { check } = usePermiso()
+
     const alerts = useLiveQuery(async () => {
         if (!configEmpresa) return []
 
         const messages = []
+        const canSeeProcesses = check('MENU_CAJA')
+        const canSeeFinances = check('MENU_REPORTES')
 
-        // WEB ORDERS ALERT (MAX PRIORITY)
-        if (pedidosWeb && pedidosWeb.length > 0) {
+        // WEB ORDERS ALERT (MAX PRIORITY) - Only for Cashiers/Admins
+        if (canSeeProcesses && pedidosWeb && pedidosWeb.length > 0) {
             messages.push({
                 type: 'web_order',
                 icon: 'shopping_cart_checkout',
@@ -44,7 +49,7 @@ export default function SmartTicker({ onOpenWebOrders }) {
             })
         }
 
-        // Stock Alerts
+        // Stock Alerts (Everyone sees this)
         if (configEmpresa.ticker_mostrar_stock !== false) {
             const criticalStock = await db.articulos
                 .filter(a => a.stock <= (a.stock_min || 5))
@@ -61,8 +66,8 @@ export default function SmartTicker({ onOpenWebOrders }) {
             })
         }
 
-        // Debts Alerts
-        if (configEmpresa.ticker_mostrar_deudas !== false) {
+        // Debts Alerts - Only for Finance/Admin
+        if (canSeeFinances && configEmpresa.ticker_mostrar_deudas !== false) {
             const pendingDebts = await db.ctas_pagar
                 .where('estado')
                 .equals('PENDIENTE')
@@ -79,8 +84,8 @@ export default function SmartTicker({ onOpenWebOrders }) {
             })
         }
 
-        // Receivables Alerts
-        if (configEmpresa.ticker_mostrar_cobranzas !== false) {
+        // Receivables Alerts - Only for Finance/Cashier
+        if (canSeeFinances && configEmpresa.ticker_mostrar_cobranzas !== false) {
             const pendingReceivables = await db.ctas_cobrar
                 .where('estado')
                 .equals('PENDIENTE')

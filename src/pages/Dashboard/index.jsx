@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { usePermiso } from '../../hooks/usePermiso'
 import { db } from '../../db/db'
 import { fmtUSD } from '../../utils/format'
 import { supabase } from '../../lib/supabase'
@@ -44,14 +46,17 @@ const CustomTooltip = ({ active, payload, label }) => {
     )
 }
 
-import { useNavigate } from 'react-router-dom'
-
 export default function Dashboard() {
     const navigate = useNavigate()
     const [isRemote, setIsRemote] = useState(false) // Toggle para modo Dueño (Nube)
     const [cloudData, setCloudData] = useState(null)
     const [loadingCloud, setLoadingCloud] = useState(false)
     const toast = useStore(s => s.toast)
+
+    const { check } = usePermiso()
+    const canSeeFinances = check('MENU_REPORTES')
+    const canManageCloud = check('MENU_SISTEMA')
+    const canSeeDashboard = check('MENU_DASHBOARD')
 
     const monthStart = new Date()
     monthStart.setDate(1)
@@ -156,19 +161,26 @@ export default function Dashboard() {
 
     const data = isRemote ? cloudData : localDataFull
 
+    if (!canSeeDashboard) {
+        return <Navigate to="/facturacion" replace />
+    }
+
     if (!data) return <div className="h-screen flex items-center justify-center bg-white font-bebas text-primary text-3xl animate-pulse tracking-widest">CARGANDO...</div>
 
-    const KPI = ({ label, value, color, icon, onClick }) => (
-        <div className={`panel flex items-center justify-between border-l-4 transition-none shadow-[var(--win-shadow)] ${onClick ? 'cursor-pointer active:translate-x-0.5 active:translate-y-0.5' : ''}`}
-            style={{ borderColor: color }}
-            onClick={onClick}>
-            <div className="flex-1">
-                <div className="text-[10px] text-[var(--text2)] uppercase tracking-widest mb-1 font-black">{label}</div>
-                <div className="text-2xl font-black text-[var(--text-main)] font-mono">{value}</div>
+    const KPI = ({ label, value, color, icon, onClick, hidden = false }) => {
+        if (hidden) return null
+        return (
+            <div className={`panel flex items-center justify-between border-l-4 transition-none shadow-[var(--win-shadow)] ${onClick ? 'cursor-pointer active:translate-x-0.5 active:translate-y-0.5' : ''}`}
+                style={{ borderColor: color }}
+                onClick={onClick}>
+                <div className="flex-1">
+                    <div className="text-[10px] text-[var(--text2)] uppercase tracking-widest mb-1 font-black">{label}</div>
+                    <div className="text-2xl font-black text-[var(--text-main)] font-mono">{value}</div>
+                </div>
+                <div className="text-3xl opacity-20 filter grayscale">{icon}</div>
             </div>
-            <div className="text-3xl opacity-20 filter grayscale">{icon}</div>
-        </div>
-    )
+        )
+    }
 
     return (
         <div className="space-y-4 pb-24 md:pb-8 pr-2 relative min-h-0">
@@ -184,26 +196,28 @@ export default function Dashboard() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded-full border border-[var(--border-var)] shadow-inner">
-                    <button
-                        onClick={() => setIsRemote(false)}
-                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${!isRemote ? 'bg-[var(--teal)] text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
-                        LOCAL
-                    </button>
-                    <button
-                        onClick={() => setIsRemote(true)}
-                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isRemote ? 'bg-blue-600 text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
-                        {loadingCloud ? <span className="material-icons-round text-xs animate-spin">sync</span> : null}
-                        NUBE (REMOTA)
-                    </button>
-                </div>
+                {canManageCloud && (
+                    <div className="flex items-center gap-2 bg-white/50 p-1.5 rounded-full border border-[var(--border-var)] shadow-inner">
+                        <button
+                            onClick={() => setIsRemote(false)}
+                            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${!isRemote ? 'bg-[var(--teal)] text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
+                            LOCAL
+                        </button>
+                        <button
+                            onClick={() => setIsRemote(true)}
+                            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isRemote ? 'bg-blue-600 text-white shadow-md' : 'text-[var(--text2)] hover:bg-slate-100'}`}>
+                            {loadingCloud ? <span className="material-icons-round text-xs animate-spin">sync</span> : null}
+                            NUBE (REMOTA)
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-                <KPI label="Utilidad Estimada" value={fmtUSD(data.totalUtilidad)} color={COLORS.green} icon="📈" />
-                <KPI label="Total Ventas" value={fmtUSD(data.totalVentas)} color={COLORS.primaryLight} icon="💰" onClick={() => navigate('/reportes')} />
-                <KPI label="Por Cobrar" value={fmtUSD(data.totalCobrar)} color={COLORS.primary} icon="⏳" onClick={() => navigate('/cobrar')} />
+                <KPI label="Utilidad Estimada" value={canSeeFinances ? fmtUSD(data.totalUtilidad) : 'RESTRICTED'} color={COLORS.green} icon="📈" hidden={!canSeeFinances} />
+                <KPI label="Total Ventas" value={fmtUSD(data.totalVentas)} color={COLORS.primaryLight} icon="💰" onClick={canSeeFinances ? () => navigate('/reportes') : () => navigate('/facturacion')} />
+                <KPI label="Por Cobrar" value={canSeeFinances ? fmtUSD(data.totalCobrar) : 'NO DISPONIBLE'} color={COLORS.primary} icon="⏳" onClick={canSeeFinances ? () => navigate('/cobrar') : null} />
                 <KPI label="Stock Total" value={data.stockTotal} color={COLORS.primaryDark} icon="📦" onClick={() => navigate('/inventario')} />
                 <KPI label="Agotados" value={data.agotados} color={COLORS.primary} icon="🚫" onClick={() => navigate('/inventario?filter=agotados')} />
             </div>

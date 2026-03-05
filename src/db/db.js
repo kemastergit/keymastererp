@@ -3,7 +3,7 @@ import { seedArticulos } from './seed_data'
 
 export const db = new Dexie('Guaicaipuro_Retail')
 
-db.version(13).stores({
+db.version(14).stores({
   articulos: '++id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad',
   clientes: '++id, rif, nombre',
   proveedores: '++id, rif, nombre',
@@ -14,6 +14,8 @@ db.version(13).stores({
   bajas_inventario: '++id, articulo_id, fecha, qty, motivo, usuario_id',
   cotizaciones: '++id, nro, fecha, cliente_id',
   cot_items: '++id, cot_id',
+  ordenes_compra: '++id, nro, fecha, proveedor_id, estado',
+  oc_items: '++id, oc_id',
   pedidos: '++id, fecha, cliente_nombre, cliente_telefono, total_usd, estado',
   pedido_items: '++id, pedido_id, articulo_id',
   ctas_cobrar: '++id, venta_id, cliente, monto, fecha, estado, vencimiento',
@@ -56,6 +58,9 @@ db.on('ready', async () => {
 
   const nroCot = await db.config.get('nro_cot')
   if (!nroCot) await db.config.put({ clave: 'nro_cot', valor: 1 })
+
+  const nroOc = await db.config.get('nro_oc')
+  if (!nroOc) await db.config.put({ clave: 'nro_oc', valor: 1 })
 
   const clave = await db.config.get('clave_admin')
   if (!clave) await db.config.put({ clave: 'clave_admin', valor: 'admin123' })

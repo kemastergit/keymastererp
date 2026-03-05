@@ -7,6 +7,15 @@ Este documento registra la evolución técnica, hitos de desarrollo y proteccion
 
 ## 🚀 Fase actual: Blindaje y Resiliencia (Marzo 2026)
 
+### [2026-03-04] - Control de Riesgos Restrictivo y Base de Conocimientos (FAQ) 🚦📚
+*   **Hito:** Bloqueos automáticos operativos, revisión exhaustiva de permisos y puesta a punto de la documentación de ayuda (FAQ) para terminal y nube.
+*   **Cambios:**
+    *   **Alerta de Precios Mutables (P4):** Si la base de datos maestra cambia el precio de un artículo mientras un vendedor lo tiene en el carrito abierto, el sistema detiene la venta y muestra un aviso interactivo para actualizar los precios antes de cobrar.
+    *   **Bloqueo por Límite de Crédito (P17):** Al seleccionar un cliente y método de pago CRÉDITO, el sistema suma la cuenta actual + cuenta por cobrar. Si excede el límite del cliente, lanza una alerta roja bloqueante (`LÍMITE DE CRÉDITO EXCEDIDO`).
+    *   **Privilegios Refactorizados (P11/P20):** Se retiró formalmente el acceso de los roles `CAJERO` hacia los módulos de `Cuentas por Pagar` y `Compras (Proveedores)`. Ahora son módulos exclusivos de Supervisión/Admin.
+    *   **Sincronización Autónoma de Clientes:** Nueva rutina `syncClientesFromSupabase()` al arrancar la app. Todas las terminales descargan y actualizan automáticamente su tabla de clientes desde Supabase, garantizando que los **Límites de Crédito** sean globales.
+    *   **Integración de FAQs en "Ayuda":** 31 preguntas frecuentes operativas añadidas organizadas por Módulo (Compras, Facturación, Catálogo Web, Reportes, Cierres), validadas 1:1 contra el código fuente funcional.
+
 ### [2026-03-02] - Sincronización Híbrida y Login Dual-Core 🔐🛰️
 *   **Hito:** El sistema ahora es una plataforma híbrida total (Nube/Local) con validación de seguridad en tiempo real.
 *   **Cambios:**

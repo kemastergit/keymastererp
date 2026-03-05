@@ -28,63 +28,63 @@ const TicketCierre = forwardRef(({ session, config, isZ = false }, ref) => {
             <div className="ticket-totals">
                 <div className="ticket-row">
                     <span>MONTO INICIAL USD:</span>
-                    <span>$ {session.monto_inicial_usd.toFixed(2)}</span>
+                    <span>$ {(session.monto_inicial_usd || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row border-b border-dashed border-zinc-200 pb-1 mb-1">
                     <span>MONTO INICIAL BS:</span>
-                    <span>Bs {session.monto_inicial_bs.toFixed(2)}</span>
+                    <span>Bs {(session.monto_inicial_bs || 0).toFixed(2)}</span>
                 </div>
 
                 <div className="ticket-row">
                     <span>VENTAS EFECTIVO $:</span>
-                    <span>$ {stats?.efectivoUsd.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.efectivoUsd || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>VENTAS EFECTIVO BS:</span>
-                    <span>Bs {stats?.efectivoBs.toFixed(2) || '0.00'}</span>
+                    <span>Bs {(stats?.efectivoBs || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>PAGO MOVIL:</span>
-                    <span>Bs {stats?.pagoMovil.toFixed(2) || '0.00'}</span>
+                    <span>Bs {(stats?.pagoMovil || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>PUNTO DE VENTA:</span>
-                    <span>Bs {stats?.punto.toFixed(2) || '0.00'}</span>
+                    <span>Bs {(stats?.punto || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>ZELLE:</span>
-                    <span>$ {stats?.zelle.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.zelle || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>VENTAS CREDITO $:</span>
-                    <span>$ {stats?.credito.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.credito || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>RECAUDACION IGTF $:</span>
-                    <span>$ {stats?.igtf?.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.igtf || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>COBRANZAS CARTERA $:</span>
-                    <span>$ {stats?.cobranzaUsd?.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.cobranzaUsd || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>INGRESOS EXTRA C.C:</span>
-                    <span>$ {stats?.ingresosCC?.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.ingresosCC || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row">
                     <span>EGRESOS GASTOS C.C:</span>
-                    <span>$ -{stats?.egresosCC?.toFixed(2) || '0.00'}</span>
+                    <span>$ -{(stats?.egresosCC || 0).toFixed(2)}</span>
                 </div>
 
                 <div className="ticket-divider"></div>
 
                 <div className="ticket-row b">
                     <span>TOTAL ESPERADO $:</span>
-                    <span>$ {stats?.esperadoUsd.toFixed(2) || '0.00'}</span>
+                    <span>$ {(stats?.esperadoUsd || 0).toFixed(2)}</span>
                 </div>
                 <div className="ticket-row b">
                     <span>TOTAL ESPERADO BS:</span>
-                    <span>Bs {stats?.esperadoBs.toFixed(2) || '0.00'}</span>
+                    <span>Bs {(stats?.esperadoBs || 0).toFixed(2)}</span>
                 </div>
 
                 {isZ && (
@@ -92,16 +92,16 @@ const TicketCierre = forwardRef(({ session, config, isZ = false }, ref) => {
                         <div className="ticket-divider"></div>
                         <div className="ticket-row">
                             <span>CONTADO FISICO $:</span>
-                            <span>$ {session.monto_fisico_usd.toFixed(2)}</span>
+                            <span>$ {(session.monto_fisico_usd || 0).toFixed(2)}</span>
                         </div>
                         <div className="ticket-row">
                             <span>CONTADO FISICO BS:</span>
-                            <span>Bs {session.monto_fisico_bs.toFixed(2)}</span>
+                            <span>Bs {(session.monto_fisico_bs || 0).toFixed(2)}</span>
                         </div>
                         <div className="ticket-divider"></div>
-                        <div className="ticket-row b" style={{ color: session.diferencia_usd < 0 ? 'red' : 'green' }}>
+                        <div className="ticket-row b" style={{ color: (session.diferencia_usd || 0) < 0 ? 'red' : 'green' }}>
                             <span>DIFERENCIA $:</span>
-                            <span>$ {session.diferencia_usd.toFixed(2)}</span>
+                            <span>$ {(session.diferencia_usd || 0).toFixed(2)}</span>
                         </div>
                     </>
                 )}

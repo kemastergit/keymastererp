@@ -51,18 +51,23 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
             </div>
 
             <div className="ticket-items">
-                {items.map((item, idx) => (
-                    <div key={idx} className="ticket-item">
-                        <div className="ticket-item-main">
-                            <span style={{ flex: 2 }}>{item.descripcion}</span>
-                            <span style={{ flex: 1, textAlign: 'center' }}>x{item.qty}</span>
-                            <span style={{ flex: 1, textAlign: 'right' }}>${(item.precio * item.qty).toFixed(2)}</span>
+                {items.map((item, idx) => {
+                    const precio = Number(item.precio ?? item.precio_unitario ?? 0)
+                    const qty = Number(item.qty ?? item.cantidad ?? 1)
+                    const totalItem = Number(item.total ?? (precio * qty))
+                    return (
+                        <div key={idx} className="ticket-item">
+                            <div className="ticket-item-main">
+                                <span style={{ flex: 2 }}>{item.descripcion}</span>
+                                <span style={{ flex: 1, textAlign: 'center' }}>x{qty}</span>
+                                <span style={{ flex: 1, textAlign: 'right' }}>${totalItem.toFixed(2)}</span>
+                            </div>
+                            <div className="ticket-item-sub">
+                                <span>{item.codigo} @ ${precio.toFixed(2)}</span>
+                            </div>
                         </div>
-                        <div className="ticket-item-sub">
-                            <span>{item.codigo} @ ${item.precio.toFixed(2)}</span>
-                        </div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
 
             <div className="ticket-divider"></div>

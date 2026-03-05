@@ -66,6 +66,7 @@ export default function CuentasCobrar() {
         .upsert({
           id_local: cobro.id, // Referencia para evitar duplicados
           cliente: cobro.cliente,
+          monto: cobro.monto,       // Enviamos ambos para compatibilidad total
           monto_total: cobro.monto,
           monto_cobrado: nuevoTotalAbonado,
           estado: nuevoEstado,
@@ -208,6 +209,56 @@ export default function CuentasCobrar() {
                 })}
                 {cuentas.length === 0 && (
                   <tr><td colSpan={7} className="text-center text-[var(--text2)] py-20 tracking-widest text-[11px] font-black uppercase italic opacity-40">Sin registros de cobranza pendientes</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* PANEL DE HISTORIAL DE ABONOS */}
+        <div className="panel p-0 overflow-hidden transition-none shadow-[var(--win-shadow)] border-t-4 border-t-[var(--teal)] mt-6">
+          <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+            <div className="text-sm font-black text-[var(--text-main)] uppercase tracking-tighter flex items-center gap-2">
+              <span className="material-icons-round text-[var(--teal)]">history</span>
+              HISTORIAL DE ABONOS Y COBROS REALIZADOS
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[var(--surfaceDark)] text-[9px] font-black uppercase text-[var(--text2)] border-b border-[var(--border-var)] sticky top-0 z-10">
+                  <th className="py-3 px-4">Fecha / Hora</th>
+                  <th className="py-3 px-4">Cliente / Nota</th>
+                  <th className="py-3 px-4">Método</th>
+                  <th className="py-3 px-4 text-right">Monto Cobrado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-var)]">
+                {[...abonos].reverse().map(a => {
+                  const c = cuentas.find(x => x.id === a.cuenta_id)
+                  return (
+                    <tr key={a.id} className="text-[10px] hover:bg-[var(--surface2)] transition-none">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-[var(--text2)]">{fmtDate(a.fecha)}</div>
+                        <div className="text-[8px] opacity-50">{new Date(a.fecha).toLocaleTimeString()}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-black text-[var(--text-main)] uppercase">{c?.cliente || 'S/C'}</div>
+                        <div className="text-[8px] text-[var(--text2)] uppercase truncate max-w-[200px]">Nota: {c?.venta_id ? `#${c.venta_id}` : 'S/N'}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 bg-[var(--surfaceDark)] border border-[var(--border-var)] text-[8px] font-black uppercase rounded">
+                          {a.metodo?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-black text-[var(--teal)] text-xs">
+                        {fmtUSD(a.monto)}
+                      </td>
+                    </tr>
+                  )
+                })}
+                {abonos.length === 0 && (
+                  <tr><td colSpan={4} className="text-center text-[var(--text2)] py-10 text-[10px] uppercase italic opacity-40 font-bold">No hay cobros registrados</td></tr>
                 )}
               </tbody>
             </table>

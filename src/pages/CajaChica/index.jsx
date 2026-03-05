@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD, fmtDate, today } from '../../utils/format'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 
 const CATEGORIAS_GASTO = [
   { value: 'ALQUILER', label: '🏠 Alquiler', color: 'badge-y' },
@@ -40,7 +41,12 @@ export default function CajaChica() {
       created_at: new Date()
     }
     delete registro.categoria_otro
-    await db.caja_chica.add(registro)
+    const id = await db.caja_chica.add(registro)
+
+    // ☁️ SYNC A SUPABASE
+    await addToSyncQueue('caja_chica', 'INSERT', { id, ...registro })
+    processSyncQueue()
+
     toast(`${form.tipo === 'INGRESO' ? '📥' : '📤'} Movimiento registrado`)
     setForm(p => ({ ...p, concepto: '', monto: '', categoria_otro: '' }))
   }

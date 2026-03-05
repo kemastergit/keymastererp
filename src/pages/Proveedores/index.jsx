@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
+import { supabase } from '../../lib/supabase'
 import Modal from '../../components/UI/Modal'
 import Confirm from '../../components/UI/Confirm'
+import { logAction } from '../../utils/audit'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 
 const empty = { rif: '', nombre: '', direccion: '', ciudad: '', telefono: '', email: '', contacto: '', observaciones: '' }
 
@@ -31,19 +34,50 @@ export default function Proveedores() {
 
   const save = async () => {
     if (!form.nombre.trim()) { toast('El nombre es requerido', 'warn'); return }
-    if (editing) {
-      await db.proveedores.update(editing, { ...form })
-      toast('Proveedor actualizado')
-    } else {
-      await db.proveedores.add({ ...form })
-      toast('Proveedor agregado')
+
+    try {
+      if (editing) {
+        await db.proveedores.update(editing, { ...form })
+        toast('Proveedor actualizado localmente')
+      } else {
+        await db.proveedores.add({ ...form })
+        toast('Proveedor agregado localmente')
+      }
+
+      // ☁️ SYNC A SUPABASE (VIA COLA)
+      await addToSyncQueue('proveedores', 'INSERT', {
+        rif: form.rif.trim(),
+        nombre: form.nombre.trim(),
+        contacto: form.contacto,
+        telefono: form.telefono,
+        email: form.email,
+        ciudad: form.ciudad,
+        direccion: form.direccion
+      })
+      processSyncQueue()
+
+      toast('✅ Cola de sincronización actualizada', 'success')
+      logAction(useStore.getState().userSession, editing ? 'PROVEEDOR_EDITADO' : 'PROVEEDOR_CREADO', { table_name: 'proveedores', record_id: form.rif })
+    } catch (err) {
+      console.error('Error guardando proveedor:', err)
+      toast('⚠️ Error local: ' + err.message, 'error')
     }
+
     setShowModal(false)
   }
 
   const del = async () => {
-    await db.proveedores.delete(delId)
-    toast('Proveedor eliminado', 'warn')
+    try {
+      const p = await db.proveedores.get(delId)
+      if (p?.rif) {
+        await supabase.from('proveedores').delete().eq('rif', p.rif)
+      }
+      await db.proveedores.delete(delId)
+      toast('Proveedor eliminado en ambos niveles', 'warn')
+    } catch (err) {
+      await db.proveedores.delete(delId)
+      toast('Eliminado localmente', 'warn')
+    }
     setDelId(null)
   }
 

@@ -48,8 +48,15 @@ const useStore = create(
         }
       },
       loadTasa: async () => {
+        // 1. CARGA INSTANTÁNEA (DEXIE)
+        const local = await getConfig('tasa_bcv')
+        const nLocal = parseFloat(local) || 0
+        if (nLocal > 0) {
+          set({ tasa: nLocal })
+        }
+
+        // 2. ACTUALIZACIÓN EN SEGUNDO PLANO (SUPABASE)
         try {
-          // Intentar obtener la tasa maestra de la nube
           const { data, error } = await supabase
             .from('config_global')
             .select('valor')
@@ -58,15 +65,14 @@ const useStore = create(
 
           if (!error && data?.valor?.monto) {
             const nMonto = parseFloat(data.valor.monto)
-            set({ tasa: nMonto })
-            await setConfig('tasa_bcv', nMonto)
-            return
+            if (nMonto !== nLocal) {
+              set({ tasa: nMonto })
+              await setConfig('tasa_bcv', nMonto)
+            }
           }
-        } catch (e) { }
-
-        // Fallback local si no hay internet
-        const v = await getConfig('tasa_bcv')
-        set({ tasa: parseFloat(v) || 0 })
+        } catch (e) {
+          console.warn("⚠️ No se pudo actualizar la tasa desde la nube, usando local.")
+        }
       },
       // Bluetooth Printer State
       btStatus: 'DISCONNECTED',
@@ -77,7 +83,8 @@ const useStore = create(
       toast: (msg, type = 'ok') => {
         const id = Date.now()
         set(s => ({ toasts: [...s.toasts, { id, msg, type }] }))
-        setTimeout(() => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })), 3000)
+        const duration = type === 'error' ? 10000 : 3000
+        setTimeout(() => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })), duration)
       },
 
       // Admin modal
@@ -304,20 +311,27 @@ const useStore = create(
             .eq('estado', 'PENDIENTE')
             .order('created_at', { ascending: false })
 
-          const cloudFull = (cloudResults || []).map(p => ({
-            ...p,
-            cliente: p.cliente_nombre,
-            telefono: p.cliente_telefono,
-            items: (p.items || []).map(it => ({
-              ...it,
-              qty: it.cantidad,
-              precio: it.precio_unitario,
-              descripcion: it.descripcion,
-              articulo_id: it.articulo_id
-            })),
-            total: p.total_usd,
-            origen: 'CLOUD',
-            fecha: p.created_at
+          const cloudFull = await Promise.all((cloudResults || []).map(async p => {
+            const itemsWithStock = await Promise.all((p.items || []).map(async it => {
+              const art = await db.articulos.where('codigo').equals(it.codigo || '').first()
+              return {
+                ...it,
+                qty: it.cantidad,
+                precio: it.precio_unitario,
+                descripcion: it.descripcion,
+                articulo_id: it.articulo_id,
+                stock: art?.stock || 0
+              }
+            }))
+            return {
+              ...p,
+              cliente: p.cliente_nombre,
+              telefono: p.cliente_telefono,
+              items: itemsWithStock,
+              total: p.total_usd,
+              origen: 'CLOUD',
+              fecha: p.created_at
+            }
           }))
 
           // Unificar y ordenar por fecha (Nuevos arriba)

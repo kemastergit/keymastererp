@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { addToSyncQueue } from '../../utils/syncManager'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
@@ -80,7 +81,10 @@ export default function CuentasPagar() {
 
   const save = async () => {
     if (!form.proveedor.trim() || !form.monto) { toast('Completa los campos requeridos', 'warn'); return }
-    await db.ctas_pagar.add({ ...form, monto: parseFloat(form.monto) || 0, fecha: new Date() })
+    const newCxp = { ...form, monto: parseFloat(form.monto) || 0, fecha: new Date() }
+    await db.ctas_pagar.add(newCxp)
+    // ☁️ Sync a Supabase — tabla cuentas_por_pagar
+    await addToSyncQueue('cuentas_por_pagar', 'INSERT', newCxp)
     toast('✅ Cuenta por pagar registrada', 'success')
     setForm(empty); setShowModal(false)
   }

@@ -5,6 +5,7 @@ import useStore from '../../store/useStore'
 import { fmtUSD, fmtBS, fmtDate } from '../../utils/format'
 import { printCotizacion } from '../../utils/print'
 import ClienteSelector from '../../components/UI/ClienteSelector'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 
 export default function Cotizaciones() {
   const { tasa, cartCot, addToCotCart, removeFromCotCart, updateCotQty,
@@ -38,6 +39,16 @@ export default function Cotizaciones() {
     for (const item of cartCot) {
       await db.cot_items.add({ cot_id: cotId, ...item })
     }
+
+    // ☁️ SYNC A SUPABASE — El Cacique ve los presupuestos desde su choza
+    await addToSyncQueue('cotizaciones', 'INSERT', { id: cotId, ...cot })
+    for (const item of cartCot) {
+      await addToSyncQueue('cot_items', 'INSERT', {
+        cot_id: cotId, articulo_id: item.id, codigo: item.codigo,
+        descripcion: item.descripcion, qty: item.qty, precio: item.precio
+      })
+    }
+    processSyncQueue()
 
     toast(`📋 Cotización #${nro} generada`)
     printCotizacion({ ...cot, nro }, cartCot, tasa)

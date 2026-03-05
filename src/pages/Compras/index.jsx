@@ -5,6 +5,7 @@ import { fmtUSD, fmtBS, today } from '../../utils/format'
 import { logAction } from '../../utils/audit'
 import Modal from '../../components/UI/Modal'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 
 export default function Compras() {
     const { toast, currentUser, tasa } = useStore()
@@ -114,6 +115,21 @@ export default function Compras() {
             toast('✅ Compra procesada e inventario actualizado')
             setItems([])
             setHeader({ ...header, nro_factura: '' })
+
+            // ☁️ SYNC A SUPABASE — El Cacique ve todo desde su choza
+            const compraData = { ...header, total_usd: totalUSD, usuario_id: currentUser.id, created_at: new Date().toISOString() }
+            await addToSyncQueue('compras', 'INSERT', { ...compraData, id: compraId })
+            for (const item of items) {
+                await addToSyncQueue('compra_items', 'INSERT', {
+                    compra_id: compraId, articulo_id: item.id,
+                    qty: item.qty, costo_unit: item.costo_unit, costo_anterior: item.costo_anterior
+                })
+            }
+            await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
+                proveedor_id: parseInt(header.proveedor_id), nro_factura: header.nro_factura,
+                monto: totalUSD, fecha: header.fecha, estado: 'PENDIENTE', vencimiento: header.fecha
+            })
+            processSyncQueue()
         } catch (err) {
             console.error(err)
             toast('❌ Error al procesar: ' + err.message, 'error')

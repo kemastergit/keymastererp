@@ -7,24 +7,30 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.ico', 'logoguaicaipuro.jpeg'],
       manifest: {
-        name: 'KEMASTER',
-        short_name: 'KEMASTER',
-        description: 'Tecnología de Gestión Avanzada',
+        name: 'KEYMASTER ERP - Command Center',
+        short_name: 'KEYMASTER',
+        description: 'Tecnología de Gestión Avanzada para Negocios Automotrices - Automotores Guaicaipuro',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
+        orientation: 'any',
+        categories: ['business', 'productivity', 'finance'],
+        lang: 'es-VE',
         icons: [
           {
             src: 'logoguaicaipuro.jpeg',
             sizes: '192x192',
-            type: 'image/jpeg'
+            type: 'image/jpeg',
+            purpose: 'any'
           },
           {
             src: 'logoguaicaipuro.jpeg',
             sizes: '512x512',
-            type: 'image/jpeg'
+            type: 'image/jpeg',
+            purpose: 'maskable'
           }
         ]
       },
@@ -47,13 +53,22 @@ export default defineConfig({
             }
           }
         ]
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module'
       }
     })
   ],
   server: {
     port: 3005,
     strictPort: true,
-    host: true
+    host: true,
+    allowedHosts: [
+      'applicant-translate-screenshots-vegetarian.trycloudflare.com',
+      '.trycloudflare.com',
+      'localhost'
+    ]
   },
   preview: {
     port: 3005,

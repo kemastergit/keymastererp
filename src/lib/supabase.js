@@ -17,8 +17,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        storageKey: 'guaicaipuro-auth-token',
-        storage: window.localStorage
+        storageKey: 'guaicaipuro-auth-token'
+        // Eliminamos el storage explícito para dejar que use el default más estable
     }
 })
 

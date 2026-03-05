@@ -1,10 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { hashPin } from '../../utils/security'
 import { logAction } from '../../utils/audit'
 import { supabase } from '../../lib/supabase'
+import { invalidateRolesCache } from '../../hooks/usePermiso'
+
+const getPermissionsList = (rol) => {
+    const allPermissions = [
+        { id: 'ventas', label: 'Cotizar y Enviar Pre-Factura', access: ['ADMIN', 'SUPERVISOR', 'CAJERO', 'VENDEDOR'] },
+        { id: 'catalogo', label: 'Consultar Catálogo', access: ['ADMIN', 'SUPERVISOR', 'CAJERO', 'VENDEDOR'] },
+        { id: 'turnos', label: 'Aperturar/Cerrar Cajas', access: ['ADMIN', 'SUPERVISOR', 'CAJERO'] },
+        { id: 'cobrar', label: 'Facturar y Recibir Pagos', access: ['ADMIN', 'SUPERVISOR', 'CAJERO'] },
+        { id: 'caja', label: 'Cierre Definitivo / Cierres Z', access: ['ADMIN', 'SUPERVISOR', 'CAJERO'] },
+        { id: 'clientes', label: 'Deudas y Directorio Clientes', access: ['ADMIN', 'SUPERVISOR', 'CAJERO'] },
+        { id: 'reportes', label: 'Ver Reportes y Ventas', access: ['ADMIN', 'SUPERVISOR', 'CAJERO'] },
+        { id: 'inventario', label: 'Modificar Datos Inventario', access: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'compras', label: 'Registrar Facturas Compras', access: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'proveedores', label: 'Directorio y Pagos a Proveedores', access: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'ajustes', label: 'Supervisión de Precios', access: ['ADMIN', 'SUPERVISOR'] },
+        { id: 'usuarios', label: 'Crear / Editar Operadores', access: ['ADMIN'] },
+        { id: 'auditoria', label: 'Historial Inalterable (Logs)', access: ['ADMIN'] },
+        { id: 'config', label: 'Configuración Avanzada', access: ['ADMIN'] }
+    ]
+    return allPermissions.map(p => ({ ...p, hasAccess: p.access.includes(rol) }))
+}
 import Modal from '../../components/UI/Modal'
 
 export default function Usuarios() {
@@ -12,15 +33,22 @@ export default function Usuarios() {
     const [editing, setEditing] = useState(null)
     const [form, setForm] = useState({ nombre: '', rol: 'CAJERO', pin: '', activo: true })
     const [commissionForm, setCommissionForm] = useState({ commission_type: 'SALES_PCT', percentage: 0, active: true })
+    const [rolesDB, setRolesDB] = useState([])
     const toast = useStore(s => s.toast)
 
     const usuarios = useLiveQuery(() => db.usuarios.toArray(), [], [])
+
+    useEffect(() => {
+        supabase.from('roles').select('codigo, nombre_display, color, orden').eq('activo', true).order('orden')
+            .then(({ data }) => { if (data) setRolesDB(data) })
+    }, [])
 
     const handleSave = async (e) => {
         e.preventDefault()
         if (form.pin.length < 4) return toast('PIN debe ser de al menos 4 dígitos', 'warn')
 
         try {
+            const hashedPin = await hashPin(form.pin)
             const userData = { ...form, pin: hashedPin }
             const currentUser = useStore.getState().currentUser
 
@@ -68,14 +96,26 @@ export default function Usuarios() {
                 }, { onConflict: 'nombre' })
 
             if (syncError) throw syncError
-            toast('🛰️ Credenciales sincronizadas en la Nube', 'success')
+
+            invalidateRolesCache() // Limpiar cache de permisos
+
+            // SINCRONIZACIÓN DE COMISIÓN
+            await supabase.from('comisiones_config').upsert({
+                user_id: userData.nombre.trim(), // Usamos nombre como ID de enlace en nube
+                commission_type: commissionForm.commission_type,
+                percentage: commissionForm.percentage,
+                active: commissionForm.active
+            }, { onConflict: 'user_id' })
+
+            toast('🛰️ Credenciales y Comisiones sincronizadas', 'success')
 
             setShowModal(false)
             setEditing(null)
             setForm({ nombre: '', rol: 'CAJERO', pin: '', activo: true })
             setCommissionForm({ commission_type: 'SALES_PCT', percentage: 0, active: true })
         } catch (err) {
-            toast('Error: El nombre de usuario ya existe', 'error')
+            console.error("Error al guardar usuario:", err)
+            toast('Error: ' + (err.message || 'No se pudo guardar el usuario'), 'error')
         }
     }
 
@@ -165,68 +205,112 @@ export default function Usuarios() {
             </div>
 
             <Modal open={showModal} onClose={() => { setShowModal(false); setEditing(null) }}
-                title={editing ? 'ACTUALIZAR CREDENCIALES DE USUARIO' : 'REGISTRO DE NUEVO OPERADOR'}>
-                <form className="space-y-6" onSubmit={handleSave}>
-                    <div className="field">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">NOMBRE COMPLETO DEL OPERADOR *</label>
-                        <input type="text" required className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black uppercase text-sm" placeholder="EJ: MARIA DELGADO"
-                            value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value.toUpperCase() })} />
+                title={editing ? 'ACTUALIZAR CREDENCIALES DE USUARIO' : 'REGISTRO DE NUEVO OPERADOR'} wide={true}>
+                <form className="flex flex-col lg:flex-row gap-6 items-start" onSubmit={handleSave}>
+
+                    {/* COLUMNA IZQUIERDA: DATOS Y CREDENCIALES */}
+                    <div className="flex-1 w-full space-y-6">
+                        <div className="field">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">NOMBRE COMPLETO DEL OPERADOR *</label>
+                            <input type="text" required className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black uppercase text-sm" placeholder="EJ: MARIA DELGADO"
+                                value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value.toUpperCase() })} />
+                        </div>
+
+                        <div className="field">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">ROL / CARGO EN EL SISTEMA</label>
+                            <select className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none uppercase text-xs font-black shadow-inner" value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
+                                {rolesDB.length > 0
+                                    ? rolesDB.map(r => (
+                                        <option key={r.codigo} value={r.codigo}>{r.nombre_display}</option>
+                                    ))
+                                    : (
+                                        // Fallback si no hay conexión
+                                        <>
+                                            <option value="CAJERO">VENDEDOR DE MOSTRADOR / CAJERO</option>
+                                            <option value="VENDEDOR">VENDEDOR DE CALLE (SOLO PRE-FACTURA)</option>
+                                            <option value="SUPERVISOR">SUPERVISOR DE PISO / GERENTE</option>
+                                            <option value="ADMIN">ADMINISTRADOR TOTAL</option>
+                                        </>
+                                    )
+                                }
+                            </select>
+                            {rolesDB.length > 0 && (
+                                <p className="text-[9px] font-bold text-[var(--teal)] mt-1 opacity-70">✓ {rolesDB.length} roles cargados desde la base de datos</p>
+                            )}
+                        </div>
+
+                        <div className="field">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">PIN DE SEGURIDAD (4-6 DÍGITOS)</label>
+                            <input type="password" required className="inp !py-4 font-mono tracking-widest rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black text-center text-xl" maxLength={6}
+                                value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
+                            <p className="text-[10px] font-black text-[var(--text2)] mt-2 uppercase opacity-40 text-center italic">Este PIN será requerido para iniciar sesión</p>
+                        </div>
+
+                        <div className="bg-[var(--surfaceDark)] p-6 border-t-2 border-[var(--orange-var)] space-y-4">
+                            <h3 className="text-xs font-black text-[var(--orange-var)] uppercase tracking-widest flex items-center gap-2">
+                                <span className="material-icons-round text-sm">payments</span>
+                                Incentivos y Comisiones
+                            </h3>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="field">
+                                    <label className="text-[9px] font-black uppercase text-[var(--text2)]">Tipo de Comisión</label>
+                                    <select className="inp bg-[var(--surface2)] !py-3 text-[10px] font-black"
+                                        value={commissionForm.commission_type}
+                                        onChange={e => setCommissionForm({ ...commissionForm, commission_type: e.target.value })}>
+                                        <option value="SALES_PCT">% SOBRE VENTA</option>
+                                        <option value="PROFIT_PCT">% SOBRE UTILIDAD</option>
+                                    </select>
+                                </div>
+                                <div className="field">
+                                    <label className="text-[9px] font-black uppercase text-[var(--text2)]">Porcentaje (%)</label>
+                                    <input type="number" step="0.01" className="inp bg-[var(--surface2)] !py-3 text-center font-black"
+                                        value={commissionForm.percentage}
+                                        onChange={e => setCommissionForm({ ...commissionForm, percentage: parseFloat(e.target.value) || 0 })} />
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input type="checkbox" checked={commissionForm.active}
+                                    onChange={e => setCommissionForm({ ...commissionForm, active: e.target.checked })}
+                                    className="w-4 h-4 accent-[var(--teal)]" />
+                                <label className="text-[9px] font-black uppercase text-[var(--text2)] pt-0.5">Generar Comisiones activas</label>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 pt-4 border-t border-[var(--border-var)]">
+                            <button type="button" className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={() => { setShowModal(false); setEditing(null) }}>ABORTAR</button>
+                            <button type="submit" className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-[10px] sm:text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest">
+                                <span className="material-icons-round text-base">verified_user</span>
+                                <span className="hidden sm:inline">{editing ? 'ACTUALIZAR' : 'REGISTRAR'} OPERADOR</span>
+                                <span className="sm:hidden">{editing ? 'ACTUALIZAR' : 'REGISTRAR'}</span>
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="field">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">ROL / CARGO EN EL SISTEMA</label>
-                        <select className="inp !py-4 rounded-none focus:border-[var(--teal)] transition-none uppercase text-xs font-black shadow-inner" value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
-                            <option value="CAJERO">VENDEDOR / CAJERO</option>
-                            <option value="SUPERVISOR">SUPERVISOR DE PISO</option>
-                            <option value="ADMIN">ADMINISTRADOR TOTAL</option>
-                        </select>
-                    </div>
-
-                    <div className="field">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">PIN DE SEGURIDAD (4-6 DÍGITOS)</label>
-                        <input type="password" required className="inp !py-4 font-mono tracking-widest rounded-none focus:border-[var(--teal)] transition-none shadow-inner font-black text-center text-xl" maxLength={6}
-                            value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
-                        <p className="text-[10px] font-black text-[var(--text2)] mt-2 uppercase opacity-40 text-center italic">Este PIN será requerido para iniciar sesión</p>
-                    </div>
-
-                    <div className="bg-[var(--surfaceDark)] p-6 border-t-2 border-[var(--orange-var)] space-y-4">
-                        <h3 className="text-xs font-black text-[var(--orange-var)] uppercase tracking-widest flex items-center gap-2">
-                            <span className="material-icons-round text-sm">payments</span>
-                            Incentivos y Comisiones
+                    {/* COLUMNA DERECHA: REVISIÓN DE PERMISOS */}
+                    <div className="w-full lg:w-80 bg-[var(--surface2)] border border-[var(--border-var)] p-4 flex flex-col rounded-sm shrink-0 self-stretch">
+                        <h3 className="text-[10px] font-black uppercase text-[var(--teal)] mb-3 tracking-widest border-b border-[var(--border-var)] pb-2 flex justify-between items-center">
+                            <span>Permisos (Vista Previa)</span>
+                            <span className="material-icons-round text-[14px]">visibility</span>
                         </h3>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="field">
-                                <label className="text-[9px] font-black uppercase text-[var(--text2)]">Tipo de Comisión</label>
-                                <select className="inp bg-[var(--surface2)] !py-3 text-[10px] font-black"
-                                    value={commissionForm.commission_type}
-                                    onChange={e => setCommissionForm({ ...commissionForm, commission_type: e.target.value })}>
-                                    <option value="SALES_PCT">% SOBRE VENTA TOTAL</option>
-                                    <option value="PROFIT_PCT">% SOBRE UTILIDAD (PROFIT)</option>
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label className="text-[9px] font-black uppercase text-[var(--text2)]">Porcentaje (%)</label>
-                                <input type="number" step="0.01" className="inp bg-[var(--surface2)] !py-3 text-center font-black"
-                                    value={commissionForm.percentage}
-                                    onChange={e => setCommissionForm({ ...commissionForm, percentage: parseFloat(e.target.value) || 0 })} />
-                            </div>
+                        <div className="flex-1 space-y-1.5 overflow-y-auto custom-scroll pr-1 max-h-[50vh] lg:max-h-[60vh]">
+                            {getPermissionsList(form.rol || 'CAJERO').map(p => (
+                                <div key={p.id} className={`flex items-center gap-2.5 p-2 border transition-all ${p.hasAccess ? 'border-[var(--teal)] bg-[var(--teal)]/10 text-[var(--teal)]' : 'border-dashed border-[var(--border-var)] bg-[var(--surfaceDark)] text-[var(--text2)] opacity-40'}`}>
+                                    <span className="material-icons-round text-sm shrink-0">{p.hasAccess ? 'check_circle' : 'block'}</span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider leading-tight pt-px">{p.label}</span>
+                                </div>
+                            ))}
                         </div>
-                        <div className="flex items-center gap-2">
-                            <input type="checkbox" checked={commissionForm.active}
-                                onChange={e => setCommissionForm({ ...commissionForm, active: e.target.checked })}
-                                className="w-4 h-4 accent-[var(--teal)]" />
-                            <label className="text-[9px] font-black uppercase text-[var(--text2)]">Generar Comisiones para este usuario</label>
+
+                        <div className="mt-4 pt-4 border-t border-[var(--border-var)] text-center pb-2">
+                            <span className="material-icons-round text-2xl text-[var(--orange-var)] mb-1 opacity-50">warning_amber</span>
+                            <p className="text-[8px] uppercase tracking-widest font-black text-[var(--text2)] leading-relaxed">
+                                Seleccione el ROL en la izquierda para<br />evaluar lo que este usuario verá.
+                            </p>
                         </div>
                     </div>
 
-                    <div className="flex gap-4 pt-4 border-t border-[var(--border-var)]">
-                        <button type="button" className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => { setShowModal(false); setEditing(null) }}>ABORTAR</button>
-                        <button type="submit" className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest uppercase">
-                            <span className="material-icons-round text-base">verified_user</span>
-                            <span>{editing ? 'ACTUALIZAR' : 'REGISTRAR'} OPERADOR</span>
-                        </button>
-                    </div>
                 </form>
             </Modal>
         </div>

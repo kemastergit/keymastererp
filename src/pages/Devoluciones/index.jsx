@@ -5,6 +5,7 @@ import useStore from '../../store/useStore'
 import { fmtUSD, fmtDate } from '../../utils/format'
 import Modal from '../../components/UI/Modal'
 import { logAction } from '../../utils/audit'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 
 export default function Devoluciones() {
   const toast = useStore(s => s.toast)
@@ -96,6 +97,33 @@ export default function Devoluciones() {
         })
 
         await db.ventas.update(ventaSel.id, { estado: 'DEVUELTA_PARCIAL' })
+
+        // ☁️ SYNC A SUPABASE
+        const devPayload = {
+          id: devId,
+          venta_id: ventaSel.id,
+          nro_venta: ventaSel.nro,
+          cliente: ventaSel.cliente,
+          motivo,
+          fecha: new Date().toISOString(),
+          total: totalUSD,
+          reingreso_stock: reingresarStock,
+          usuario_id: currentUser?.id
+        }
+        await addToSyncQueue('devoluciones', 'INSERT', devPayload)
+
+        for (const item of devItems) {
+          await addToSyncQueue('dev_items', 'INSERT', {
+            devolucion_id: devId,
+            articulo_id: item.articulo_id,
+            descripcion: item.descripcion,
+            codigo: item.codigo,
+            qty: item.qty_dev,
+            precio: item.precio
+          })
+        }
+
+        processSyncQueue()
       })
 
       toast(reingresarStock ? '✅ Stock reintegrado correctamente' : '⚠️ Registrado como DAÑADO (Pérdida)')

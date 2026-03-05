@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { useReactToPrint } from 'react-to-print'
 import TicketCierre from '../../components/Ticket/TicketCierre'
 import { useRef } from 'react'
+import { usePermiso } from '../../hooks/usePermiso'
 
 export default function Caja() {
     const { activeSession, loadSession, toast, askAdmin, tasa } = useStore()
@@ -19,10 +20,26 @@ export default function Caja() {
 
     const ticketRef = useRef()
     const { configEmpresa, loadConfigEmpresa, currentUser } = useStore()
+    const { check } = usePermiso()
 
     useEffect(() => {
         loadConfigEmpresa()
     }, [])
+
+    if (!check('MENU_CAJA')) {
+        return (
+            <div className="flex-1 flex items-center justify-center bg-[var(--surface2)] p-10 h-full">
+                <div className="bg-white p-12 border-2 border-red-500 shadow-[var(--win-shadow)] text-center max-w-lg">
+                    <span className="material-symbols-outlined text-red-500 text-6xl mb-4">gpp_maybe</span>
+                    <h2 className="text-2xl font-black text-red-600 uppercase mb-2">Acceso Restringido</h2>
+                    <p className="text-gray-600 font-bold uppercase text-[10px] tracking-widest leading-relaxed">
+                        Este módulo de Caja y Arqueo está reservado exclusivamente para personal de Tesorería y Administración.
+                        Sus acciones han sido registradas para auditoría.
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     const handlePrint = useReactToPrint({
         contentRef: ticketRef,
@@ -56,7 +73,6 @@ export default function Caja() {
     }, [activeSession], [])
 
     const handleAbrir = async () => {
-        if (!aperturaForm.usuario) { toast('Ingrese nombre del cajero', 'warn'); return }
         const now = new Date()
         const id = await db.sesiones_caja.add({
             fecha_apertura: now,
@@ -108,10 +124,16 @@ export default function Caja() {
                 })
 
                 // 2. SINCRONIZACIÓN CON SUPABASE
+                // ID único por dispositivo (generado automáticamente la primera vez)
+                if (!localStorage.getItem('deviceId')) {
+                    localStorage.setItem('deviceId', 'DEV-' + Math.random().toString(36).substring(2, 8).toUpperCase())
+                }
+                const prefix = localStorage.getItem('deviceId')
                 const { error: syncError } = await supabase
                     .from('cierres_caja')
                     .upsert({
-                        id_sesion_local: activeSession.id,
+                        id_sesion_local: `${prefix}-${activeSession.id}`,
+                        terminal_nombre: configEmpresa?.nombre_empresa || prefix,
                         usuario: currentUser.nombre,
                         fecha_apertura: activeSession.fecha_apertura,
                         fecha_cierre: now,
@@ -121,7 +143,7 @@ export default function Caja() {
                         diferencia_usd: diffUsd,
                         diferencia_bs: diffBs,
                         notas_count: stats.totalNotas,
-                        desglose: stats // Guardamos todo el objeto stats para análisis profundo
+                        desglose: stats
                     }, { onConflict: 'id_sesion_local' })
 
                 if (syncError) throw syncError
@@ -342,12 +364,14 @@ export default function Caja() {
                             <span className="material-icons-round text-[var(--teal)] text-3xl">meeting_room</span>
                         </div>
                         <h2 className="text-xl font-black text-[var(--text-main)] mb-2 uppercase text-center tracking-tighter">Apertura de Caja</h2>
-                        <div className="space-y-4">
-                            <div className="field">
-                                <label>Nombre del Cajero</label>
-                                <input type="text" className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none" placeholder="Ej: Juan Pérez"
-                                    value={aperturaForm.usuario} onChange={e => setAperturaForm({ ...aperturaForm, usuario: e.target.value })} />
+                        <div className="flex items-center gap-3 bg-[var(--surface2)] border border-[var(--border-var)] p-3 mb-2">
+                            <span className="material-icons-round text-[var(--teal)]">person</span>
+                            <div>
+                                <div className="text-[9px] text-[var(--text2)] font-bold uppercase tracking-widest">Cajero Responsable</div>
+                                <div className="text-sm font-black text-[var(--text-main)] uppercase">{currentUser?.nombre || 'SISTEMA'}</div>
                             </div>
+                        </div>
+                        <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="field">
                                     <label>Monto Inicial ($)</label>

@@ -273,19 +273,41 @@ export default function Admin() {
 
           <div className="w-full flex justify-center mt-2">
             <a href="#" className="text-[10px] text-blue-500 hover:underline font-bold uppercase tracking-widest flex items-center gap-1"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.preventDefault()
-                const headers = "codigo,referencia,descripcion,marca,departamento,sub_depto,proveedor,unidad,stock,precio,costo,ubicacion"
-                const example = "759123456,REF-001,PASTILLAS DE FRENO DELANTERO,TOYOTA,REPUESTOS,FRENOS,PROVEEDOR A,UNI,10,25.50,15.00,PASILLO A-1"
-                const csvContent = headers + "\n" + example
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-                const a = document.createElement('a')
-                a.href = URL.createObjectURL(blob)
-                a.download = 'formato_inventario_keymaster.csv'
-                a.click()
+                try {
+                  const { utils, write } = await import('xlsx')
+                  const ws = utils.json_to_sheet([
+                    {
+                      codigo: "759123456",
+                      referencia: "REF-001",
+                      descripcion: "PASTILLAS DE FRENO DELANTERO",
+                      marca: "TOYOTA",
+                      departamento: "REPUESTOS",
+                      sub_depto: "FRENOS",
+                      proveedor: "PROVEEDOR A",
+                      unidad: "UNI",
+                      stock: 10,
+                      precio: 25.50,
+                      costo: 15.00,
+                      ubicacion: "PASILLO A-1"
+                    }
+                  ])
+                  const wb = utils.book_new()
+                  utils.book_append_sheet(wb, ws, "Inventario")
+
+                  const wbout = write(wb, { bookType: 'xlsx', type: 'array' })
+                  const blob = new Blob([wbout], { type: 'application/octet-stream' })
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = 'formato_inventario_keymaster.xlsx'
+                  a.click()
+                } catch (err) {
+                  toast('Error generando el Excel', 'error')
+                }
               }}>
               <span className="material-icons-round text-xs">download_for_offline</span>
-              DESCARGAR PLANTILLA EXCEL (CSV)
+              DESCARGAR PLANTILLA EXCEL (XLSX)
             </a>
           </div>
         </div>

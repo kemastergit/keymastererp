@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -13,31 +13,38 @@
 }
 
 :root {
-  --primary: #0F172A;
-  --primary-dark: #020617;
-  --bg: #F0F2F5;
+  /* ── Paleta Principal ── */
+  --primary: #0D1B2A;
+  --primary-dark: #060E18;
+  --bg: #EAEDF2;
   --surface: #FFFFFF;
-  --surface2: #E8EAED;
-  --border-var: #B0B8C4;
-  --border2: #D0D5DC;
-  --text-main: #1A1F2E;
-  --text2: #4A5568;
-  --text3: #8A93A2;
-  --teal: #0F172A;
-  --teal2: #1E293B;
-  --teal3: #CBD5E1;
-  --teal4: #F1F5F9;
-  --tealDark: #020617;
-  --red-var: #C0392B;
-  --redLight: #FDECEA;
-  --green-var: #1A7A4A;
-  --greenLight: #E8F5EE;
-  --orange-var: #B7600A;
-  --orangeLight: #FEF3E2;
-  --yellow-var: #9A7D0A;
-  --shadow: 2px 2px 0px rgba(0, 0, 0, 0.12);
-  --shadow2: 3px 3px 0px rgba(0, 0, 0, 0.15);
-  --win-shadow: 4px 4px 0px rgba(0, 0, 0, 0.20);
+  --surface2: #F0F3F7;
+  --border-var: #C2CAD5;
+  --border2: #D8DEE6;
+  --text-main: #111827;
+  --text2: #4B5563;
+  --text3: #9CA3AF;
+
+  /* ── Acento Azul-Pizarra (cabeceras, botones primarios) ── */
+  --teal: #1B2B45;
+  --teal2: #253A59;
+  --teal3: #C8D8F0;
+  --teal4: #EEF3FA;
+  --tealDark: #0D1B2A;
+
+  /* ── Estados ── */
+  --red-var: #B91C1C;
+  --redLight: #FEE2E2;
+  --green-var: #166534;
+  --greenLight: #DCFCE7;
+  --orange-var: #C2410C;
+  --orangeLight: #FFEDD5;
+  --yellow-var: #92400E;
+
+  /* ── Sombras con más profundidad ── */
+  --shadow: 2px 2px 0px rgba(0, 0, 0, 0.10), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow2: 3px 3px 0px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.10);
+  --win-shadow: 4px 4px 0px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
 @layer base {
@@ -78,16 +85,21 @@
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-[var(--border-var)] rounded-none;
+  background: var(--border-var);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--teal2);
 }
 
 @layer components {
@@ -256,7 +268,7 @@
   }
 
   tr:nth-child(odd) {
-    background: #F8F9FA;
+    background: #F5F7FA;
   }
 
   tr:hover {
@@ -339,7 +351,21 @@
 }
 
 .band-top {
-  @apply h-1.5 w-full bg-gradient-to-r from-slate-900 via-red-600 to-slate-900;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(to right, #0D1B2A, #2563EB, #1B2B45, #1d4ed8, #0D1B2A);
+  background-size: 200% auto;
+  animation: band-shift 6s linear infinite;
+}
+
+@keyframes band-shift {
+  0% {
+    background-position: 0% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
 }
 
 .band-accent {

@@ -9,11 +9,13 @@ export default function Ayuda() {
         { id: 'tecnologia', title: 'PWA e Instalación', icon: 'install_mobile' },
         { id: 'facturacion', title: 'Ventas y Smart App', icon: 'point_of_sale' },
         { id: 'compras', title: 'Compras y Proveedores', icon: 'shopping_cart' },
+        { id: 'catalogo', title: 'Catálogo Web', icon: 'language' },
         { id: 'inventario', title: 'Inventario y Mercancía', icon: 'inventory_2' },
         { id: 'reportes', title: 'Reportes y Deudas', icon: 'analytics' },
         { id: 'caja', title: 'Control de Caja', icon: 'payments' },
         { id: 'hibrido', title: 'Radar e Híbrido', icon: 'sync_problem' },
         { id: 'config', title: 'Configuración', icon: 'settings' },
+        { id: 'bitacora', title: 'Bitácora y Cambios', icon: 'history_edu' },
     ]
 
     return (
@@ -24,7 +26,7 @@ export default function Ayuda() {
                 </div>
                 <div>
                     <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Centro de Ayuda</h1>
-                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Manual de usuario KEYMASTER ERP - V3.0.0 Command Center</p>
+                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Manual de usuario KEYMASTER ERP - V3.5.0 MASTER CONTROL</p>
                 </div>
             </div>
 
@@ -87,7 +89,9 @@ export default function Ayuda() {
                                     <FaqItem q="¿Qué hago si sale la pantalla de error crítica?" r="No entre en pánico. Dele al botón grande de 'RECARGAR SISTEMA'. El escudo restaurará la pantalla y sus ventas locales seguirán en su sitio." />
                                     <FaqItem q="¿Es peligroso limpiar el historial del navegador?" r="¡Sí! Si borra 'Cookies y otros datos de sitios', borrará la base de datos local. Hágalo solo después de confirmar que sus datos están en la nube (Radar)." />
                                     <FaqItem q="¿Cómo aseguro mi reporte para llevar?" r="Use el botón 'Exportar CSV' en Reportes. Eso crea un archivo físico en su carpeta de descargas que funciona fuera de internet." />
-                                    <FaqItem q="¿Qué pasa si no tengo internet?" r="Keymaster es 'Offline-First'. El sistema funciona 100% solo. Al volver el internet, el radar se encargará de subir las ventas que se hicieron offline." />
+                                    <FaqItem q="¿Qué pasa si no tengo internet?" r="Keymaster es 'Offline-First'... El sistema funciona 100% solo. Al volver el internet, el radar se encargará de subir las ventas que se hicieron offline." />
+                                    <FaqItem q="¿Puede un vendedor ver los reportes de P&L o utilidades del negocio?" r="No. El módulo de Reportes financieros y el Panel del Dueño requieren rol Admin. El vendedor solo puede ver sus propias ventas del día." />
+                                    <FaqItem q="¿Qué pasa si el admin bloquea a un cajero mientras está vendiendo?" r="El cajero puede terminar la venta actual. Al intentar abrir una nueva sesión el sistema le niega el acceso porque el login valida activo=true contra Supabase al iniciar. Sus ventas quedan registradas correctamente." />
                                 </div>
                             </div>
                         </div>
@@ -114,6 +118,19 @@ export default function Ayuda() {
                                 <HelpItem title="Calculadora de Costos" desc="Herramienta para calcular el 'Costo Ponderado' cuando registra mercancía con variaciones de precio." icon="calculate" />
                                 <HelpItem title="Búsqueda con Teclas" desc="F2 para buscar, F8 para pagar, F9 para vaciar carrito. Optimice su tiempo en caja." icon="keyboard" />
                             </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Facturación
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un vendedor vender más unidades de las que hay en stock?" r="No. El sistema valida el stock local antes de procesar. Si hay 3 y pide 5 muestra error de stock insuficiente. La RPC en Supabase hace una segunda validación antes de confirmar." />
+                                    <FaqItem q="¿Puede facturarse con la caja cerrada?" r="Depende del rol. El cajero necesita abrir sesión de caja primero. Sin sesión activa no puede cerrar ventas. El vendedor solo hace pre-facturas que no tocan el inventario ni la caja." />
+                                    <FaqItem q="¿Puede un vendedor cambiar el precio de un producto al facturar?" r="No. Los precios vienen de la BD. Solo el Admin puede modificarlos en el módulo de Inventario. El vendedor no tiene acceso a ese módulo." />
+                                    <FaqItem q="¿Qué pasa si el precio cambia mientras el vendedor tiene el carrito abierto?" r="El sistema detecta la diferencia al momento de cerrar la venta y exige actualización: 'PRECIO ACTUALIZADO: $10 → $12'. El vendedor debe aceptar continuar con los nuevos precios o el sistema anula el cobro." />
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -125,6 +142,35 @@ export default function Ayuda() {
                                 <HelpItem title="Monitor de Facturas" desc="En el historial, use el icono del 'Ojo' para abrir el detalle completo de ítems y costos de cualquier factura vieja." icon="visibility" />
                                 <HelpItem title="Historial de Abonos" desc="Vea una lista detallada de todos los pagos realizados a sus proveedores en la sección de Cuentas por Pagar." icon="payments" />
                             </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Compras
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un cajero recibir y cargar facturas de proveedores?" r="No. El módulo de Compras y Proveedores solo es visible para Admin o Supervisor. Al registrar una compra el sistema actualiza el stock y recalcula el costo promedio AVCO automáticamente." />
+                                    <FaqItem q="¿Qué pasa si se registra una compra con el precio de costo incorrecto?" r="El AVCO se recalcula automáticamente. Si el costo fue incorrecto afecta el P&L. Solo Admin puede corregirlo con un ajuste de inventario auditado." />
+                                    <FaqItem q="¿Puede un proveedor tener múltiples facturas pendientes?" r="Sí. Cuentas por Pagar registra cada factura de proveedor por separado con fecha de vencimiento. El Admin ve el total de deuda por proveedor en el módulo financiero." />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeSection === 'catalogo' && (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight mb-4">Catálogo Web y Pedidos</h2>
+                            <div className="mt-4 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Catálogo Web
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un cliente ver los costos o las utilidades del negocio en el catálogo web?" r="No. El catálogo solo muestra descripcion, precio y stock. El campo costo nunca sale en ninguna consulta pública. Las políticas RLS de Supabase bloquean esos campos al público." />
+                                    <FaqItem q="¿Puede un cliente hacer un pedido si el producto está agotado?" r="Depende de la configuración. Si stock=0 el producto muestra badge AGOTADO pero sigue visible. El cliente puede pedirlo igual y el vendedor decide si puede conseguirlo o no. Si mostrar_en_web=false el producto no aparece en el catálogo." />
+                                    <FaqItem q="¿Qué pasa si dos clientes piden el mismo producto en el catálogo al mismo tiempo?" r="Los pedidos web son pre-reservas. No descuentan stock hasta que el vendedor los convierte en factura. El primero que el vendedor facture descuenta el stock. El segundo recibirá error de stock insuficiente al facturar." />
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -135,6 +181,18 @@ export default function Ayuda() {
                                 <HelpItem title="Valor del Inventario" desc="Calculado en tiempo real según el costo de reposición y stock actual." icon="inventory" />
                                 <HelpItem title="Stock Minino" desc="Configure alertas para que la Smart App le avise cuando un producto esté por agotarse." icon="notifications_active" />
                                 <HelpItem title="Control de Costos" desc="Mantenga sus márgenes protegidos verificando que sus precios de venta superen siempre los costos ponderados." icon="monitoring" />
+                            </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Inventario
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un cajero agregar o modificar productos en el inventario?" r="No. El módulo de Inventario solo es visible para Admin. El cajero y vendedor no ven ese menú." />
+                                    <FaqItem q="¿Puede el stock quedar en negativo?" r="No. El sistema impide stock menor a cero localmente. En Supabase la RPC valida antes de descontar. Si dos vendedores intentan vender el último artículo simultáneamente el segundo recibe error." />
+                                    <FaqItem q="¿Qué pasa si se desactiva un producto que está en un carrito abierto?" r="La venta puede completarse porque el carrito ya tiene el producto cargado. El bloqueo de activo=false solo aplica para búsquedas nuevas. Las ventas en proceso no se interrumpen." />
+                                </div>
                             </div>
                         </div>
                     )}
@@ -166,6 +224,53 @@ export default function Ayuda() {
                                 <HelpItem title="Arqueo de Caja (Z)" desc="Comparación entre el sistema y el dinero físico. Indispensable para mantener la transparencia." icon="task_alt" />
                                 <HelpItem title="Caja Chica con Categorías" desc="Registre gastos operativos clasificándolos por categoría: Alquiler, Nómina, Servicios (agua/luz/internet), Transporte, Mantenimiento o Caja Chica General. Los egresos categorizados alimentan automáticamente el reporte P&L." icon="account_balance_wallet" />
                             </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Caja y Cierres
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un cajero ver los costos de los productos?" r="No. El campo costo está oculto para el rol cajero y vendedor. Solo Admin ve el costo y la utilidad en el Panel del Dueño y en P&L." />
+                                    <FaqItem q="¿Puede reimprimirse una factura de otro turno o caja cerrada?" r="Sí. La reimpresión lee de Dexie local y no requiere caja abierta. Cualquier factura histórica puede reimprimirse en cualquier momento. Solo el Admin puede anular facturas." />
+                                    <FaqItem q="¿Qué pasa si dos cajeros cierran caja al mismo tiempo?" r="No hay conflicto. Cada sesión tiene un id_sesion_local único. Supabase los recibe como dos cierres separados. El consolidado del dueño suma ambos automáticamente." />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeSection === 'reportes' && (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight mb-4">Reportes, Deudas y Libros Fiscales</h2>
+                            <div className="space-y-4">
+                                <HelpItem title="Monitor de Deudas" desc="Diferencie entre lo que debe (Cuentas por Pagar) y lo que le deben (Cuentas por Cobrar) con un solo vistazo." icon="account_balance" />
+                                <HelpItem title="Estado de Resultados (P&L)" desc="Ventas Netas − CMV = Utilidad Bruta − Gastos Operativos = Utilidad Neta. Con márgenes porcentuales y gráfico de barra. Acceda desde Reportes → tab P&L." icon="analytics" />
+                                <HelpItem title="Anulación con Auditoría" desc="Toda anulación queda grabada con el nombre del responsable. Requiere PIN de Admin o Supervisor." icon="security" />
+                                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4">
+                                    <p className="text-[10px] font-black text-teal-700 uppercase tracking-widest mb-3">⚖️ Libros Fiscales SENIAT</p>
+                                    <div className="space-y-3">
+                                        <HelpItem title="Libro de Ventas" desc="Se genera desde Reportes → tab Ventas → botón 'Libro Ventas'. Incluye Base Imponible, IVA Débito Fiscal (16%) e IGTF (3%) por factura, con totalizadores fiscales." icon="menu_book" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Reportes, Deudas y Auditoría
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Puede un vendedor dar crédito a un cliente sin autorización?" r="Depende de la configuración. El sistema muestra la deuda actual del cliente con un parpadeo naranja al seleccionarlo. El vendedor decide pero queda registrado." />
+                                    <FaqItem q="¿Puede un cliente tener crédito ilimitado?" r="No. Cada cliente tiene un campo límite de crédito en su ficha. Si la deuda supera ese límite el sistema bloquea al vendedor con una alerta roja LÍMITE DE CRÉDITO EXCEDIDO al intentar usar el botón CRÉDITO." />
+                                    <FaqItem q="¿Qué pasa si un cliente abona en una terminal y la otra no se entera?" r="El abono se guarda local y sube a Supabase automáticamente. La otra terminal actualiza el saldo al consultar. Nunca hay choque." />
+                                    <FaqItem q="¿Puede un cajero anular una cuenta por cobrar o deuda?" r="No. Solo Admin puede anular cuentas por cobrar. El cajero solo puede registrar abonos. Queda registrado en auditoría." />
+                                    <FaqItem q="¿Puede un cajero pagar facturas a proveedores?" r="No. El módulo de Cuentas por Pagar solo es visible para Admin o Supervisor. El cajero solo ve su módulo de ventas y cierre de caja." />
+                                    <FaqItem q="¿Puede un vendedor borrar o modificar una venta ya procesada?" r="No. Las ventas son inmutables. Solo Admin puede anular con PIN y motivo. La anulación no borra el registro, lo marca ANULADA." />
+                                    <FaqItem q="¿Los reportes de ventas incluyen las ventas anuladas?" r="Sí pero separadas. Muestra Ventas válidas / Anulaciones / Reversos para ver impacto real." />
+                                    <FaqItem q="¿Puede alguien modificar un registro de auditoría?" r="No. La auditoría está en Supabase con RLS activado. Ningún usuario puede escribir ni borrar, y la app solo puede insertar eventos." />
+                                    <FaqItem q="¿Los libros fiscales para el SENIAT se generan automáticamente?" r="Sí. Libro Ventas (16% IVA e IGTF 3%), Libro Compras y Libro de Inventario Valorado." />
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -188,6 +293,9 @@ export default function Ayuda() {
                                     <FaqItem q="8. ¿Qué ocurre si la Tasa BCV cambia durante una factura?" r="El sistema reacciona en segundos. El monto en bolívares de la pantalla de pago se recalculará automáticamente con la nueva tasa antes de que el cajero valide el recibo." />
                                     <FaqItem q="9. Pedido Web vs Venta Presencial: ¿Quién tiene prioridad?" r="La venta física que se procese primero. Si la tienda vende el stock antes de que el vendedor procese el pedido web, el sistema dará error de stock al intentar despachar el pedido." />
                                     <FaqItem q="10. ¿Se puede bloquear a un cajero mientras está trabajando?" r="Sí. El cajero podrá terminar su factura actual, pero el sistema le impedirá abrir nuevas ventas o re-ingresar al sistema apenas intente usar su PIN nuevamente." />
+                                    <FaqItem q="11. ¿Se descuenta de verdad el inventario para evitar vender la misma unidad dos veces?" r="SÍ. Ocurre a 2 niveles: 1) Localmente el sistema valida el stock antes de guardar; si no hay, cancela la venta al instante. 2) En la nube (Supabase) se aplica un bloqueo de seguridad (FOR UPDATE). Si tu PC y tu teléfono intentan vender la última pieza al mismo segundo exacto, la nube solo dejará pasar al primero. El segundo dispositivo será rechazado automáticamente." />
+                                    <FaqItem q="12. ¿Qué pasa si se va el internet mientras el cajero está facturando?" r="La venta se guarda en Dexie local. El sistema continúa funcionando offline. Cuando vuelve internet el SyncManager sube automáticamente las ventas pendientes. El stock global se actualiza al reconectar." />
+                                    <FaqItem q="13. ¿Si un vendedor en el teléfono vende el último producto puede la PC venderlo también?" r="Con el Radar de Stock activo no. Cuando el teléfono vende Supabase notifica a la PC que actualice su Dexie. La PC recibe el cambio en segundos y muestra stock 0 antes de que otro vendedor intente venderlo." />
                                 </div>
                             </div>
                         </div>
@@ -199,6 +307,67 @@ export default function Ayuda() {
                             <div className="space-y-4">
                                 <HelpItem title="Seguridad (PIN)" desc="Cambie sus códigos regularmente desde la gestión de usuarios." icon="lock" />
                                 <HelpItem title="Datos del Ticket" desc="Personalice el mensaje de despedida y los datos fiscales de Automotores Guaicaipuro." icon="print" />
+                            </div>
+
+                            <div className="mt-8 bg-slate-100 p-6 rounded-3xl border-2 border-slate-200">
+                                <h3 className="font-black uppercase text-xs tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">quiz</span>
+                                    Preguntas Frecuentes - Multimoneda y Config
+                                </h3>
+                                <div className="space-y-6">
+                                    <FaqItem q="¿Qué pasa si la tasa BCV cambia mientras un vendedor está facturando?" r="El sistema detecta el cambio via Supabase Realtime y actualiza el monto en Bolívares en la pantalla del vendedor antes de cobrar." />
+                                    <FaqItem q="¿Puede un vendedor cambiar la tasa BCV manualmente?" r="No. Solo Admin puede actualizar la tasa desde el panel de Configuración. El cambio se propaga a todos los terminales." />
+                                    <FaqItem q="¿El IGTF se aplica siempre?" r="No. Solo se aplica al seleccionar método Divisas Extranjeras (Zelle o Efectivo USD). Pagos en Bs o Pago Móvil no generan IGTF." />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeSection === 'bitacora' && (
+                        <div className="space-y-8">
+                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight border-b-4 border-primary inline-block mb-4">Bitácora de Desarrollo 🪶</h2>
+                            <p className="text-slate-600 leading-relaxed text-sm">Registro histórico de las últimas implementaciones críticas y actualizaciones del sistema "Keymaster ERP".</p>
+
+                            <div className="relative border-l-4 border-slate-100 pl-8 space-y-12 py-4">
+                                <div className="relative">
+                                    <div className="absolute -left-[42px] top-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-xs font-black shadow-lg shadow-amber-200">04</div>
+                                    <span className="text-[10px] font-black text-primary uppercase tracking-widest bg-amber-50 px-3 py-1 rounded-full border border-amber-100">MARZO 2026 — Key Implementation: "Cacique Connect"</span>
+                                    <div className="mt-4 space-y-4">
+                                        <div className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm transition-all hover:border-primary/20">
+                                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2 mb-3">
+                                                <span className="material-icons-round text-primary">cloud_done</span>
+                                                Sincronización Total 360°
+                                            </h4>
+                                            <ul className="text-xs text-slate-500 space-y-2 font-medium">
+                                                <li className="flex items-start gap-2"><span className="text-primary">•</span> <strong>Compras y Cotizaciones:</strong> Ahora todos los presupuestos y entradas de mercancía suben a la nube. El dueño puede ver el historial de costos desde cualquier lugar.</li>
+                                                <li className="flex items-start gap-2"><span className="text-primary">•</span> <strong>Cuentas por Pagar (Manual):</strong> Corrección del flujo de sync. Las deudas registradas manualmente ahora se encolan y sincronizan correctamente.</li>
+                                                <li className="flex items-start gap-2"><span className="text-primary">•</span> <strong>Stock Web Integrado:</strong> El catálogo web ahora consulta el stock real de la tienda para cada pedido entrante.</li>
+                                            </ul>
+                                        </div>
+                                        <div className="bg-white p-5 rounded-3xl border-2 border-indigo-100 shadow-sm transition-all hover:border-indigo-200">
+                                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2 mb-3">
+                                                <span className="material-icons-round text-indigo-500">security</span>
+                                                Health Check & Fortificación
+                                            </h4>
+                                            <ul className="text-xs text-slate-500 space-y-2 font-medium">
+                                                <li className="flex items-start gap-2"><span className="text-indigo-500">•</span> <strong>Auditoría Técnica ISO 25010:</strong> Aplicación evaluada con un puntaje de <strong>8.3/10</strong> (Apta para Producción).</li>
+                                                <li className="flex items-start gap-2"><span className="text-indigo-500">•</span> <strong>Seguridad RLS:</strong> Activado el Row Level Security en todas las tablas de Supabase. Remoción de 16 políticas redundantes.</li>
+                                                <li className="flex items-start gap-2"><span className="text-indigo-500">•</span> <strong>Optimización SQL:</strong> Creación de índices en <code>venta_items</code>, <code>cierres_caja</code> y <code>cuentas_por_cobrar</code> para búsquedas instantáneas.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="relative">
+                                    <div className="absolute -left-[42px] top-0 w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-slate-500 text-xs font-black">01</div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full border border-slate-100">MARZO 2026 — Production Cleanup</span>
+                                    <div className="mt-4 space-y-4 opacity-70">
+                                        <div className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2 mb-3">Limpieza de Entorno</h4>
+                                            <p className="text-xs text-slate-500">Remoción de datos de prueba, usuarios demo y módulos experimentales. Preparación del bundle para despliegue final en Netlify.</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

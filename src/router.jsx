@@ -28,6 +28,7 @@ import Comisiones from './pages/Comisiones'
 import Radar from './pages/Radar'
 import Catalogo from './pages/Catalogo'
 import PedidosWeb from './pages/PedidosWeb'
+import OrdenesCompra from './pages/OrdenesCompra'
 import ErrorBoundary from './components/UI/ErrorBoundary'
 
 export const router = createBrowserRouter([
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
       { path: 'cotizaciones', element: <Cotizaciones /> },
       { path: 'compras', element: <Compras /> },
       { path: 'compras-historial', element: <ComprasHistorial /> },
+      { path: 'ordenes-compra', element: <OrdenesCompra /> },
       { path: 'inventario', element: <Inventario /> },
       { path: 'clientes', element: <Clientes /> },
       { path: 'proveedores', element: <Proveedores /> },

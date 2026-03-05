@@ -3,17 +3,24 @@ import { db } from '../../db/db'
 import { fmtUSD, fmtBS } from '../../utils/format'
 import useStore from '../../store/useStore'
 import { supabase } from '../../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
+import { usePermiso } from '../../hooks/usePermiso'
 import Confirm from '../../components/UI/Confirm'
 
 
 export default function PedidosWeb() {
     const { tasa, cart, addToCart, clearCart, setClienteFact, toast, unreadOrders, clearUnread } = useStore()
+    const { check } = usePermiso()
+    const canSeePedidos = check('MENU_CAJA')
 
     useEffect(() => {
         if (unreadOrders > 0) clearUnread()
     }, [unreadOrders])
     const navigate = useNavigate()
+
+    if (!canSeePedidos) {
+        return <Navigate to="/facturacion" replace />
+    }
     const [filtro, setFiltro] = useState('PENDIENTE')
     const [selectedPedido, setSelectedPedido] = useState(null)
 
@@ -54,15 +61,23 @@ export default function PedidosWeb() {
 
             if (sbError) throw sbError
 
-            const sbFull = (sbResults || []).map(p => ({
-                ...p,
-                fecha: p.created_at,
-                origen: 'CLOUD',
-                items: (p.items || []).map(it => ({
-                    ...it,
-                    qty: it.cantidad,
-                    precio: it.precio_unitario
+            const sbFull = await Promise.all((sbResults || []).map(async p => {
+                const itemsWithStock = await Promise.all((p.items || []).map(async it => {
+                    // Buscar el artículo localmente para saber el stock real
+                    const art = await db.articulos.where('codigo').equals(it.codigo).first()
+                    return {
+                        ...it,
+                        qty: it.cantidad,
+                        precio: it.precio_unitario,
+                        stock: art?.stock || 0
+                    }
                 }))
+                return {
+                    ...p,
+                    fecha: p.created_at,
+                    origen: 'CLOUD',
+                    items: itemsWithStock
+                }
             }))
 
             // Consolidar y ordenar por fecha

@@ -1,36 +1,47 @@
 import { useState, useEffect } from 'react'
 import { fmtUSD, fmtBS } from '../../utils/format'
 import ClienteSelector from '../../components/UI/ClienteSelector'
-import { supabase } from '../../lib/supabase'
+import { db } from '../../db/db'
 
 export default function PanelPago({
     cart, cartSubtotal, cartIva, cartIgtf, cartTotal, ivaEnabled, setIvaEnabled,
     tipoPago, setTipoPago, payments, paymentsTotal, openModalWithMethod, setShowPaymentModal,
     removePayment, tasa, vencFact, setVencFact, procesarCotizacion, clearCart,
-    procesarNota, clienteFact, setClienteFact
+    procesarNota, clienteFact, setClienteFact, currentUser, enviarCajaCentral,
+    setShowNotasModal, notasPendientes, fetchNotasVendedores, loading
 }) {
     const [deuda, setDeuda] = useState(0)
+    const [limiteCredito, setLimiteCredito] = useState(0)
 
     useEffect(() => {
-        if (!clienteFact) { setDeuda(0); return }
-
-        const fetchDeuda = async () => {
+        if (!clienteFact || clienteFact.length < 2) {
+            setDeuda(0); setLimiteCredito(0); return
+        }
+        const calcDeuda = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('cuentas_por_cobrar')
-                    .select('monto')
-                    .eq('cliente', clienteFact)
-                    .neq('estado', 'COBRADA')
-                    .neq('estado', 'ANULADA')
+                const deudas = await db.ctas_cobrar
+                    .filter(c =>
+                        c.cliente === clienteFact &&
+                        c.estado !== 'COBRADA' &&
+                        c.estado !== 'ANULADA'
+                    ).toArray()
+                const total = deudas.reduce((acc, curr) => {
+                    const m = curr.monto_total || curr.monto || 0
+                    const c = curr.monto_cobrado || curr.monto_pagado || 0
+                    return acc + (m - c)
+                }, 0)
+                setDeuda(total)
 
-                if (!error && data) {
-                    const total = data.reduce((acc, curr) => acc + (curr.monto || 0), 0)
-                    setDeuda(total)
-                }
+                // Buscar límite de crédito del cliente
+                const cliente = await db.clientes.filter(c => c.nombre === clienteFact).first()
+                setLimiteCredito(cliente?.limite_credito || 0)
             } catch (e) { console.error("Error deuda:", e) }
         }
-        fetchDeuda()
+        calcDeuda()
     }, [clienteFact])
+
+    const excedeLimite = limiteCredito > 0 && tipoPago === 'CREDITO' && (deuda + cartTotal()) > limiteCredito
+
     return (
         <div className="col-pago bg-[var(--surface)] border border-[var(--border-var)] flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[280px] lg:max-w-[320px]">
 
@@ -40,6 +51,22 @@ export default function PanelPago({
                     <span className="material-icons-round text-[13px]">person</span>
                     Cliente
                 </label>
+
+                {(currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO' || currentUser?.rol === 'SUPERVISOR') && (
+                    <button
+                        onClick={() => { fetchNotasVendedores(); setShowNotasModal(true) }}
+                        className="w-full mb-4 flex items-center justify-center gap-2 bg-[var(--orange-var)]/10 text-[var(--orange-var)] border border-[var(--orange-var)] py-2 text-[10px] font-black uppercase tracking-widest hover:bg-[var(--orange-var)] hover:text-white transition-all shadow-sm group"
+                    >
+                        <span className="material-icons-round text-sm group-hover:animate-bounce">cloud_download</span>
+                        <span>Cargar Nota Vendedor</span>
+                        {notasPendientes?.length > 0 && (
+                            <span className="bg-[var(--orange-var)] text-white text-[8px] px-1.5 py-0.5 rounded-full ml-1">
+                                {notasPendientes.length}
+                            </span>
+                        )}
+                    </button>
+                )}
+
                 <ClienteSelector value={clienteFact} onChange={setClienteFact} />
 
                 {deuda > 0.01 && (
@@ -52,161 +79,206 @@ export default function PanelPago({
                         </div>
                     </div>
                 )}
+
+                {excedeLimite && (
+                    <div className="mt-2 p-2 bg-red-100 border-l-4 border-red-500">
+                        <div className="flex items-center gap-2">
+                            <span className="material-icons-round text-red-600 text-sm">block</span>
+                            <span className="text-[10px] font-black text-red-800 uppercase tracking-tighter">
+                                LÍMITE DE CRÉDITO EXCEDIDO — Máx: {fmtUSD(limiteCredito)}
+                            </span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="p-4 flex flex-col gap-4 flex-1 bg-[var(--surface)]">
 
                 {/* TOTALES */}
-                <div className="bg-[var(--surface2)] border border-[var(--border-var)] p-4 text-[var(--text-main)] shrink-0">
-                    <div className="space-y-2 mb-3">
-                        <div className="flex justify-between items-center opacity-70">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text2)]">Subtotal</span>
-                            <span className="text-xs font-mono">{fmtUSD(cartSubtotal())}</span>
+                <div className="bg-slate-900 border-b-8 border-[var(--teal)] p-6 text-white shrink-0 shadow-xl rounded-2xl mb-4">
+                    <div className="space-y-2 mb-4 opacity-80">
+                        <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subtotal</span>
+                            <span className="text-sm font-mono font-bold">{fmtUSD(cartSubtotal())}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text2)] flex items-center gap-2">
-                                IVA (16%)
-                                <button onClick={() => setIvaEnabled(!ivaEnabled)} className={`w-8 h-4 relative transition-all border border-[var(--border-var)] ${ivaEnabled ? 'bg-[var(--teal)]' : 'bg-[var(--surfaceDark)]'}`}>
-                                    <div className={`absolute top-0.5 w-[10px] h-[10px] bg-white transition-all ${ivaEnabled ? 'left-4' : 'left-0.5'}`}></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                Impuestos (IVA 16%)
+                                <button onClick={() => setIvaEnabled(!ivaEnabled)} className={`w-8 h-4 relative transition-all border border-white/20 rounded-full ${ivaEnabled ? 'bg-[var(--teal)]' : 'bg-slate-700'}`}>
+                                    <div className={`absolute top-0.5 w-[10px] h-[10px] bg-white rounded-full transition-all ${ivaEnabled ? 'left-4' : 'left-0.5'}`}></div>
                                 </button>
                             </span>
-                            <span className="text-xs font-mono text-[var(--teal)]">{fmtUSD(cartIva())}</span>
+                            <span className="text-sm font-mono font-bold text-[var(--teal)]">{fmtUSD(cartIva())}</span>
                         </div>
                         {cartIgtf() > 0 && (
-                            <div className="flex justify-between items-center animate-in fade-in slide-in-from-right-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--orange-var)]">IGTF (3%)</span>
-                                <span className="text-xs font-mono text-[var(--orange-var)]">{fmtUSD(cartIgtf())}</span>
+                            <div className="flex justify-between items-center text-orange-400 italic">
+                                <span className="text-[10px] font-black uppercase tracking-widest">Cargo IGTF (3%)</span>
+                                <span className="text-sm font-mono font-bold">{fmtUSD(cartIgtf())}</span>
                             </div>
                         )}
                     </div>
 
-                    <div className="pt-3 border-t border-[var(--border-var)]">
-                        <span className="text-[10px] font-black text-[var(--teal)] uppercase tracking-widest block mb-1">Total Final</span>
-                        <div className="flex justify-between items-end">
-                            <div className="text-3xl font-mono font-black text-[var(--teal)] leading-none">
+                    <div className="pt-4 border-t border-white/10">
+                        <span className="text-[9px] font-black text-[var(--teal)] uppercase tracking-[0.2em] block mb-2">Total a Pagar</span>
+                        <div className="flex justify-between items-baseline">
+                            <div className="text-4xl font-mono font-black text-white tracking-tighter">
                                 {fmtUSD(cartTotal())}
                             </div>
-                            <div className="text-[11px] font-mono font-bold text-[var(--text2)] opacity-70">
+                            <div className="text-[11px] font-mono font-black text-slate-400">
                                 {fmtBS(cartTotal(), tasa)}
                             </div>
                         </div>
                     </div>
-
-                    {/* QUICK PAYMENT SELECTOR */}
-                    <div className="grid grid-cols-4 gap-1 mt-3">
-                        {[
-                            { id: 'EFECTIVO_USD', label: 'EFECTIVO', icon: 'payments' },
-                            { id: 'PAGO_MOVIL', label: 'P.MÓVIL', icon: 'account_balance' },
-                            { id: 'ZELLE', label: 'ZELLE', icon: 'credit_card' },
-                            { id: 'EFECTIVO_BS', label: 'DIVISAS', icon: 'savings' },
-                        ].map(m => (
-                            <button
-                                key={m.id}
-                                onClick={() => openModalWithMethod(m.id)}
-                                className="flex flex-col items-center justify-center p-2 bg-[var(--surfaceDark)] border border-[var(--border-var)] hover:border-[var(--teal)] hover:bg-[var(--surface2)] text-[var(--text2)] hover:text-[var(--teal)] transition-all group cursor-pointer"
-                            >
-                                <span className="material-icons-round text-lg group-hover:scale-110 transition-transform">{m.icon}</span>
-                                <span className="text-[7px] font-black uppercase tracking-tighter mt-1">{m.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* PAGOS REALIZADOS */}
-                <div className="flex-1 min-h-0 flex flex-col">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold text-[var(--teal)] uppercase tracking-widest">Pagos</span>
-                        <button onClick={() => setShowPaymentModal(true)} className="text-[var(--teal)] text-[10px] font-black uppercase hover:underline flex items-center">
-                            <span className="material-icons-round text-[12px] mr-0.5">add</span> Agregar
-                        </button>
-                    </div>
-
-                    <div className="space-y-2 flex-1 overflow-y-auto custom-scroll min-h-[50px]">
-                        {payments.length === 0
-                            ? <div className="text-[10px] text-[var(--text2)] italic text-center py-3 border border-dashed border-[var(--border-var)] bg-[var(--surface2)]">Pendiente</div>
-                            : payments.map(p => (
-                                <div key={p.id} className="flex items-center justify-between bg-[var(--surface)] p-2 text-[var(--text-main)] border border-[var(--border-var)] shadow-sm">
-                                    <div className="flex flex-col">
-                                        <div className="text-[9px] font-bold uppercase">{p.metodo.replace(/_/g, ' ')}</div>
-                                        {['EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA'].includes(p.metodo) && (
-                                            <div className="text-[8px] font-mono text-[var(--text2)]">Bs {p.montoBS?.toFixed(2) || '—'}</div>
-                                        )}
+                </div>      {/* INTERFAZ CONDICIONAL: SOLO CAJEROS/ADMIN COBRAN, LOS DEMÁS ENVÍAN A CAJA CENTRAL */}
+                {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
+                    <>
+                        {/* QUICK PAYMENT SELECTOR (SOLO CAJEROS/ADMIN) */}
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                            {[
+                                { id: 'EFECTIVO_USD', label: 'EFECTIVO', icon: 'payments', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+                                { id: 'PAGO_MOVIL', label: 'P. MÓVIL', icon: 'smartphone', color: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50' },
+                                { id: 'ZELLE', label: 'ZELLE', icon: 'bolt', color: 'bg-purple-600', text: 'text-purple-700', bg: 'bg-purple-50' },
+                                { id: 'PUNTO_VENTA', label: 'T. DÉBITO', icon: 'credit_card', color: 'bg-blue-600', text: 'text-blue-700', bg: 'bg-blue-50' },
+                            ].map(m => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => openModalWithMethod(m.id)}
+                                    className={`flex items-center gap-3 p-3 ${m.bg} border-b-4 border-black/10 hover:border-black/20 active:translate-y-0.5 transition-all group cursor-pointer shadow-sm relative overflow-hidden`}
+                                >
+                                    <div className={`${m.color} text-white p-2 rounded-lg group-hover:scale-110 transition-transform`}>
+                                        <span className="material-icons-round text-lg">{m.icon}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="font-mono text-[11px] font-black">{fmtUSD(p.monto)}</div>
-                                        <button onClick={() => removePayment(p.id)} className="text-[var(--red-var)] hover:text-white hover:bg-[var(--red-var)] transition-colors w-5 h-5 flex justify-center items-center">
-                                            <span className="material-icons-round text-[14px]">cancel</span>
-                                        </button>
+                                    <span className={`text-[9px] font-black uppercase tracking-widest ${m.text}`}>{m.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* PAGOS REALIZADOS */}
+                        <div className="flex-1 min-h-0 flex flex-col mt-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold text-[var(--teal)] uppercase tracking-widest">Pagos</span>
+                                <button onClick={() => setShowPaymentModal(true)} className="text-[var(--teal)] text-[10px] font-black uppercase hover:underline flex items-center">
+                                    <span className="material-icons-round text-[12px] mr-0.5">add</span> Agregar
+                                </button>
+                            </div>
+
+                            <div className="space-y-2 flex-1 overflow-y-auto custom-scroll min-h-[50px]">
+                                {payments.length === 0
+                                    ? <div className="text-[10px] text-[var(--text2)] italic text-center py-3 border border-dashed border-[var(--border-var)] bg-[var(--surface2)]">Pendiente</div>
+                                    : payments.map(p => (
+                                        <div key={p.id} className="flex items-center justify-between bg-[var(--surface)] p-2 text-[var(--text-main)] border border-[var(--border-var)] shadow-sm">
+                                            <div className="flex flex-col">
+                                                <div className="text-[9px] font-bold uppercase">{p.metodo.replace(/_/g, ' ')}</div>
+                                                {['EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA'].includes(p.metodo) && (
+                                                    <div className="text-[8px] font-mono text-[var(--text2)]">Bs {p.montoBS?.toFixed(2) || '—'}</div>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-mono text-[11px] font-black">{fmtUSD(p.monto)}</div>
+                                                <button onClick={() => removePayment(p.id)} className="text-[var(--red-var)] hover:text-white hover:bg-[var(--red-var)] transition-colors w-5 h-5 flex justify-center items-center">
+                                                    <span className="material-icons-round text-[14px]">cancel</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+
+                            {paymentsTotal() > 0 && paymentsTotal() < cartTotal() - 0.01 && (
+                                <div className="bg-[var(--orange-var)]/10 p-2 border border-[var(--orange-var)]/50 mt-2 shrink-0">
+                                    <div className="flex justify-between items-center text-[var(--orange-var)]">
+                                        <span className="text-[9px] font-black uppercase">Falta:</span>
+                                        <span className="font-mono text-[11px] font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
                                     </div>
                                 </div>
-                            ))
-                        }
-                    </div>
+                            )}
 
-                    {paymentsTotal() > 0 && paymentsTotal() < cartTotal() - 0.01 && (
-                        <div className="bg-[var(--orange-var)]/10 p-2 border border-[var(--orange-var)]/50 mt-2 shrink-0">
-                            <div className="flex justify-between items-center text-[var(--orange-var)]">
-                                <span className="text-[9px] font-black uppercase">Falta:</span>
-                                <span className="font-mono text-[11px] font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
+                            {paymentsTotal() > cartTotal() + 0.01 && (
+                                <div className="bg-[var(--teal)]/10 p-2 border border-[var(--teal)]/50 mt-2 shrink-0">
+                                    <div className="flex justify-between items-center text-[var(--tealDark)] py-0.5">
+                                        <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto $:</span>
+                                        <span className="font-mono text-[11px] font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[var(--teal)] border-t border-[var(--teal)]/30 pt-1 mt-1">
+                                        <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto Bs:</span>
+                                        <span className="font-mono text-[11px] font-black">{fmtBS(paymentsTotal() - cartTotal(), tasa)}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* CONTADO / CREDITO */}
+                        <div className="shrink-0 space-y-3 mt-3">
+                            <div className="bg-[var(--surface2)] p-1 border border-[var(--border-var)] flex gap-1">
+                                {['CONTADO', 'CREDITO'].map(t => (
+                                    <button key={t} onClick={() => setTipoPago(t)}
+                                        className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase transition-all
+                            ${tipoPago === t ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)] hover:text-[var(--teal)]'}`}>
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {tipoPago === 'CREDITO' && (
+                                <div className="animate-in slide-in-from-top-2">
+                                    <label className="text-[9px] font-black text-[var(--teal)] mb-1 block uppercase">Vencimiento</label>
+                                    <input type="date" className="inp !py-1.5 !text-[11px] w-full bg-[var(--surface)]" value={vencFact} onChange={e => setVencFact(e.target.value)} />
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-var)]">
+                                <button className="w-full py-2 flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest bg-[var(--surface2)] border border-[var(--border-var)] text-[var(--text2)] hover:bg-[var(--surface)] transition-all"
+                                    onClick={procesarCotizacion}>
+                                    <span className="material-icons-round text-[14px]">assignment</span>
+                                    <span>Solo Cotizar</span>
+                                </button>
+
+                                <div className="flex gap-2">
+                                    <button className="w-10 bg-[var(--red-var)]/10 text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white flex items-center justify-center transition-colors shrink-0" onClick={clearCart} title="Vaciar Carrito">
+                                        <span className="material-icons-round text-[16px]">delete_sweep</span>
+                                    </button>
+                                    <button
+                                        disabled={loading}
+                                        className={`flex-1 py-2 flex items-center justify-center gap-2 font-black uppercase text-[11px] tracking-widest transition-all shadow-[var(--win-shadow)]
+                            ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none' : 'bg-[var(--teal)] hover:bg-[var(--tealDark)] text-white'}`}
+                                        onClick={procesarNota}>
+                                        <span className={`material-icons-round text-[16px] ${loading ? 'animate-spin' : ''}`}>
+                                            {loading ? 'sync' : 'check_circle'}
+                                        </span>
+                                        <span>{loading ? 'Procesando...' : 'Cerrar Venta'}</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    )}
-
-                    {paymentsTotal() > cartTotal() + 0.01 && (
-                        <div className="bg-[var(--teal)]/10 p-2 border border-[var(--teal)]/50 mt-2 shrink-0">
-                            <div className="flex justify-between items-center text-[var(--tealDark)] py-0.5">
-                                <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto $:</span>
-                                <span className="font-mono text-[11px] font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[var(--teal)] border-t border-[var(--teal)]/30 pt-1 mt-1">
-                                <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto Bs:</span>
-                                <span className="font-mono text-[11px] font-black">{fmtBS(paymentsTotal() - cartTotal(), tasa)}</span>
-                            </div>
+                    </>
+                ) : (
+                    <div className="flex flex-col gap-3 mt-4 flex-1 justify-end">
+                        <div className="text-center p-3 border border-dashed border-[var(--teal)]/50 bg-[var(--teal)]/5 rounded-lg mb-2">
+                            <span className="material-icons-round text-[var(--teal)] text-3xl mb-1 block animate-bounce">storefront</span>
+                            <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-widest">El cliente pagará en la</p>
+                            <p className="text-xs font-black text-[var(--teal)] uppercase tracking-widest">Caja Central</p>
                         </div>
-                    )}
-                </div>
 
-                {/* CONTADO / CREDITO */}
-                <div className="shrink-0 space-y-3">
-                    <div className="bg-[var(--surface2)] p-1 border border-[var(--border-var)] flex gap-1">
-                        {['CONTADO', 'CREDITO'].map(t => (
-                            <button key={t} onClick={() => setTipoPago(t)}
-                                className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase transition-all
-                ${tipoPago === t ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)] hover:text-[var(--teal)]'}`}>
-                                {t}
-                            </button>
-                        ))}
-                    </div>
-
-                    {tipoPago === 'CREDITO' && (
-                        <div className="animate-in slide-in-from-top-2">
-                            <label className="text-[9px] font-black text-[var(--teal)] mb-1 block uppercase">Vencimiento</label>
-                            <input type="date" className="inp !py-1.5 !text-[11px] w-full bg-[var(--surface)]" value={vencFact} onChange={e => setVencFact(e.target.value)} />
-                        </div>
-                    )}
-
-                    <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-var)]">
-                        <button className="w-full py-2 flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest bg-[var(--surface2)] border border-[var(--border-var)] text-[var(--text2)] hover:bg-[var(--surface)] transition-all"
+                        <button className="w-full py-3 flex items-center justify-center gap-2 font-bold uppercase text-[11px] tracking-widest bg-[var(--surface2)] border border-[var(--border-var)] text-[var(--text2)] hover:bg-[var(--surface)] transition-all shadow-sm"
                             onClick={procesarCotizacion}>
-                            <span className="material-icons-round text-[14px]">assignment</span>
-                            <span>Solo Cotizar</span>
+                            <span className="material-icons-round text-[16px]">assignment</span>
+                            <span>Imprimir Cotización</span>
                         </button>
 
                         <div className="flex gap-2">
-                            <button className="w-10 bg-[var(--red-var)]/10 text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white flex items-center justify-center transition-colors shrink-0" onClick={clearCart} title="Vaciar Carrito">
-                                <span className="material-icons-round text-[16px]">delete_sweep</span>
+                            <button className="w-12 bg-[var(--red-var)]/10 text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white flex items-center justify-center transition-colors shrink-0 shadow-[var(--win-shadow)]" onClick={clearCart} title="Vaciar Carrito">
+                                <span className="material-icons-round text-[18px]">delete_sweep</span>
                             </button>
                             <button
-                                className={`flex-1 py-2 flex items-center justify-center gap-2 font-black uppercase text-[11px] tracking-widest transition-all shadow-[var(--win-shadow)]
-                  ${(tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none' : 'bg-[var(--teal)] hover:bg-[var(--tealDark)] text-white'}`}
-                                onClick={procesarNota}>
-                                <span className="material-icons-round text-[16px]">check_circle</span>
-                                <span>Cerrar Venta</span>
+                                className={`flex-1 py-4 flex items-center justify-center gap-3 font-black uppercase text-xs tracking-widest transition-all shadow-[var(--win-shadow)]
+                                    bg-[var(--teal)] hover:bg-[var(--tealDark)] text-white hover:scale-[1.02]`}
+                                onClick={enviarCajaCentral}>
+                                <span className="material-icons-round text-[20px]">send</span>
+                                <span>Enviar a Caja</span>
                             </button>
                         </div>
                     </div>
-                </div>
-
+                )}
             </div>
         </div>
     )

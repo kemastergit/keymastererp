@@ -12,8 +12,12 @@ export async function logAction(user, accion, metadata = {}) {
     } = metadata
 
     try {
+        // Fallback para contextos sin HTTPS (crypto.randomUUID no disponible por IP)
+        const uid = (typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10))
         const logEntry = {
-            id: crypto.randomUUID(), // ID idempotente
+            id: uid,
             fecha: new Date(),
             usuario_id: user.id,
             usuario_nombre: user.nombre,

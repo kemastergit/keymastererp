@@ -110,6 +110,10 @@ export default function NavTop() {
   const { configEmpresa } = useStore()
 
   const filteredMenu = menu.map(item => {
+    const hasParentPerm = !item.perm || check(item.perm)
+    const hasParentFeature = !item.feature || configEmpresa?.[item.feature] === true
+    if (!hasParentPerm || !hasParentFeature) return null
+
     if (item.sub) {
       const sub = item.sub.filter(s => {
         const hasPerm = !s.perm || check(s.perm)
@@ -119,9 +123,6 @@ export default function NavTop() {
       if (sub.length === 0) return null
       return { ...item, sub }
     }
-    const hasPerm = !item.perm || check(item.perm)
-    const hasFeature = !item.feature || configEmpresa?.[item.feature] === true
-    if (!hasPerm || !hasFeature) return null
     return item
   }).filter(Boolean)
 

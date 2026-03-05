@@ -2,31 +2,37 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import useStore from '../../store/useStore'
 
-const main = [
-  { to: '/', ico: '🏠', label: 'Inicio' },
-  { to: '/facturacion', ico: '⚡', label: 'Ventas' },
-  { to: '/inventario', ico: '📦', label: 'Stock' },
-  { to: '/reportes', ico: '📊', label: 'Reportes' },
+import { usePermiso } from '../../hooks/usePermiso'
+
+const mainConfig = [
+  { to: '/', ico: '🏠', label: 'Inicio', perm: 'MENU_DASHBOARD' },
+  { to: '/facturacion', ico: '⚡', label: 'Ventas', perm: 'MENU_VENTAS' },
+  { to: '/inventario', ico: '📦', label: 'Stock', perm: 'MENU_INVENTARIO' },
+  { to: '/reportes', ico: '📊', label: 'Reportes', perm: 'MENU_REPORTES' },
 ]
 
-const extra = [
-  { to: '/cobrar', ico: '💳', label: 'Por Cobrar' },
-  { to: '/cotizaciones', ico: '📋', label: 'Cotizaciones' },
-  { to: '/clientes', ico: '👥', label: 'Clientes' },
-  { to: '/proveedores', ico: '🏭', label: 'Proveedores' },
-  { to: '/pagar', ico: '🏦', label: 'Por Pagar' },
-  { to: '/caja', ico: '🏧', label: 'Caja' },
-  { to: '/etiquetas', ico: '🏷️', label: 'Etiquetas' },
-  { id: 'help', ico: '❓', label: 'Ayuda' },
-  { to: '/config', ico: '⚙️', label: 'Config' },
+const extraConfig = [
+  { to: '/cobrar', ico: '💳', label: 'Por Cobrar', perm: 'MENU_COBRAR' },
+  { to: '/cotizaciones', ico: '📋', label: 'Cotizaciones', perm: 'MENU_COTIZACIONES' },
+  { to: '/clientes', ico: '👥', label: 'Clientes', perm: 'MENU_CLIENTES' },
+  { to: '/proveedores', ico: '🏭', label: 'Proveedores', perm: 'MENU_PROVEEDORES' },
+  { to: '/pagar', ico: '🏦', label: 'Por Pagar', perm: 'MENU_PAGAR' },
+  { to: '/caja', ico: '🏧', label: 'Caja', perm: 'MENU_CAJA' },
+  { to: '/etiquetas', ico: '🏷️', label: 'Etiquetas', perm: 'MENU_INVENTARIO' },
+  { id: 'help', ico: '❓', label: 'Ayuda', perm: null },
+  { to: '/config', ico: '⚙️', label: 'Config', perm: 'CONFIGURACION' },
 ]
 
 export default function NavBottom() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
+  const { check } = usePermiso()
   const setShowHelp = useStore(s => s.setShowHelp)
   const hideNav = useStore(s => s.hideNav)
   const setHideNav = useStore(s => s.setHideNav)
+
+  const main = mainConfig.filter(item => !item.perm || check(item.perm))
+  const extra = extraConfig.filter(item => !item.perm || check(item.perm))
 
   const handleExtra = (item) => {
     setOpen(false)

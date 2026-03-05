@@ -8,6 +8,7 @@ export default function ConfigPage() {
     const { configEmpresa, loadConfigEmpresa, updateConfigEmpresa, toast, btStatus, setBtStatus } = useStore()
     const [formData, setFormData] = useState(null)
     const [syncing, setSyncing] = useState(false)
+    const [unlockedCompany, setUnlockedCompany] = useState(false)
 
     useEffect(() => {
         loadConfigEmpresa()
@@ -54,6 +55,16 @@ export default function ConfigPage() {
         }
     }
 
+    const handleUnlockCompany = () => {
+        const pin = prompt('🛡️ INGRESE CÓDIGO MAESTRO DE SEGURIDAD NUCLEAR:')
+        if (pin === '11863329') {
+            setUnlockedCompany(true)
+            toast('🔓 Acceso Concedido: Núcleo Desbloqueado', 'success')
+        } else if (pin) {
+            toast('❌ Código Incorrecto. Sistema Bloqueado.', 'error')
+        }
+    }
+
     const handleSincronizacionMaestra = async () => {
         if (!confirm("🚨 ¿Iniciar sincronización masiva de Clientes, Usuarios y Cierres a la Nube?")) return
 
@@ -86,7 +97,8 @@ export default function ConfigPage() {
                     nombre: String(c.nombre || '').trim(),
                     telefono: c.telefono || '',
                     direccion: c.direccion || '',
-                    email: c.email || ''
+                    email: c.email || '',
+                    limite_credito: c.limite_credito || 0
                 })), { onConflict: 'rif' })
                 if (errC) throw errC
                 toast('🏢 Clientes sincronizados', 'ok')
@@ -127,115 +139,153 @@ export default function ConfigPage() {
             </header>
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-10">
-                {/* Datos Básicos */}
-                <div className="panel p-6 rounded-none space-y-4 shadow-[var(--win-shadow)] transition-none h-full">
-                    <h2 className="text-xl font-black text-[var(--teal)] mb-4 flex items-center gap-2 uppercase tracking-tight">
-                        🏢 Datos Fiscales
-                    </h2>
+                {/* Datos Básicos y Contactos - BLOQUEADOS CON CRISTAL BLINDADO */}
+                <div className="panel p-0 rounded-none shadow-[var(--win-shadow)] transition-none h-full relative overflow-hidden group col-span-1 md:col-span-2 flex flex-col md:flex-row gap-0">
+                    {!unlockedCompany && (
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-slate-900/20 backdrop-blur-[3px] text-center uppercase border border-slate-700/30">
+                            <div className="bg-slate-900/70 backdrop-blur-xl p-8 border border-white/10 rounded-2xl flex flex-col items-center shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] w-full max-w-lg mx-auto transition-all">
+                                <span className="material-icons-round text-5xl text-slate-300 mb-3 drop-shadow-md opacity-80">enhanced_encryption</span>
+                                <h3 className="text-slate-100 font-black text-lg tracking-widest mb-1 drop-shadow-sm">NÚCLEO PROTEGIDO</h3>
+                                <p className="text-slate-400 font-bold text-[9px] tracking-[0.2em] mb-6 leading-relaxed">DATOS DE LICENCIA ASIGNADA. ALTERAR METADATOS REQUIERE CÓDIGO DE AUTORIZACIÓN.</p>
+                                <button
+                                    type="button"
+                                    onClick={handleUnlockCompany}
+                                    className="bg-white/5 border border-white/10 text-slate-200 hover:text-white hover:bg-white/10 hover:border-white/30 font-black px-6 py-3 text-[10px] tracking-[0.3em] uppercase transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 cursor-pointer rounded-xl shadow-[0_4px_15px_rgba(0,0,0,0.2)] backdrop-blur-sm"
+                                >
+                                    <span className="material-icons-round text-sm opacity-70">vpn_key</span> DESBLOQUEAR
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Nombre de Empresa</label>
-                        <input
-                            type="text"
-                            name="nombre"
-                            value={formData.nombre}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                            required
-                        />
+                    <div className={`p-6 space-y-4 flex-1 border-b md:border-b-0 md:border-r border-[var(--border-var)] ${!unlockedCompany ? 'opacity-60 pointer-events-none select-none' : ''}`}>
+                        <h2 className="text-xl font-black text-[var(--teal)] mb-4 flex items-center gap-2 uppercase tracking-tight">
+                            🏢 Datos Fiscales
+                        </h2>
+
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Nombre de Empresa</label>
+                            <input
+                                type="text"
+                                name="nombre"
+                                value={formData.nombre}
+                                onChange={handleChange}
+                                disabled={!unlockedCompany}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner disabled:opacity-50"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">RIF</label>
+                            <input
+                                type="text"
+                                name="rif"
+                                value={formData.rif}
+                                onChange={handleChange}
+                                disabled={!unlockedCompany}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner disabled:opacity-50"
+                                required
+                            />
+                        </div>
+
+
+
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Dirección Línea 1</label>
+                            <input
+                                type="text"
+                                name="direccion1"
+                                value={formData.direccion1}
+                                onChange={handleChange}
+                                disabled={!unlockedCompany}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner disabled:opacity-50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Dirección Línea 2</label>
+                            <input
+                                type="text"
+                                name="direccion2"
+                                value={formData.direccion2}
+                                onChange={handleChange}
+                                disabled={!unlockedCompany}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner disabled:opacity-50"
+                            />
+                        </div>
                     </div>
 
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">RIF</label>
-                        <input
-                            type="text"
-                            name="rif"
-                            value={formData.rif}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                            required
-                        />
-                    </div>
+                    <div className={`p-6 space-y-4 flex-1 ${!unlockedCompany ? 'opacity-60 pointer-events-none select-none' : ''}`}>
+                        <h2 className="text-xl font-black text-[var(--teal)] mb-4 flex items-center gap-2 uppercase tracking-tight">
+                            📞 Contacto y Mensajes
+                        </h2>
 
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Dirección Línea 1</label>
-                        <input
-                            type="text"
-                            name="direccion1"
-                            value={formData.direccion1}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
-                    </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Teléfonos</label>
+                            <input
+                                type="text"
+                                name="telefonos"
+                                value={formData.telefonos}
+                                onChange={handleChange}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
+                            />
+                        </div>
 
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Dirección Línea 2</label>
-                        <input
-                            type="text"
-                            name="direccion2"
-                            value={formData.direccion2}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
-                    </div>
-                </div>
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Email</label>
+                            <input
+                                type="email"
+                                name="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
+                            />
+                        </div>
 
-                {/* Contacto y Mensajes */}
-                <div className="panel p-6 rounded-none space-y-4 shadow-[var(--win-shadow)] transition-none h-full">
-                    <h2 className="text-xl font-black text-[var(--teal)] mb-4 flex items-center gap-2 uppercase tracking-tight">
-                        📞 Contacto y Mensajes
-                    </h2>
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Mensaje Bienvenida (Ticket)</label>
+                            <input
+                                type="text"
+                                name="mensaje_bienvenida"
+                                value={formData.mensaje_bienvenida}
+                                onChange={handleChange}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
+                            />
+                        </div>
 
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Teléfonos</label>
-                        <input
-                            type="text"
-                            name="telefonos"
-                            value={formData.telefonos}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Email</label>
-                        <input
-                            type="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Mensaje Bienvenida (Ticket)</label>
-                        <input
-                            type="text"
-                            name="mensaje_bienvenida"
-                            value={formData.mensaje_bienvenida}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Mensaje Pie (Ticket)</label>
-                        <input
-                            type="text"
-                            name="mensaje_pie"
-                            value={formData.mensaje_pie}
-                            onChange={handleChange}
-                            className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
-                        />
+                        <div>
+                            <label className="block text-[10px] uppercase font-black text-[var(--text2)] mb-1">Mensaje Pie (Ticket)</label>
+                            <input
+                                type="text"
+                                name="mensaje_pie"
+                                value={formData.mensaje_pie}
+                                onChange={handleChange}
+                                className="inp w-full bg-[var(--surfaceDark)] border border-[var(--border-var)] rounded-none p-3 text-[var(--text-main)] focus:border-[var(--teal)] outline-none transition-none shadow-inner"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Impresión y Otros */}
                 <div className="panel p-6 rounded-none space-y-4 shadow-[var(--win-shadow)] transition-none col-span-1 md:col-span-2">
                     <h2 className="text-xl font-black text-[var(--teal)] mb-4 flex items-center gap-2 uppercase tracking-tight">
-                        🖨️ Configuración de Impresión
+                        🖥️ Configuración de Terminal e Impresión
                     </h2>
+
+                    <div className="p-5 bg-[var(--surfaceDark)] border border-[var(--orange-var)] rounded-none mb-6">
+                        <label className="block text-xs uppercase font-black text-[var(--orange-var)] mb-2">Nombre / Prefijo de Terminal (Módulo Actual)</label>
+                        <input
+                            type="text"
+                            name="terminal_prefix"
+                            value={formData.terminal_prefix || ''}
+                            onChange={handleChange}
+                            placeholder="EJ: CAJA-01, MOVIL, SUR"
+                            className="inp w-full bg-[var(--surface)] border border-[var(--border-var)] rounded-none p-4 text-[var(--text-main)] text-lg focus:border-[var(--teal)] outline-none transition-none shadow-inner font-black"
+                            required
+                        />
+                        <p className="text-[9px] text-[var(--text2)] mt-2 font-bold uppercase italic">📡 Este es el nombre público de esta caja/dispositivo. Cada equipo debe tener un nombre diferente para evitar facturas duplicadas en la nube.</p>
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">

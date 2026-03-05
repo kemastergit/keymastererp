@@ -4,10 +4,12 @@ import useStore from '../../store/useStore'
 import { usePermiso } from '../../hooks/usePermiso'
 import { menu } from './menu'
 import MobileSidebar from './MobileSidebar'
+import { usePWA } from '../../hooks/usePWA'
 
 export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders }) {
   const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount } = useStore()
   const { check } = usePermiso()
+  const { canInstall, install, isInstalled } = usePWA()
   const [showDrawer, setShowDrawer] = useState(false)
 
   useEffect(() => {
@@ -26,12 +28,13 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
   }
 
   const filteredMenu = menu.map(item => {
+    if (item.perm && !check(item.perm)) return null // <-- SE AÑADIÓ ESTO PRIMERO
+
     if (item.sub) {
       const sub = item.sub.filter(s => !s.perm || check(s.perm))
       if (sub.length === 0) return null
       return { ...item, sub }
     }
-    if (item.perm && !check(item.perm)) return null
     return item
   }).filter(Boolean)
 
@@ -113,28 +116,36 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
           )}
 
           {/* Acceso directo a Pedidos en Línea - solo desktop */}
-          <a
-            href="/pedidos-web"
-            className="relative hidden md:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 text-white hover:bg-white/10 transition-all rounded-lg"
-          >
-            <span className="material-icons-round text-lg">shopping_cart_checkout</span>
-            <span className="text-[9px] font-black uppercase tracking-widest">Pedidos</span>
-            {pedidosWeb.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[var(--tealDark)] shadow-lg animate-pulse">
-                {pedidosWeb.length}
-              </span>
-            )}
-          </a>
+          {currentUser?.rol !== 'VENDEDOR' && (
+            <a
+              href="/pedidos-web"
+              className="relative hidden md:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 text-white hover:bg-white/10 transition-all rounded-lg"
+            >
+              <span className="material-icons-round text-lg">shopping_cart_checkout</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">Pedidos</span>
+              {pedidosWeb.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[var(--tealDark)] shadow-lg animate-pulse">
+                  {pedidosWeb.length}
+                </span>
+              )}
+            </a>
+          )}
 
           {/* Tasa BCV */}
           {!hideTasa && (
-            <div className="flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-2xl group cursor-pointer hover:bg-white/10 transition-all"
+            <div className={`flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-2xl group transition-all ${currentUser?.rol === 'VENDEDOR' ? 'cursor-default opacity-90' : 'cursor-pointer hover:bg-white/10'}`}
               onClick={() => {
+                if (currentUser?.rol === 'VENDEDOR') {
+                  toast('Solo Administradores o Cajeros pueden actualizar la tasa', 'warn')
+                  return
+                }
+
                 const edit = () => {
                   const val = prompt('Nueva Tasa BCV:', tasa)
-                  if (val) setTasa(val)
+                  if (val && !isNaN(parseFloat(val))) setTasa(parseFloat(val))
                 }
-                if (currentUser?.rol === 'ADMIN') edit()
+
+                if (currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO') edit()
                 else askAdmin(edit)
               }}>
               <div className="text-right">
@@ -147,6 +158,20 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
                 <span className="material-icons-round text-sm">currency_exchange</span>
               </div>
             </div>
+          )}
+
+          {/* BOTÓN INSTALAR PWA */}
+          {canInstall && !isInstalled && (
+            <button
+              onClick={install}
+              className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-cyan-700 border border-cyan-400 px-3 md:px-4 py-1.5 md:py-2 text-white hover:scale-105 transition-all rounded-xl shadow-lg shadow-cyan-900/40"
+            >
+              <span className="material-icons-round text-lg animate-bounce">install_desktop</span>
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Disponible</span>
+                <span className="text-[10px] font-black uppercase tracking-tight">Instalar</span>
+              </div>
+            </button>
           )}
 
           {/* Usuario Info */}

@@ -1,7 +1,7 @@
 import { fmtUSD } from '../../utils/format'
 
 export default function Catalogo({
-    busq, setBusq, showDrop, setShowDrop, articulos, addToCart, addGeneric, cart = []
+    busq, setBusq, showDrop, setShowDrop, articulos, addToCart, addGeneric, cart = [], removeFromCart, updateQty
 }) {
     const isInCart = (id) => cart.some(item => item.id === id)
 
@@ -89,12 +89,6 @@ export default function Catalogo({
                                     <td className="p-3 min-w-[200px]">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <div className="font-bold text-[var(--text-main)] leading-tight text-sm">{a.descripcion}</div>
-                                            {q > 0 && (
-                                                <div className="flex items-center gap-1 bg-[var(--green-var)]/10 px-1.5 py-0.5 rounded border border-[var(--green-var)]/20 shadow-sm transition-all whitespace-nowrap">
-                                                    <span className="material-icons-round text-[var(--green-var)] text-[10px]">shopping_cart</span>
-                                                    <span className="text-[var(--green-var)] font-black text-[9px]">{q}</span>
-                                                </div>
-                                            )}
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] text-[var(--text2)] font-medium uppercase tracking-tighter">{a.marca}</span>
@@ -113,14 +107,30 @@ export default function Catalogo({
                                     </td>
                                     <td className="p-3 font-mono text-right font-black text-[var(--text-main)] whitespace-nowrap">{fmtUSD(a.precio)}</td>
                                     <td className="p-3 text-right whitespace-nowrap">
-                                        <button className={`w-8 h-8 border border-[var(--border-var)] transition-none inline-flex items-center justify-center shadow-[var(--win-shadow)]
-                                            ${(a.stock ?? 0) === 0
-                                                ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none'
-                                                : 'bg-[var(--teal)] text-white hover:bg-[var(--tealDark)] active:scale-90'}`}
-                                            onClick={() => addToCart(a)}
-                                            disabled={(a.stock ?? 0) === 0}>
-                                            <span className="material-icons-round text-sm">add</span>
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            {q > 0 && (
+                                                <>
+                                                    <button className="w-8 h-8 border border-[var(--border-var)] transition-none inline-flex items-center justify-center shadow-[var(--win-shadow)] bg-[var(--surface2)] text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white active:scale-90"
+                                                        onClick={() => {
+                                                            if (q === 1) removeFromCart(a.id)
+                                                            else updateQty(a.id, q - 1)
+                                                        }}>
+                                                        <span className="material-icons-round text-sm">remove</span>
+                                                    </button>
+                                                    <div className="flex items-center justify-center gap-1 bg-[var(--green-var)] text-white w-8 h-8 rounded shadow-sm font-['IBM_Plex_Mono'] transition-all">
+                                                        <span className="font-black text-[14px]">{q}</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <button className={`w-8 h-8 border border-[var(--border-var)] transition-none inline-flex items-center justify-center shadow-[var(--win-shadow)]
+                                                ${(a.stock ?? 0) === 0
+                                                    ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none'
+                                                    : 'bg-[var(--teal)] text-white hover:bg-[var(--tealDark)] active:scale-90'}`}
+                                                onClick={() => addToCart(a)}
+                                                disabled={(a.stock ?? 0) === 0}>
+                                                <span className="material-icons-round text-sm">add</span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             )

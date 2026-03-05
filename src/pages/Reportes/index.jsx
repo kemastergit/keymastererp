@@ -6,6 +6,7 @@ import { fmtUSD, fmtDate, today } from '../../utils/format'
 import { printReporte, printLibroVentas, printLibroCompras, printLibroInventarioValorado } from '../../utils/print'
 import { useReactToPrint } from 'react-to-print'
 import TicketTermico from '../../components/Ticket/TicketTermico'
+import TicketCierre from '../../components/Ticket/TicketCierre'
 import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
@@ -39,6 +40,7 @@ export default function Reportes() {
   const [showReimprimirModal, setShowReimprimirModal] = useState(false)
   const [selectedCierre, setSelectedCierre] = useState(null)
   const [showCierreModal, setShowCierreModal] = useState(false)
+  const [showCierreGeneralModal, setShowCierreGeneralModal] = useState(false)
 
   // Estados Anulación
   const [showAnularModal, setShowAnularModal] = useState(false)
@@ -52,6 +54,13 @@ export default function Reportes() {
   const [cloudVentas, setCloudVentas] = useState([])
   const [loadingCloud, setLoadingCloud] = useState(false)
   const [highlightedIds, setHighlightedIds] = useState(new Set())
+
+  // 👤 Filtro por vendedor
+  const [filtroVendedor, setFiltroVendedor] = useState('TODOS')
+
+  // ☁️ Estado de Cierres en Nube
+  const [cloudCierres, setCloudCierres] = useState([])
+  const [loadingCierres, setLoadingCierres] = useState(false)
 
   // ☁️ Escuchar Ventas de TODOS los Vendedores en Tiempo Real
   useEffect(() => {
@@ -90,6 +99,44 @@ export default function Reportes() {
 
     return () => supabase.removeChannel(channel)
   }, [])
+
+  // ☁️ Cargar Cierres de la Nube al cambiar a la pestaña Cierres
+  useEffect(() => {
+    if (tab !== 'cierres' && cloudCierres.length > 0) return
+
+    const fetchCierres = async () => {
+      setLoadingCierres(true)
+      const { data, error } = await supabase
+        .from('cierres_caja')
+        .select('*')
+        .order('fecha_apertura', { ascending: false })
+      if (!error && data) setCloudCierres(data)
+      setLoadingCierres(false)
+    }
+
+    if (tab === 'cierres') fetchCierres()
+  }, [tab])
+
+  // Cierre General — jala cierres de HOY desde Supabase
+  const [cierreGeneralData, setCierreGeneralData] = useState([])
+  const [loadingCierreGeneral, setLoadingCierreGeneral] = useState(false)
+
+  useEffect(() => {
+    if (!showCierreGeneralModal) return
+    const fetchGeneral = async () => {
+      setLoadingCierreGeneral(true)
+      const hoy = today() // 'YYYY-MM-DD'
+      const { data, error } = await supabase
+        .from('cierres_caja')
+        .select('*')
+        .gte('fecha_cierre', hoy + 'T00:00:00')
+        .lte('fecha_cierre', hoy + 'T23:59:59')
+        .order('fecha_cierre', { ascending: true })
+      if (!error && data) setCierreGeneralData(data)
+      setLoadingCierreGeneral(false)
+    }
+    fetchGeneral()
+  }, [showCierreGeneralModal])
 
   useEffect(() => {
     loadConfigEmpresa()
@@ -192,6 +239,40 @@ export default function Reportes() {
   const abonos = useLiveQuery(() => db.abonos.toArray(), [], [])
   const cierres = useLiveQuery(() => db.sesiones_caja.where('estado').equals('CERRADA').toArray().then(arr => [...arr].reverse()), [], [])
 
+  // 🔄 Unificar Cierres (Locales + Nube)
+  const allCierres = useMemo(() => {
+    const myDeviceId = localStorage.getItem('deviceId') || 'DEV-UNKNOWN'
+
+    const merged = [...cierres.map(c => ({ ...c, isCloud: false, terminal_nombre: myDeviceId }))]
+
+    cloudCierres.forEach(cc => {
+      // Solo omitimos si es de ESTE dispositivo y ya existe localmente
+      const isMio = cc.id_sesion_local?.startsWith(`${myDeviceId}-`)
+      const localId = isMio ? Number(cc.id_sesion_local.substring(myDeviceId.length + 1)) : null
+      const yaLoTengoLocal = isMio && merged.find(c => c.id === localId)
+
+      if (!yaLoTengoLocal) {
+        merged.push({
+          id: cc.id_sesion_local || cc.id,
+          fecha_apertura: cc.fecha_apertura,
+          fecha_cierre: cc.fecha_cierre,
+          usuario: cc.usuario || 'SISTEMA',
+          terminal_nombre: cc.terminal_nombre || cc.id_sesion_local?.split('-')[0] || 'NUBE',
+          notas_del_dia: Array(cc.notas_count || 0).fill(1),
+          cierre_z: cc.desglose || { esperadoUsd: cc.ventas_totales_usd, esperadoBs: cc.efectivo_bs },
+          monto_inicial_usd: cc.desglose?.inicialUsd ?? 0,
+          monto_inicial_bs: cc.desglose?.inicialBs ?? 0,
+          monto_fisico_usd: cc.monto_fisico_usd ?? cc.desglose?.fisicoUsd ?? 0,
+          diferencia_usd: cc.diferencia_usd,
+          diferencia_bs: cc.diferencia_bs,
+          isCloud: true
+        })
+      }
+    })
+
+    return merged.sort((a, b) => new Date(b.fecha_apertura) - new Date(a.fecha_apertura))
+  }, [cierres, cloudCierres])
+
   // 📊 Datos para P&L (Estado de Resultados)
   const devolucionesPeriodo = useLiveQuery(
     () => db.ventas.filter(v => {
@@ -243,7 +324,40 @@ export default function Reportes() {
     return merged.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
   }, [ventas, cloudVentas])
 
-  const totalVentas = allVentas.filter(v => v.estado !== 'ANULADA').reduce((s, v) => s + (v.total || 0), 0)
+  // 👤 Lista única de vendedores para el dropdown
+  const vendedoresUnicos = useMemo(() => {
+    const set = new Set()
+    allVentas.forEach(v => {
+      const nombre = v.vendedor || v.cajero_nombre || 'SISTEMA'
+      if (nombre) set.add(nombre)
+    })
+    return [...set].sort()
+  }, [allVentas])
+
+  // 👤 Ventas filtradas por vendedor seleccionado
+  const allVentasFiltradas = useMemo(() => {
+    if (filtroVendedor === 'TODOS') return allVentas
+    return allVentas.filter(v => {
+      const nombre = v.vendedor || v.cajero_nombre || 'SISTEMA'
+      return nombre === filtroVendedor
+    })
+  }, [allVentas, filtroVendedor])
+
+  // 👤 Ranking de ventas por cajero/vendedor
+  const resumenPorVendedor = useMemo(() => {
+    const mapa = {}
+    allVentas.filter(v => v.estado !== 'ANULADA').forEach(v => {
+      const nombre = v.vendedor || v.cajero_nombre || 'SISTEMA'
+      if (!mapa[nombre]) mapa[nombre] = { total: 0, notas: 0 }
+      mapa[nombre].total += v.total || 0
+      mapa[nombre].notas += 1
+    })
+    return Object.entries(mapa)
+      .map(([nombre, datos]) => ({ nombre, ...datos }))
+      .sort((a, b) => b.total - a.total)
+  }, [allVentas])
+
+  const totalVentas = allVentasFiltradas.filter(v => v.estado !== 'ANULADA').reduce((s, v) => s + (v.total || 0), 0)
 
   const porCobrarTotal = ctas_cobrar.reduce((s, c) => {
     const pagos = abonos.filter(a => a.cuenta_id === c.id && a.tipo_cuenta === 'COBRAR').reduce((sum, a) => sum + a.monto, 0)
@@ -284,13 +398,14 @@ export default function Reportes() {
       })
       printReporte('Cuentas por Pagar Pendientes', ['PROVEEDOR', 'CONCEPTO', 'TOTAL', 'PENDIENTE', 'VENCIMIENTO'], data, { 'TOTAL POR PAGAR': fmtUSD(porPagarTotal) })
     } else if (tab === 'cierres') {
-      const data = cierres.map(c => [
-        fmtDate(c.fecha_apertura), c.usuario || '—',
+      const data = allCierres.map(c => [
+        fmtDate(c.fecha_apertura),
+        c.isCloud ? `${c.usuario} (${c.terminal_nombre || 'NUBE'})` : (c.usuario || '—'),
         c.notas_del_dia?.length || 0,
         fmtUSD(c.cierre_z?.esperadoUsd || 0),
         fmtUSD(c.diferencia_usd || 0)
       ])
-      printReporte('Historial de Cierres Z', ['FECHA', 'CAJERO', 'NOTAS', 'TOTAL USD', 'DIFERENCIA'], data)
+      printReporte('Historial Global de Cierres Z', ['FECHA', 'CAJERO', 'NOTAS', 'TOTAL USD', 'DIFERENCIA'], data)
     } else if (tab === 'pyl') {
       const ventasBrutas = totalVentas
       const totalDev = devolucionesPeriodo.reduce((s, d) => s + (d.total || 0), 0)
@@ -399,6 +514,22 @@ export default function Reportes() {
             <input type="date" className="inp !py-2 !px-3 w-40" value={hasta} onChange={e => setHasta(e.target.value)} />
           </div>
         </div>
+        {/* Filtro Vendedor — solo visible en tab ventas */}
+        {tab === 'ventas' && (
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2 py-1">
+            <span className="material-icons-round text-sm text-slate-400">person</span>
+            <select
+              className="bg-transparent border-none text-[11px] font-black text-slate-600 focus:ring-0 pr-1 cursor-pointer"
+              value={filtroVendedor}
+              onChange={e => setFiltroVendedor(e.target.value)}
+            >
+              <option value="TODOS">TODOS LOS VENDEDORES</option>
+              {vendedoresUnicos.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex gap-2 w-full sm:w-auto">
           {tab === 'ventas' && (
             <>
@@ -467,7 +598,7 @@ export default function Reportes() {
             </div>
             {/* Mobile cards */}
             <div className="block md:hidden divide-y divide-[var(--border-var)]">
-              {allVentas.map(v => (
+              {allVentasFiltradas.map(v => (
                 <div key={v.id} className={`p-4 active:bg-[var(--surfaceDark)] hover:bg-[var(--surface2)] transition-none cursor-pointer ${highlightedIds.has(v.id) ? 'radar-glow' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -488,7 +619,7 @@ export default function Reportes() {
                   </div>
                 </div>
               ))}
-              {allVentas.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No se encontraron ventas</div>}
+              {allVentasFiltradas.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No se encontraron ventas</div>}
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
@@ -504,7 +635,7 @@ export default function Reportes() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {allVentas.map(v => (
+                  {allVentasFiltradas.map(v => (
                     <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${highlightedIds.has(v.id) ? 'radar-glow shadow-inner' : ''}`}>
                       <td className="p-4 font-mono text-[#0d9488] font-black">#{v.nro}</td>
                       <td className="p-4 text-[11px] text-slate-500 font-bold">{fmtDate(v.fecha)}</td>
@@ -534,7 +665,7 @@ export default function Reportes() {
                       </td>
                     </tr>
                   ))}
-                  {allVentas.length === 0 && <tr><td colSpan={6} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No se encontraron ventas</td></tr>}
+                  {allVentasFiltradas.length === 0 && <tr><td colSpan={6} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No se encontraron ventas</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -567,6 +698,50 @@ export default function Reportes() {
                   <span className="text-2xl font-mono font-bold text-[var(--teal)]">{fmtUSD(totalVentas)}</span>
                 </div>
               </div>
+            </div>
+
+            {/* 👤 RANKING POR VENDEDOR */}
+            <div className="panel p-0 overflow-hidden">
+              <div className="p-3 border-b border-[var(--border-var)] bg-[var(--surface2)] flex items-center gap-2">
+                <span className="material-icons-round text-sm text-[var(--teal)]">leaderboard</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">Ventas por Vendedor</span>
+              </div>
+              <div className="divide-y divide-[var(--border-var)]">
+                {resumenPorVendedor.map((v, i) => (
+                  <div key={v.nombre}
+                    className={`flex items-center justify-between p-3 cursor-pointer transition-none hover:bg-[var(--surfaceDark)] ${filtroVendedor === v.nombre ? 'bg-[var(--teal)]/10 border-l-2 border-[var(--teal)]' : ''}`}
+                    onClick={() => setFiltroVendedor(filtroVendedor === v.nombre ? 'TODOS' : v.nombre)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-[var(--text2)] w-4">{i + 1}</span>
+                      <div>
+                        <div className="text-[11px] font-black text-[var(--text-main)] uppercase">{v.nombre}</div>
+                        <div className="text-[9px] text-[var(--text2)] font-bold">{v.notas} nota{v.notas !== 1 ? 's' : ''}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono font-black text-[var(--teal)] text-sm">{fmtUSD(v.total)}</div>
+                      <div className="text-[9px] text-[var(--text2)] font-bold">
+                        {totalVentas > 0 ? ((v.total / allVentas.filter(x => x.estado !== 'ANULADA').reduce((s, x) => s + (x.total || 0), 0)) * 100).toFixed(1) : 0}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {resumenPorVendedor.length === 0 && (
+                  <div className="text-center text-[var(--text2)] py-8 text-[10px] font-bold uppercase">Sin datos</div>
+                )}
+              </div>
+              {filtroVendedor !== 'TODOS' && (
+                <div className="p-2 border-t border-[var(--border-var)] bg-[var(--surface2)]">
+                  <button
+                    onClick={() => setFiltroVendedor('TODOS')}
+                    className="w-full text-[9px] font-black uppercase text-[var(--teal)] hover:text-[var(--tealDark)] tracking-widest flex items-center justify-center gap-1"
+                  >
+                    <span className="material-icons-round text-xs">close</span>
+                    Quitar filtro — Ver todos
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="bg-[var(--surface2)] border border-[var(--border-var)] p-4 rounded-none shadow-[var(--win-shadow)] relative overflow-hidden">
@@ -792,17 +967,29 @@ export default function Reportes() {
       {
         tab === 'cierres' && (
           <div className="panel p-0 overflow-hidden">
-            <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+            <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)] flex items-center justify-between">
               <div className="panel-title mb-0">Historial de Cierres Z</div>
+              {currentUser?.rol === 'ADMIN' && (
+                <button
+                  onClick={() => setShowCierreGeneralModal(true)}
+                  className="btn bg-[var(--teal)] text-white shadow-[var(--win-shadow)] font-black text-xs uppercase tracking-widest px-6 !py-3 animate-pulse-slow border border-[var(--tealDark)] cursor-pointer hover:scale-105 transition-transform"
+                >
+                  <span className="material-icons-round text-lg mr-2">military_tech</span>
+                  CIERRE GENERAL (Z MAESTRO)
+                </button>
+              )}
             </div>
             {/* Mobile cards */}
             <div className="block md:hidden divide-y divide-[var(--border-var)]">
-              {cierres.map(c => (
+              {allCierres.map(c => (
                 <div key={c.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-bold text-[var(--text-main)] text-sm">{fmtDate(c.fecha_apertura)}</p>
-                      <p className="text-[10px] text-[var(--text2)] uppercase font-bold">{c.usuario}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-[10px] text-[var(--text2)] uppercase font-bold">{c.usuario}</p>
+                        {c.isCloud && <span className="text-[8px] bg-[var(--teal)] text-white px-1 rounded font-black">NUBE ({c.terminal_nombre || 'SUCURSAL'})</span>}
+                      </div>
                       <span className="badge badge-g mt-1">{c.notas_del_dia?.length || 0} notas</span>
                     </div>
                     <div className="text-right shrink-0">
@@ -816,7 +1003,7 @@ export default function Reportes() {
                   </div>
                 </div>
               ))}
-              {cierres.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No hay cierres registrados</div>}
+              {allCierres.length === 0 && <div className="text-center text-[var(--text2)] py-12 text-[10px] font-bold uppercase">No hay cierres registrados</div>}
             </div>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto min-h-[400px]">
@@ -833,10 +1020,13 @@ export default function Reportes() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {cierres.map(c => (
+                  {allCierres.map(c => (
                     <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 font-black text-slate-700">{fmtDate(c.fecha_apertura)}</td>
-                      <td className="p-4 text-slate-500 text-[11px] font-black uppercase">{c.usuario}</td>
+                      <td className="p-4 text-slate-500 text-[11px] font-black uppercase">
+                        {c.usuario}
+                        {c.isCloud && <span className="ml-2 text-[8px] bg-[#0d9488] text-white px-1.5 py-0.5 rounded font-black shadow-sm">NUBE ({c.terminal_nombre || 'SUCURSAL'})</span>}
+                      </td>
                       <td className="p-4 text-center">
                         <span className="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black border border-indigo-100">
                           {c.notas_del_dia?.length || 0} ITEMS
@@ -855,7 +1045,7 @@ export default function Reportes() {
                       </td>
                     </tr>
                   ))}
-                  {cierres.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No hay cierres registrados</td></tr>}
+                  {allCierres.length === 0 && <tr><td colSpan={7} className="text-center text-slate-400 py-12 tracking-widest text-[10px] font-black uppercase opacity-50">No hay cierres registrados</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1086,6 +1276,103 @@ export default function Reportes() {
       </Modal>
 
       {/* Modal Detalle de Cierre */}
+      <Modal open={showCierreGeneralModal} onClose={() => setShowCierreGeneralModal(false)} title="CIERRE GENERAL (Z MAESTRO) DEL DÍA" wide>
+        {loadingCierreGeneral ? (
+          <div className="p-12 text-center text-[var(--text2)] font-black uppercase tracking-widest animate-pulse">⏳ Cargando cierres del día...</div>
+        ) : cierreGeneralData.length === 0 ? (
+          <div className="p-12 text-center text-[var(--text2)] font-black uppercase tracking-widest">No hay cierres registrados hoy</div>
+        ) : (() => {
+          // Calcular totales consolidados
+          const totalUsd = cierreGeneralData.reduce((s, c) => s + (c.ventas_totales_usd || 0), 0)
+          const totEfecUsd = cierreGeneralData.reduce((s, c) => s + (c.desglose?.efectivoUsd || 0), 0)
+          const totZelle = cierreGeneralData.reduce((s, c) => s + (c.desglose?.zelle || 0), 0)
+          const totOtros = cierreGeneralData.reduce((s, c) => s + (c.desglose?.otros || 0), 0)
+          const totCredito = cierreGeneralData.reduce((s, c) => s + (c.desglose?.credito || 0), 0)
+          const totEfecBs = cierreGeneralData.reduce((s, c) => s + (c.desglose?.efectivoBs || 0), 0)
+          const totMovil = cierreGeneralData.reduce((s, c) => s + (c.desglose?.pagoMovil || 0), 0)
+          const totPunto = cierreGeneralData.reduce((s, c) => s + (c.desglose?.punto || 0), 0)
+          const totNotas = cierreGeneralData.reduce((s, c) => s + (c.notas_count || 0), 0)
+          const todasCuadradas = cierreGeneralData.every(c => Math.abs(c.diferencia_usd || 0) < 0.10)
+
+          return (
+            <div className="space-y-4 -m-2">
+              {/* Header */}
+              <div className="bg-slate-900 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-3">
+                <div>
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">CONSOLIDADO MAESTRO — {today()}</div>
+                  <div className="text-2xl font-black text-white">{cierreGeneralData.length} CAJAS CERRADAS</div>
+                </div>
+                <div className={`px-4 py-2 rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2 border ${todasCuadradas ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
+                  <span className={`w-2 h-2 rounded-full ${todasCuadradas ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                  {todasCuadradas ? 'TODAS LAS CAJAS CUADRADAS ✓' : 'HAY DESCUADRES — REVISAR'}
+                </div>
+              </div>
+
+              {/* Tabla por caja */}
+              <div className="overflow-x-auto px-2">
+                <table className="w-full border-separate border-spacing-0 text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="p-3 text-left font-black uppercase tracking-widest border-r border-slate-700">Cajero / Terminal</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Ef. USD</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Zelle</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Otros</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Crédito</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Ef. Bs</th>
+                      <th className="p-3 text-right font-black uppercase tracking-widest border-r border-slate-700">Total USD</th>
+                      <th className="p-3 text-center font-black uppercase tracking-widest">Dif</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cierreGeneralData.map((c, i) => {
+                      const cuad = Math.abs(c.diferencia_usd || 0) < 0.10
+                      return (
+                        <tr key={i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                          <td className="p-3 font-black text-slate-700">
+                            {c.usuario}
+                            <div className="text-[9px] text-slate-400 font-bold">{c.terminal_nombre}</div>
+                          </td>
+                          <td className="p-3 text-right font-mono text-slate-600">{fmtUSD(c.desglose?.efectivoUsd || 0)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600">{fmtUSD(c.desglose?.zelle || 0)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600">{fmtUSD(c.desglose?.otros || 0)}</td>
+                          <td className="p-3 text-right font-mono text-slate-600">{fmtUSD(c.desglose?.credito || 0)}</td>
+                          <td className="p-3 text-right font-mono text-slate-500 text-[10px]">Bs {(c.desglose?.efectivoBs || 0).toFixed(2)}</td>
+                          <td className="p-3 text-right font-mono font-black text-slate-800">{fmtUSD(c.ventas_totales_usd || 0)}</td>
+                          <td className={`p-3 text-center font-black text-xs ${cuad ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {cuad ? '✓' : fmtUSD(c.diferencia_usd)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900 text-white">
+                      <td className="p-3 font-black uppercase tracking-widest text-xs">TOTAL DÍA — {totNotas} NOTAS</td>
+                      <td className="p-3 text-right font-mono font-black">{fmtUSD(totEfecUsd)}</td>
+                      <td className="p-3 text-right font-mono font-black">{fmtUSD(totZelle)}</td>
+                      <td className="p-3 text-right font-mono font-black">{fmtUSD(totOtros)}</td>
+                      <td className="p-3 text-right font-mono font-black">{fmtUSD(totCredito)}</td>
+                      <td className="p-3 text-right font-mono font-black text-[10px]">Bs {(totEfecBs + totMovil + totPunto).toFixed(2)}</td>
+                      <td className="p-3 text-right font-mono font-black text-[var(--teal)] text-base">{fmtUSD(totalUsd)}</td>
+                      <td className="p-3 text-center font-black text-emerald-400 text-base">{todasCuadradas ? '✓' : '⚠'}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3 justify-end px-2 pb-2">
+                <button onClick={() => window.print()} className="btn bg-[var(--teal)] text-white font-black uppercase tracking-widest cursor-pointer shadow-[var(--win-shadow)]">
+                  <span className="material-icons-round text-base">print</span> Imprimir Reporte
+                </button>
+                <button onClick={() => setShowCierreGeneralModal(false)} className="btn btn-gr font-bold cursor-pointer">Cerrar</button>
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
+
+      {/* Modal Detalle de Cierre */}
       <Modal open={showCierreModal} onClose={() => setShowCierreModal(false)} title="INFORME DE CIERRE Z" wide>
         {selectedCierre && (() => {
           const dif = selectedCierre.diferencia_usd || 0
@@ -1121,8 +1408,8 @@ export default function Reportes() {
                   <CierreRow label="Ingresos C.C." val={selectedCierre.cierre_z?.ingresosCC || 0} />
                   <CierreRow label="Egresos C.C." val={-(selectedCierre.cierre_z?.egresosCC || 0)} negative />
                   <div className="pt-3 border-t border-emerald-900 flex justify-between items-center">
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">ESPERADO</span>
-                    <span className="text-xl font-mono font-black text-emerald-400">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd)}</span>
+                    <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">ESPERADO</span>
+                    <span className="text-xl font-mono font-black text-slate-900">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd)}</span>
                   </div>
                 </div>
 
@@ -1136,8 +1423,8 @@ export default function Reportes() {
                   <CierreRow label="Efectivo Bs" val={selectedCierre.cierre_z?.efectivoBs} isBs />
                   <CierreRow label="Pago Móvil / P.Venta" val={(selectedCierre.cierre_z?.pagoMovil || 0) + (selectedCierre.cierre_z?.punto || 0)} isBs />
                   <div className="pt-3 border-t border-indigo-900 flex justify-between items-center">
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">ESPERADO</span>
-                    <span className="text-xl font-mono font-black text-indigo-400">Bs {(selectedCierre.cierre_z?.esperadoBs || 0).toFixed(2)}</span>
+                    <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">ESPERADO</span>
+                    <span className="text-xl font-mono font-black text-slate-900">Bs {(selectedCierre.cierre_z?.esperadoBs || 0).toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -1148,22 +1435,22 @@ export default function Reportes() {
                     ARQUEO FINAL
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] font-black text-slate-400 uppercase">Contado Físico</div>
-                    <div className="text-2xl font-mono font-black text-white">{fmtUSD(selectedCierre.monto_fisico_usd || 0)}</div>
+                    <div className="text-[10px] font-black text-slate-600 uppercase">Contado Físico</div>
+                    <div className="text-2xl font-mono font-black text-slate-900">{fmtUSD(selectedCierre.monto_fisico_usd || 0)}</div>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-[10px] font-black text-slate-400 uppercase">Sistema Esperaba</div>
-                    <div className="text-lg font-mono font-bold text-slate-300">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd || 0)}</div>
+                    <div className="text-[10px] font-black text-slate-600 uppercase">Sistema Esperaba</div>
+                    <div className="text-lg font-mono font-bold text-slate-800">{fmtUSD(selectedCierre.cierre_z?.esperadoUsd || 0)}</div>
                   </div>
                   <div className={`pt-3 border-t flex justify-between items-center ${cuadrado ? 'border-emerald-900' : 'border-red-900'}`}>
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">DIFERENCIA</span>
-                    <span className={`text-2xl font-mono font-black ${cuadrado ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">DIFERENCIA</span>
+                    <span className={`text-2xl font-mono font-black text-slate-900`}>
                       {fmtUSD(dif)}
                     </span>
                   </div>
                   <div className="pt-2">
-                    <div className="text-[9px] font-black text-slate-500 uppercase mb-2">FACTURAS DEL PERÍODO</div>
-                    <div className="text-3xl font-black text-white">{selectedCierre.notas_del_dia?.length || 0}</div>
+                    <div className="text-[9px] font-black text-slate-600 uppercase mb-2">FACTURAS DEL PERÍODO</div>
+                    <div className="text-3xl font-black text-slate-900">{selectedCierre.notas_del_dia?.length || 0}</div>
                   </div>
                 </div>
               </div>
@@ -1224,8 +1511,8 @@ export default function Reportes() {
 function CierreRow({ label, val, isBs, negative }) {
   return (
     <div className="flex justify-between items-center text-[11px] py-1">
-      <span className="text-slate-400 font-bold uppercase tracking-wider">{label}</span>
-      <span className={`font-mono font-black ${negative && val !== 0 ? 'text-red-400' : 'text-slate-200'}`}>
+      <span className="text-slate-800 font-bold uppercase tracking-wider">{label}</span>
+      <span className={`font-mono font-black text-slate-900`}>
         {isBs ? `Bs ${(val || 0).toFixed(2)}` : fmtUSD(val || 0)}
       </span>
     </div>

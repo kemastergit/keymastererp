@@ -2,10 +2,28 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import { fmtDate } from '../../utils/format'
+import { supabase } from '../../lib/supabase'
 
 export default function Auditoria() {
     const [busq, setBusq] = useState('')
     const [selectedLog, setSelectedLog] = useState(null)
+
+    const [loadingCloud, setLoadingCloud] = useState(false)
+
+    const pullFromCloud = async () => {
+        setLoadingCloud(true)
+        try {
+            const { data, error } = await supabase.from('auditoria').select('*').order('fecha', { ascending: false }).limit(200)
+            if (error) throw error
+            if (data) {
+                for (const l of data) {
+                    const existe = await db.auditoria.get(l.id)
+                    if (!existe) await db.auditoria.add(l)
+                }
+            }
+        } catch (e) { console.error(e) }
+        setLoadingCloud(false)
+    }
 
     const logs = useLiveQuery(
         async () => {
@@ -66,7 +84,15 @@ export default function Auditoria() {
                     <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Registro inmutable de acciones operativas y administrativas</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="badge bg-slate-800 text-white shadow-lg">MODO LECTURA</span>
+                    <button
+                        onClick={pullFromCloud}
+                        disabled={loadingCloud}
+                        className="btn bg-[var(--teal)] text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 px-4 py-2 hover:brightness-110 disabled:opacity-50"
+                    >
+                        <span className={`material-icons-round text-sm ${loadingCloud ? 'animate-spin' : ''}`}>sync</span>
+                        {loadingCloud ? 'ACTUALIZANDO...' : 'REFRESCAR DESDE NUBE'}
+                    </button>
+                    <span className="badge bg-slate-800 text-white shadow-lg">MOVIMIENTOS EN VIVO</span>
                 </div>
             </div>
 
