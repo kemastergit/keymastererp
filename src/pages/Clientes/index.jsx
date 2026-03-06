@@ -129,14 +129,21 @@ export default function Clientes() {
       }
 
       if (cliente?.rif) {
-        await supabase.from('clientes').delete().eq('rif', cliente.rif)
+        // 1. Borrar primero en la nube para que el PULL no lo traiga de vuelta
+        const { error: syncError } = await supabase.from('clientes').delete().eq('rif', cliente.rif)
+
+        if (syncError) {
+          console.error("Error borrando en Supabase:", syncError)
+          toast('⚠️ No se pudo borrar en la nube, se borrará solo localmente', 'warn')
+        }
       }
+
+      // 2. Borrar localmente
       await db.clientes.delete(delId)
-      toast('Cliente eliminado en ambos niveles', 'warn')
+      toast('Cliente eliminado correctamente', 'success')
     } catch (err) {
-      console.error(err)
-      await db.clientes.delete(delId)
-      toast('Cliente eliminado localmente (Error en nube)', 'warn')
+      console.error("Error en proceso de eliminación:", err)
+      toast('❌ Error al eliminar: ' + err.message, 'error')
     }
     setDelId(null)
   }

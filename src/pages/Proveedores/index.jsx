@@ -139,14 +139,21 @@ export default function Proveedores() {
       }
 
       if (p?.rif) {
-        await supabase.from('proveedores').delete().eq('rif', p.rif)
+        // 1. Borrar en la nube primero con await para asegurar que no se sincronice de vuelta
+        const { error: syncError } = await supabase.from('proveedores').delete().eq('rif', p.rif)
+
+        if (syncError) {
+          console.error("Error borrando en Supabase:", syncError)
+          toast('⚠️ No se pudo borrar en la nube, se borrará solo localmente', 'warn')
+        }
       }
+
+      // 2. Borrar localmente
       await db.proveedores.delete(delId)
-      toast('Proveedor eliminado en ambos niveles', 'warn')
+      toast('Proveedor eliminado correctamente', 'success')
     } catch (err) {
-      console.error(err)
-      await db.proveedores.delete(delId)
-      toast('Eliminado localmente', 'warn')
+      console.error("Error al eliminar proveedor:", err)
+      toast('❌ Error al eliminar: ' + err.message, 'error')
     }
     setDelId(null)
   }
