@@ -3,6 +3,7 @@ import { db, setConfig } from '../../db/db'
 import useStore from '../../store/useStore'
 import { signData, verifyData } from '../../utils/security'
 import { logAction } from '../../utils/audit'
+import { supabase } from '../../lib/supabase'
 
 export default function Admin() {
   const toast = useStore(s => s.toast)
