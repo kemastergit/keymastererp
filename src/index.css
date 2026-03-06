@@ -104,10 +104,11 @@
 
 @layer components {
   .panel {
-    @apply p-4 transition-none;
-    background: var(--surface);
-    border: 1px solid var(--border-var);
-    box-shadow: var(--win-shadow);
+    @apply p-6 transition-all;
+    background: #ffffff;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   .panel-title {
@@ -120,68 +121,53 @@
   }
 
   .field label {
-    @apply block text-[11px] font-bold uppercase tracking-wider mb-2 ml-1;
-    font-family: 'IBM Plex Mono', monospace;
-    color: var(--text2);
+    @apply block text-[10px] font-bold uppercase tracking-widest mb-1 ml-1;
+    font-family: 'Inter', sans-serif;
+    color: #64748b;
   }
 
   .inp {
-    @apply w-full py-3 px-4 text-sm outline-none transition-all font-medium;
-    background: var(--surface);
-    border: 1px solid var(--border-var);
-    color: var(--text-main);
-    font-family: 'IBM Plex Mono', monospace;
+    @apply w-full py-3 px-4 text-sm outline-none transition-all font-medium rounded-xl;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+    font-family: 'Inter', sans-serif;
   }
 
   .inp:focus {
-    border-color: var(--teal) !important;
-    background: var(--teal4) !important;
-    box-shadow: none !important;
+    border-color: #3b82f6 !important;
+    background: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
     outline: none !important;
   }
 
   .btn {
-    @apply font-bold text-[11px] uppercase tracking-widest py-3 px-6 flex items-center justify-center gap-2 disabled:opacity-50;
-    transition: none !important;
-    box-shadow: var(--shadow);
+    @apply font-bold text-xs uppercase tracking-wider py-3 px-6 flex items-center justify-center gap-2 rounded-xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100;
     border: 1px solid transparent;
   }
 
-  .btn:active:not(:disabled) {
-    transform: translate(1px, 1px) !important;
-    box-shadow: none !important;
-  }
-
   .btn-r {
-    @apply text-white;
-    background-color: var(--teal);
-    border-color: var(--tealDark);
-    box-shadow: var(--shadow2);
+    @apply text-white bg-blue-600 shadow-md shadow-blue-500/20;
   }
 
   .btn-r:hover:not(:disabled) {
-    background-color: var(--tealDark);
+    @apply bg-blue-700 shadow-lg shadow-blue-500/30;
   }
 
   .btn-g {
-    @apply text-white;
-    background: var(--green-var);
-    border-color: var(--green-var);
+    @apply text-white bg-emerald-600 shadow-md shadow-emerald-500/20;
   }
 
   .btn-g:hover:not(:disabled) {
-    background: #145e39;
+    @apply bg-emerald-700 shadow-lg shadow-emerald-500/30;
   }
 
   .btn-b {
-    background: var(--surface2);
-    color: var(--text-main);
-    border-color: var(--border-var);
+    @apply bg-slate-100 text-slate-700 border-slate-200;
   }
 
   .btn-b:hover:not(:disabled) {
-    background: var(--teal);
-    color: white;
+    @apply bg-slate-200 text-slate-800 border-slate-300;
   }
 
   .btn-y {

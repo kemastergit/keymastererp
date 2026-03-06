@@ -6,12 +6,18 @@ import { db } from '../../db/db'
 export default function PanelPago({
     cart, cartSubtotal, cartIva, cartIgtf, cartTotal, ivaEnabled, setIvaEnabled,
     tipoPago, setTipoPago, payments, paymentsTotal, openModalWithMethod, setShowPaymentModal,
-    removePayment, tasa, vencFact, setVencFact, procesarCotizacion, clearCart,
+    removePayment, handleEditPay, tasa, vencFact, setVencFact, procesarCotizacion, clearCart,
     procesarNota, clienteFact, setClienteFact, currentUser, enviarCajaCentral,
     setShowNotasModal, notasPendientes, fetchNotasVendedores, loading
 }) {
     const [deuda, setDeuda] = useState(0)
     const [limiteCredito, setLimiteCredito] = useState(0)
+
+    // --- NUEVOS ESTADOS PARA CREDITO_CUOTAS (PASO 4B) ---
+    const [inicialCuotas, setInicialCuotas] = useState(0)
+    const [metodoInicial, setMetodoInicial] = useState('EFECTIVO_USD')
+    const [numCuotas, setNumCuotas] = useState(2)
+    const [frecuenciaCuotas, setFrecuenciaCuotas] = useState('QUINCENAL')
 
     useEffect(() => {
         if (!clienteFact || clienteFact.length < 2) {
@@ -43,140 +49,163 @@ export default function PanelPago({
     const excedeLimite = limiteCredito > 0 && tipoPago === 'CREDITO' && (deuda + cartTotal()) > limiteCredito
 
     return (
-        <div className="col-pago bg-[var(--surface)] border border-[var(--border-var)] flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[280px] lg:max-w-[320px]">
+        <div className="bg-[#f8fafc] border border-slate-200 flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[300px] lg:max-w-[340px]">
 
             {/* SECCIÓN CLIENTE */}
-            <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)] shrink-0">
-                <label className="text-[9px] font-['IBM_Plex_Mono'] !font-bold text-[var(--teal)] uppercase tracking-wider flex items-center gap-1 mb-2">
-                    <span className="material-icons-round text-[13px]">person</span>
-                    Cliente
-                </label>
+            <div className="p-5 border-b border-slate-200 bg-white shrink-0">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-[38px] h-[38px] rounded-full bg-slate-200 flex justify-center items-center shrink-0">
+                        <span className="material-icons-round text-slate-400 text-lg">person</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Cliente</span>
+                        <ClienteSelector value={clienteFact} onChange={setClienteFact} />
+                    </div>
+                    <button className="text-slate-400 hover:text-slate-800 transition-colors">
+                        <span className="material-icons-round text-[20px]">edit</span>
+                    </button>
+                </div>
 
                 {(currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO' || currentUser?.rol === 'SUPERVISOR') && (
                     <button
                         onClick={() => { fetchNotasVendedores(); setShowNotasModal(true) }}
-                        className="w-full mb-4 flex items-center justify-center gap-2 bg-[var(--orange-var)]/10 text-[var(--orange-var)] border border-[var(--orange-var)] py-2 text-[10px] font-black uppercase tracking-widest hover:bg-[var(--orange-var)] hover:text-white transition-all shadow-sm group"
+                        className="w-full mt-2 flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-200 border-dashed rounded-xl py-2.5 text-[11px] font-bold uppercase tracking-widest hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition-all shadow-sm group"
                     >
-                        <span className="material-icons-round text-sm group-hover:animate-bounce">cloud_download</span>
+                        <span className="material-icons-round text-[16px] text-orange-500 group-hover:animate-bounce">cloud_download</span>
                         <span>Cargar Nota Vendedor</span>
                         {notasPendientes?.length > 0 && (
-                            <span className="bg-[var(--orange-var)] text-white text-[8px] px-1.5 py-0.5 rounded-full ml-1">
+                            <span className="bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1 font-black">
                                 {notasPendientes.length}
                             </span>
                         )}
                     </button>
                 )}
 
-                <ClienteSelector value={clienteFact} onChange={setClienteFact} />
-
                 {deuda > 0.01 && (
-                    <div className="mt-3 p-2 bg-orange-100 border-l-4 border-orange-500 animate-pulse">
-                        <div className="flex items-center gap-2">
-                            <span className="material-icons-round text-orange-600 text-sm">warning</span>
-                            <span className="text-[10px] font-black text-orange-800 uppercase tracking-tighter">
-                                DEUDA PENDIENTE: {fmtUSD(deuda)}
-                            </span>
+                    <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2">
+                        <span className="material-icons-round text-red-500 text-sm mt-0.5">warning</span>
+                        <div className="flex-1">
+                            <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider block mb-0.5">Deuda Pendiente</span>
+                            <span className="text-sm font-black text-red-600 font-mono tracking-tighter">{fmtUSD(deuda)}</span>
                         </div>
                     </div>
                 )}
 
                 {excedeLimite && (
-                    <div className="mt-2 p-2 bg-red-100 border-l-4 border-red-500">
-                        <div className="flex items-center gap-2">
-                            <span className="material-icons-round text-red-600 text-sm">block</span>
-                            <span className="text-[10px] font-black text-red-800 uppercase tracking-tighter">
-                                LÍMITE DE CRÉDITO EXCEDIDO — Máx: {fmtUSD(limiteCredito)}
-                            </span>
+                    <div className="mt-2 p-3 bg-red-500 text-white rounded-xl shadow-md flex items-start gap-2">
+                        <span className="material-icons-round text-white text-sm mt-0.5">block</span>
+                        <div className="flex-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider block mb-0.5">Límite Excedido</span>
+                            <span className="text-xs font-black font-mono tracking-tighter">Máx: {fmtUSD(limiteCredito)}</span>
                         </div>
                     </div>
                 )}
             </div>
 
-            <div className="p-4 flex flex-col gap-4 flex-1 bg-[var(--surface)]">
+            <div className="p-5 flex flex-col gap-5 flex-1 bg-[#f8fafc]">
 
-                {/* TOTALES */}
-                <div className="bg-slate-900 border-b-8 border-[var(--teal)] p-6 text-white shrink-0 shadow-xl rounded-2xl mb-4">
-                    <div className="space-y-2 mb-4 opacity-80">
-                        <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Subtotal</span>
-                            <span className="text-sm font-mono font-bold">{fmtUSD(cartSubtotal())}</span>
+                {/* TOTALES (TARJETA OSCURA) */}
+                <div className="bg-[#0f172a] rounded-3xl p-6 text-white shrink-0 shadow-lg relative overflow-hidden">
+                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500 blur-[60px] opacity-20 rounded-full"></div>
+
+                    <div className="flex justify-between items-center mb-6 relative z-10">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-[#94a3b8] block mb-1">Subtotal</span>
+                            <span className="text-[15px] font-mono font-bold text-slate-200">{fmtUSD(cartSubtotal())}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                Impuestos (IVA 16%)
-                                <button onClick={() => setIvaEnabled(!ivaEnabled)} className={`w-8 h-4 relative transition-all border border-white/20 rounded-full ${ivaEnabled ? 'bg-[var(--teal)]' : 'bg-slate-700'}`}>
-                                    <div className={`absolute top-0.5 w-[10px] h-[10px] bg-white rounded-full transition-all ${ivaEnabled ? 'left-4' : 'left-0.5'}`}></div>
+                        <div className="flex-1 text-right">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-[#94a3b8] block mb-1 flex items-center justify-end gap-1.5">
+                                IVA (16%)
+                                <button onClick={() => setIvaEnabled(!ivaEnabled)} className={`w-8 h-4 relative transition-all rounded-full ${ivaEnabled ? 'bg-blue-500' : 'bg-slate-700'}`}>
+                                    <div className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-all shadow-sm ${ivaEnabled ? 'left-[18px]' : 'left-[2px]'}`}></div>
                                 </button>
                             </span>
-                            <span className="text-sm font-mono font-bold text-[var(--teal)]">{fmtUSD(cartIva())}</span>
+                            <span className="text-[15px] font-mono font-bold text-slate-200">{fmtUSD(cartIva())}</span>
                         </div>
-                        {cartIgtf() > 0 && (
-                            <div className="flex justify-between items-center text-orange-400 italic">
-                                <span className="text-[10px] font-black uppercase tracking-widest">Cargo IGTF (3%)</span>
-                                <span className="text-sm font-mono font-bold">{fmtUSD(cartIgtf())}</span>
-                            </div>
-                        )}
                     </div>
+                    {cartIgtf() > 0 && (
+                        <div className="flex justify-between items-center text-orange-400 mb-4 relative z-10 border-t border-slate-700/50 pt-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Cargo IGTF (3%)</span>
+                            <span className="text-sm font-mono font-bold">{fmtUSD(cartIgtf())}</span>
+                        </div>
+                    )}
 
-                    <div className="pt-4 border-t border-white/10">
-                        <span className="text-[9px] font-black text-[var(--teal)] uppercase tracking-[0.2em] block mb-2">Total a Pagar</span>
-                        <div className="flex justify-between items-baseline">
-                            <div className="text-4xl font-mono font-black text-white tracking-tighter">
-                                {fmtUSD(cartTotal())}
+                    <div className="pt-5 border-t border-slate-700/50 relative z-10">
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">Total a Pagar</span>
+                        <div className="flex justify-between items-end">
+                            <div className="text-[40px] leading-none font-black text-white tracking-tighter">
+                                <span className="text-2xl mr-1 text-slate-300">$</span>
+                                {cartTotal()?.toFixed(2)}
                             </div>
-                            <div className="text-[11px] font-mono font-black text-slate-400">
-                                {fmtBS(cartTotal(), tasa)}
+                            <div className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest pb-1">
+                                BS {fmtBS(cartTotal(), tasa).replace('Bs.', '').trim()}
                             </div>
                         </div>
                     </div>
-                </div>      {/* INTERFAZ CONDICIONAL: SOLO CAJEROS/ADMIN COBRAN, LOS DEMÁS ENVÍAN A CAJA CENTRAL */}
+                </div>
+
+                {/* INTERFAZ CONDICIONAL */}
                 {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
                     <>
                         {/* QUICK PAYMENT SELECTOR (SOLO CAJEROS/ADMIN) */}
-                        <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div className="grid grid-cols-2 gap-3 mt-1">
                             {[
-                                { id: 'EFECTIVO_USD', label: 'EFECTIVO', icon: 'payments', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-                                { id: 'PAGO_MOVIL', label: 'P. MÓVIL', icon: 'smartphone', color: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50' },
-                                { id: 'ZELLE', label: 'ZELLE', icon: 'bolt', color: 'bg-purple-600', text: 'text-purple-700', bg: 'bg-purple-50' },
-                                { id: 'PUNTO_VENTA', label: 'T. DÉBITO', icon: 'credit_card', color: 'bg-blue-600', text: 'text-blue-700', bg: 'bg-blue-50' },
+                                { id: 'EFECTIVO_USD', label: 'Efectivo', icon: 'payments', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+                                { id: 'PAGO_MOVIL', label: 'P. Móvil', icon: 'smartphone', color: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50 border-orange-100' },
+                                { id: 'ZELLE', label: 'Zelle', icon: 'bolt', color: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
+                                { id: 'PUNTO_VENTA', label: 'T. Débito', icon: 'credit_card', color: 'bg-blue-600', text: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
                             ].map(m => (
                                 <button
                                     key={m.id}
                                     onClick={() => openModalWithMethod(m.id)}
-                                    className={`flex items-center gap-3 p-3 ${m.bg} border-b-4 border-black/10 hover:border-black/20 active:translate-y-0.5 transition-all group cursor-pointer shadow-sm relative overflow-hidden`}
+                                    className={`flex flex-col items-center justify-center p-4 rounded-[20px] ${m.bg} border hover:shadow-md transition-all group cursor-pointer active:scale-95`}
                                 >
-                                    <div className={`${m.color} text-white p-2 rounded-lg group-hover:scale-110 transition-transform`}>
-                                        <span className="material-icons-round text-lg">{m.icon}</span>
+                                    <div className={`${m.color} text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform mb-2`}>
+                                        <span className="material-icons-round text-[20px]">{m.icon}</span>
                                     </div>
-                                    <span className={`text-[9px] font-black uppercase tracking-widest ${m.text}`}>{m.label}</span>
+                                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${m.text}`}>{m.label}</span>
                                 </button>
                             ))}
                         </div>
 
                         {/* PAGOS REALIZADOS */}
-                        <div className="flex-1 min-h-0 flex flex-col mt-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] font-bold text-[var(--teal)] uppercase tracking-widest">Pagos</span>
-                                <button onClick={() => setShowPaymentModal(true)} className="text-[var(--teal)] text-[10px] font-black uppercase hover:underline flex items-center">
-                                    <span className="material-icons-round text-[12px] mr-0.5">add</span> Agregar
+                        <div className="flex-1 min-h-[150px] flex flex-col mt-4">
+                            <div className="flex items-center justify-between mb-3 px-1">
+                                <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Pagos Realizados</span>
+                                <button onClick={() => setShowPaymentModal(true)} className="text-emerald-600 text-[10px] font-bold uppercase hover:underline flex items-center">
+                                    <span className="material-icons-round text-[14px] mr-0.5">add</span> Agregar
                                 </button>
                             </div>
 
-                            <div className="space-y-2 flex-1 overflow-y-auto custom-scroll min-h-[50px]">
+                            <div className="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
                                 {payments.length === 0
-                                    ? <div className="text-[10px] text-[var(--text2)] italic text-center py-3 border border-dashed border-[var(--border-var)] bg-[var(--surface2)]">Pendiente</div>
+                                    ? <div className="text-[11px] font-medium text-slate-400 italic text-center py-6 border border-dashed border-slate-300 rounded-xl bg-slate-50">Pendiente por asignar pagos</div>
                                     : payments.map(p => (
-                                        <div key={p.id} className="flex items-center justify-between bg-[var(--surface)] p-2 text-[var(--text-main)] border border-[var(--border-var)] shadow-sm">
+                                        <div
+                                            key={p.id}
+                                            onClick={() => handleEditPay(p)}
+                                            className="flex items-center justify-between bg-white px-3 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:border-[#F36E25] cursor-pointer group transition-all"
+                                        >
                                             <div className="flex flex-col">
-                                                <div className="text-[9px] font-bold uppercase">{p.metodo.replace(/_/g, ' ')}</div>
-                                                {['EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA'].includes(p.metodo) && (
-                                                    <div className="text-[8px] font-mono text-[var(--text2)]">Bs {p.montoBS?.toFixed(2) || '—'}</div>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center group-hover:bg-orange-50 transition-colors">
+                                                        <span className="material-icons-round text-slate-500 text-[12px] group-hover:text-[#F36E25]">receipt</span>
+                                                    </span>
+                                                    <div>
+                                                        <div className="text-[10px] font-bold text-slate-700 uppercase tracking-widest group-hover:text-[#F36E25]">{p.metodo.replace(/_/g, ' ')}</div>
+                                                        {['EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA'].includes(p.metodo) && (
+                                                            <div className="text-[9px] font-mono text-slate-400">Bs {p.montoBS?.toFixed(2) || '—'}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="font-mono text-[11px] font-black">{fmtUSD(p.monto)}</div>
-                                                <button onClick={() => removePayment(p.id)} className="text-[var(--red-var)] hover:text-white hover:bg-[var(--red-var)] transition-colors w-5 h-5 flex justify-center items-center">
-                                                    <span className="material-icons-round text-[14px]">cancel</span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="font-mono text-sm font-black text-slate-800">{fmtUSD(p.monto)}</div>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); removePayment(p.id) }}
+                                                    className="text-slate-300 hover:text-red-500 transition-colors flex justify-center items-center"
+                                                >
+                                                    <span className="material-icons-round text-[16px]">cancel</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -185,67 +214,139 @@ export default function PanelPago({
                             </div>
 
                             {paymentsTotal() > 0 && paymentsTotal() < cartTotal() - 0.01 && (
-                                <div className="bg-[var(--orange-var)]/10 p-2 border border-[var(--orange-var)]/50 mt-2 shrink-0">
-                                    <div className="flex justify-between items-center text-[var(--orange-var)]">
-                                        <span className="text-[9px] font-black uppercase">Falta:</span>
-                                        <span className="font-mono text-[11px] font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
+                                <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 mt-3 shrink-0">
+                                    <div className="flex justify-between items-center text-orange-600">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Falta:</span>
+                                        <span className="font-mono text-sm font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
                                     </div>
                                 </div>
                             )}
 
                             {paymentsTotal() > cartTotal() + 0.01 && (
-                                <div className="bg-[var(--teal)]/10 p-2 border border-[var(--teal)]/50 mt-2 shrink-0">
-                                    <div className="flex justify-between items-center text-[var(--tealDark)] py-0.5">
-                                        <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto $:</span>
-                                        <span className="font-mono text-[11px] font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
+                                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 mt-3 shrink-0">
+                                    <div className="flex justify-between items-center text-emerald-800 pb-1.5 border-b border-emerald-200/50">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Vuelto $:</span>
+                                        <span className="font-mono text-sm font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
                                     </div>
-                                    <div className="flex justify-between items-center text-[var(--teal)] border-t border-[var(--teal)]/30 pt-1 mt-1">
-                                        <span className="text-[9px] font-black uppercase tracking-tighter">Vuelto Bs:</span>
-                                        <span className="font-mono text-[11px] font-black">{fmtBS(paymentsTotal() - cartTotal(), tasa)}</span>
+                                    <div className="flex justify-between items-center text-emerald-600 pt-1.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest">Vuelto Bs:</span>
+                                        <span className="font-mono text-xs font-black">{fmtBS(paymentsTotal() - cartTotal(), tasa)}</span>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* CONTADO / CREDITO */}
-                        <div className="shrink-0 space-y-3 mt-3">
-                            <div className="bg-[var(--surface2)] p-1 border border-[var(--border-var)] flex gap-1">
-                                {['CONTADO', 'CREDITO'].map(t => (
-                                    <button key={t} onClick={() => setTipoPago(t)}
-                                        className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase transition-all
-                            ${tipoPago === t ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)] hover:text-[var(--teal)]'}`}>
-                                        {t}
+                        {/* CONTADO / CREDITO / CUOTAS */}
+                        <div className="shrink-0 space-y-3 mt-4 pt-4 border-t border-slate-200">
+                            <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
+                                {[
+                                    { id: 'CONTADO', label: 'CONTADO' },
+                                    { id: 'CREDITO', label: 'CRÉDITO' },
+                                    { id: 'CREDITO_CUOTAS', label: 'CUOTAS' }
+                                ].map(t => (
+                                    <button key={t.id} onClick={() => setTipoPago(t.id)}
+                                        className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-lg transition-all
+                            ${tipoPago === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                                        {t.label}
                                     </button>
                                 ))}
                             </div>
 
                             {tipoPago === 'CREDITO' && (
                                 <div className="animate-in slide-in-from-top-2">
-                                    <label className="text-[9px] font-black text-[var(--teal)] mb-1 block uppercase">Vencimiento</label>
-                                    <input type="date" className="inp !py-1.5 !text-[11px] w-full bg-[var(--surface)]" value={vencFact} onChange={e => setVencFact(e.target.value)} />
+                                    <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-widest px-1">Vencimiento Crédito</label>
+                                    <input type="date" className="inp bg-white border-slate-200 text-slate-700 w-full" value={vencFact} onChange={e => setVencFact(e.target.value)} />
                                 </div>
                             )}
 
-                            <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-var)]">
-                                <button className="w-full py-2 flex items-center justify-center gap-2 font-bold uppercase text-[10px] tracking-widest bg-[var(--surface2)] border border-[var(--border-var)] text-[var(--text2)] hover:bg-[var(--surface)] transition-all"
+                            {tipoPago === 'CREDITO_CUOTAS' && (
+                                <div className="animate-in slide-in-from-top-2 space-y-3 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                                    <div className="flex gap-3">
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Inicial ($)</label>
+                                            <input type="number"
+                                                className="inp !py-2 !px-3 font-mono text-right text-slate-800 font-bold bg-white"
+                                                value={inicialCuotas || ''}
+                                                onChange={e => setInicialCuotas(Number(e.target.value))}
+                                                min="0"
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Método</label>
+                                            <select
+                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                value={metodoInicial}
+                                                onChange={e => setMetodoInicial(e.target.value)}
+                                            >
+                                                <option value="EFECTIVO_USD">Efectivo USD</option>
+                                                <option value="EFECTIVO_BS">Efectivo BS</option>
+                                                <option value="ZELLE">Zelle</option>
+                                                <option value="PAGO_MOVIL">Pago Móvil</option>
+                                                <option value="PUNTO_VENTA">T. Débito</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Saldo a Diferir:</span>
+                                        <span className="text-[13px] font-mono font-black text-red-500">{fmtUSD(Math.max(0, cartTotal() - inicialCuotas))}</span>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Dividir</label>
+                                            <select
+                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                value={numCuotas}
+                                                onChange={e => setNumCuotas(Number(e.target.value))}
+                                            >
+                                                <option value="1">1 Cuota</option>
+                                                <option value="2">2 Cuotas</option>
+                                                <option value="3">3 Cuotas</option>
+                                                <option value="4">4 Cuotas</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Frecuencia</label>
+                                            <select
+                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                value={frecuenciaCuotas}
+                                                onChange={e => setFrecuenciaCuotas(e.target.value)}
+                                            >
+                                                <option value="SEMANAL">SEMANAL</option>
+                                                <option value="QUINCENAL">QUINCENAL</option>
+                                                <option value="MENSUAL">MENSUAL</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100 flex justify-between items-center text-emerald-800">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest block">A pagar por cuota:</span>
+                                        <span className="text-[15px] font-mono font-black text-emerald-600">{fmtUSD(Math.max(0, (cartTotal() - inicialCuotas) / numCuotas))}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-3 pt-3">
+                                <button className="w-full py-3 flex items-center justify-center gap-2 font-bold uppercase text-[11px] tracking-widest bg-white rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:shadow-sm transition-all shadow-sm active:scale-[0.98]"
                                     onClick={procesarCotizacion}>
-                                    <span className="material-icons-round text-[14px]">assignment</span>
+                                    <span className="material-icons-round text-[16px]">assignment</span>
                                     <span>Solo Cotizar</span>
                                 </button>
 
-                                <div className="flex gap-2">
-                                    <button className="w-10 bg-[var(--red-var)]/10 text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white flex items-center justify-center transition-colors shrink-0" onClick={clearCart} title="Vaciar Carrito">
-                                        <span className="material-icons-round text-[16px]">delete_sweep</span>
+                                <div className="flex gap-3">
+                                    <button className="w-14 bg-white rounded-xl border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 flex items-center justify-center transition-all shadow-sm active:scale-[0.98] shrink-0" onClick={clearCart} title="Vaciar Carrito">
+                                        <span className="material-icons-round text-[20px]">delete_sweep</span>
                                     </button>
                                     <button
                                         disabled={loading}
-                                        className={`flex-1 py-2 flex items-center justify-center gap-2 font-black uppercase text-[11px] tracking-widest transition-all shadow-[var(--win-shadow)]
-                            ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-[var(--surface2)] text-[var(--text2)] cursor-not-allowed shadow-none' : 'bg-[var(--teal)] hover:bg-[var(--tealDark)] text-white'}`}
-                                        onClick={procesarNota}>
-                                        <span className={`material-icons-round text-[16px] ${loading ? 'animate-spin' : ''}`}>
-                                            {loading ? 'sync' : 'check_circle'}
+                                        className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-[12px] tracking-widest transition-all shadow-md active:scale-[0.98]
+                            ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' : 'bg-[#009c85] hover:bg-[#007b69] text-white'}`}
+                                        onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}>
+                                        <span className={`material-icons-round text-[20px] ${loading ? 'animate-spin' : ''}`}>
+                                            {loading ? 'sync' : 'save'}
                                         </span>
-                                        <span>{loading ? 'Procesando...' : 'Cerrar Venta'}</span>
+                                        <span>{loading ? 'Procesando...' : 'Finalizar Venta'}</span>
                                     </button>
                                 </div>
                             </div>
@@ -253,25 +354,25 @@ export default function PanelPago({
                     </>
                 ) : (
                     <div className="flex flex-col gap-3 mt-4 flex-1 justify-end">
-                        <div className="text-center p-3 border border-dashed border-[var(--teal)]/50 bg-[var(--teal)]/5 rounded-lg mb-2">
-                            <span className="material-icons-round text-[var(--teal)] text-3xl mb-1 block animate-bounce">storefront</span>
-                            <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-widest">El cliente pagará en la</p>
-                            <p className="text-xs font-black text-[var(--teal)] uppercase tracking-widest">Caja Central</p>
+                        <div className="text-center p-4 border border-dashed border-emerald-300 bg-emerald-50 rounded-2xl mb-2">
+                            <span className="material-icons-round text-emerald-500 text-4xl mb-2 block animate-bounce">storefront</span>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">El cliente pagará en la</p>
+                            <p className="text-sm font-black text-emerald-700 uppercase tracking-widest">Caja Central</p>
                         </div>
 
-                        <button className="w-full py-3 flex items-center justify-center gap-2 font-bold uppercase text-[11px] tracking-widest bg-[var(--surface2)] border border-[var(--border-var)] text-[var(--text2)] hover:bg-[var(--surface)] transition-all shadow-sm"
+                        <button className="w-full py-4 flex items-center justify-center gap-2 font-bold uppercase text-[11px] tracking-widest bg-white rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all shadow-sm active:scale-[0.98]"
                             onClick={procesarCotizacion}>
-                            <span className="material-icons-round text-[16px]">assignment</span>
+                            <span className="material-icons-round text-[18px]">assignment</span>
                             <span>Imprimir Cotización</span>
                         </button>
 
-                        <div className="flex gap-2">
-                            <button className="w-12 bg-[var(--red-var)]/10 text-[var(--red-var)] hover:bg-[var(--red-var)] hover:text-white flex items-center justify-center transition-colors shrink-0 shadow-[var(--win-shadow)]" onClick={clearCart} title="Vaciar Carrito">
-                                <span className="material-icons-round text-[18px]">delete_sweep</span>
+                        <div className="flex gap-3">
+                            <button className="w-14 bg-white rounded-xl border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-all shadow-sm active:scale-[0.98] shrink-0" onClick={clearCart} title="Vaciar Carrito">
+                                <span className="material-icons-round text-[20px]">delete_sweep</span>
                             </button>
                             <button
-                                className={`flex-1 py-4 flex items-center justify-center gap-3 font-black uppercase text-xs tracking-widest transition-all shadow-[var(--win-shadow)]
-                                    bg-[var(--teal)] hover:bg-[var(--tealDark)] text-white hover:scale-[1.02]`}
+                                className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-3 font-black uppercase text-[12px] tracking-widest transition-all shadow-md active:scale-[0.98]
+                                    bg-[#0f172a] hover:bg-slate-800 text-white`}
                                 onClick={enviarCajaCentral}>
                                 <span className="material-icons-round text-[20px]">send</span>
                                 <span>Enviar a Caja</span>

@@ -10,6 +10,7 @@ import TicketTermico from '../../components/Ticket/TicketTermico'
 import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
 import { supabase } from '../../lib/supabase'
+import Fuse from 'fuse.js'
 
 import Catalogo from './Catalogo'
 import ItemsAgregados from './ItemsAgregados'
@@ -30,6 +31,10 @@ export default function Facturacion() {
   const navigate = useNavigate()
   const lastScrollY = useRef(0)
 
+  // NINJA SCANNER REFS
+  const scannerBuffer = useRef('')
+  const lastKeyTime = useRef(0)
+
   const handleScroll = (e) => {
     const currentScroll = e.target.scrollTop
     if (window.innerWidth >= 768) return
@@ -48,11 +53,6 @@ export default function Facturacion() {
   const [showRutaModal, setShowRutaModal] = useState(false)
   const [payForm, setPayForm] = useState({ metodo: 'EFECTIVO_USD', montoUSD: '', montoBS: '' })
 
-  const openModalWithMethod = (method) => {
-    setPayForm({ ...payForm, metodo: method, montoUSD: '', montoBS: '' });
-    setShowPaymentModal(true);
-  }
-
   const [lastVenta, setLastVenta] = useState(null)
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
@@ -66,6 +66,41 @@ export default function Facturacion() {
   const [filtroNotas, setFiltroNotas] = useState('PENDIENTE') // 'PENDIENTE' o 'EN_PROCESO'
 
   const ticketRef = useRef()
+
+  const [keypadBuffer, setKeypadBufferState] = useState('')
+  const [activeCurrency, setActiveCurrencyState] = useState('USD') // Local states for logic
+
+  const handleEditPay = (p) => {
+    // Cargar los datos del pago al form y buffer
+    setPayForm({
+      metodo: p.metodo,
+      montoUSD: p.monto.toString(),
+      montoBS: p.montoBS?.toString() || (p.monto * tasa).toString()
+    })
+    setKeypadBufferState(p.monto.toString())
+    setActiveCurrencyState('USD')
+
+    // Quitarlo de la lista para que al "añadir" no se duplique
+    removePayment(p.id)
+    setShowPaymentModal(true)
+  }
+
+  const openModalWithMethod = (method) => {
+    // Si ya está abierto, solo cambiamos el método sin reiniciar montos
+    if (showPaymentModal) {
+      setPayForm(prev => ({ ...prev, metodo: method }))
+      return
+    }
+
+    const remaining = Math.max(0, cartTotal() - paymentsTotal())
+    setPayForm({
+      metodo: method,
+      montoUSD: remaining > 0 ? remaining.toFixed(2) : '',
+      montoBS: remaining > 0 ? (remaining * tasa).toFixed(2) : ''
+    })
+    setKeypadBufferState(remaining > 0 ? remaining.toFixed(2) : '')
+    setShowPaymentModal(true)
+  }
 
   useEffect(() => {
     loadConfigEmpresa()
@@ -137,9 +172,43 @@ export default function Facturacion() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore if a modal is open to let modal inputs handle keys if needed
-      // Actually per rules: Enter=confirm modal, Esc=close modal. Those 
-      // are better handled by the Modal component.
+      // Ignore if a modal is open
+      if (document.body.classList.contains('modal-open') || showPaymentModal || showNotasModal || showPrintModal || editingItem) return
+
+      // ------ NINJA SCANNER (Headless Barcode Reader) ------
+      // Si recibimos texto rápido sin modificadores (pistola en emulación teclado)
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const now = Date.now()
+        // Una pistola humana/normal no escribe usualmente < 35ms, un scanner escupe todo a 10-20ms
+        if (now - lastKeyTime.current > 50) {
+          scannerBuffer.current = e.key // Reset si fue muy lento (inicio o persona escribiendo normal)
+        } else {
+          scannerBuffer.current += e.key
+        }
+        lastKeyTime.current = now
+      }
+      else if (e.key === 'Enter') {
+        const now = Date.now()
+        // Si el buffer tiene > 3 caracteres y la ráfaga acaba de terminar (menos de 100ms atrás)
+        if (scannerBuffer.current.length >= 3 && (now - lastKeyTime.current < 100)) {
+          e.preventDefault() // Evitar submit accidental o enters sueltos
+          const codeToFind = scannerBuffer.current.trim()
+          scannerBuffer.current = '' // Limpiamos la metralleta
+
+          db.articulos.where('codigo').equals(codeToFind).first().then(art => {
+            if (art) {
+              addToCart(art, 1) // Store local o store Zustand lo maneja a qty=1
+              toast(`🛒 ${art.descripcion} escaneado!`, 'ok')
+            } else {
+              toast(`❌ Código de barra ${codeToFind} no registrado`, 'warn')
+            }
+          }).catch(err => console.error("Error ninja scanner:", err))
+
+          return // Frenamos la propagación de este Enter ninja
+        }
+        scannerBuffer.current = '' // reset estándar
+      }
+      // ------ FIN NINJA SCANNER ------
 
       if (e.key === 'F2') {
         e.preventDefault()
@@ -182,7 +251,7 @@ export default function Facturacion() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [cart, setShowPaymentModal, clearCart, setStep, removeFromCart, toast])
+  }, [cart, setShowPaymentModal, clearCart, setStep, removeFromCart, toast, showPaymentModal, showNotasModal, showPrintModal, editingItem, addToCart])
 
   const handlePrint = useReactToPrint({
     contentRef: ticketRef,
@@ -213,17 +282,23 @@ export default function Facturacion() {
   }
 
   const articulos = useLiveQuery(
-    () => busq.trim().length > 0
-      ? db.articulos.filter(a =>
-        a.codigo?.toLowerCase().includes(busq.toLowerCase()) ||
-        a.descripcion?.toLowerCase().includes(busq.toLowerCase()) ||
-        a.marca?.toLowerCase().includes(busq.toLowerCase())
-      ).limit(100).toArray()
-      : db.articulos.orderBy('descripcion').toArray(),
+    async () => {
+      if (busq.trim().length === 0) {
+        return await db.articulos.orderBy('descripcion').toArray();
+      }
+
+      const allArts = await db.articulos.toArray();
+      const fuse = new Fuse(allArts, {
+        keys: ['descripcion', 'marca', 'referencia', 'codigo'],
+        threshold: 0.3
+      });
+
+      return fuse.search(busq).slice(0, 100).map(r => r.item);
+    },
     [busq], []
   ) || []
 
-  const procesarNota = async () => {
+  const procesarNota = async (inicial = 0, metodoInicial = 'EFECTIVO_USD', numCuotas = 1, frecuencia = 'MENSUAL') => {
     if (loading) return
     setLoading(true)
     if (!activeSession) {
@@ -241,6 +316,15 @@ export default function Facturacion() {
     }
     if (tipoPago === 'CREDITO' && !vencFact) {
       toast('Selecciona fecha de vencimiento', 'warn'); setLoading(false); return
+    }
+
+    if (tipoPago.includes('CREDITO')) {
+      // Soporta: V-123, V123, V- 123, V 123, J-, E-, G-
+      const cedulaRegex = /^[VJEG]-?\s?\d{6,9}/i
+      if (!cedulaRegex.test(clienteFact.trim())) {
+        toast('❌ Para ventas a Crédito/Cuotas es obligatorio colocar Cédula/RIF (V-12345678) en el nombre del cliente', 'error')
+        setLoading(false); return
+      }
     }
 
     const prefix = configEmpresa?.terminal_prefix || 'FACT'
@@ -273,11 +357,15 @@ export default function Facturacion() {
       // 💾 A. GUARDADO LOCAL (DEXIE)
       await db.transaction('rw', [
         db.ventas, db.venta_items, db.articulos,
-        db.ctas_cobrar, db.abonos, db.sesiones_caja, db.config
+        db.ctas_cobrar, db.abonos, db.sesiones_caja, db.config, db.cuotas_credito
       ], async () => {
-        // Validación de stock local final
+        // Validación de stock local final (con reparación de IDs huérfanos)
         for (const item of cart) {
-          const freshArticle = await db.articulos.get(item.id)
+          let freshArticle = await db.articulos.get(item.id)
+          // Si el ID del carrito caducó por una recarga de la nube, buscar por código maestro
+          if (!freshArticle && item.codigo) {
+            freshArticle = await db.articulos.where('codigo').equals(item.codigo).first()
+          }
           if (!freshArticle || freshArticle.stock < item.qty) {
             throw new Error(`STOCK_INSUFICIENTE:${item.descripcion}:${freshArticle?.stock || 0}`)
           }
@@ -293,17 +381,25 @@ export default function Facturacion() {
         ventaId = await db.ventas.add(ventaCalculada)
 
         for (const item of cart) {
-          const freshArt = await db.articulos.get(item.id)
+          let freshArt = await db.articulos.get(item.id)
+          if (!freshArt && item.codigo) {
+            freshArt = await db.articulos.where('codigo').equals(item.codigo).first()
+          }
+
           await db.venta_items.add({
-            venta_id: ventaId, articulo_id: item.id,
+            venta_id: ventaId,
+            articulo_id: freshArt ? freshArt.id : item.id, // Se usa el ID real de la base de datos actual
             codigo: item.codigo, descripcion: item.descripcion,
             marca: item.marca || '', precio: item.precio, costo: freshArt?.costo || 0, qty: item.qty
           })
-          await db.articulos.update(item.id, { stock: Math.max(0, (freshArt.stock || 0) - item.qty) })
+
+          if (freshArt) {
+            await db.articulos.update(freshArt.id, { stock: Math.max(0, (freshArt.stock || 0) - item.qty) })
+          }
         }
 
         let cxcId = null
-        if (tipoPago === 'CREDITO' || total > pTotal + 0.01) {
+        if (tipoPago === 'CREDITO' || (tipoPago === 'CONTADO' && total > pTotal + 0.01)) {
           cxcId = await db.ctas_cobrar.add({
             venta_id: ventaId, cliente: clienteFact, monto: total, fecha: new Date(),
             vencimiento: vencFact, estado: pTotal >= total - 0.01 ? 'COBRADA' : pTotal > 0 ? 'PARCIAL' : 'PENDIENTE'
@@ -315,6 +411,43 @@ export default function Facturacion() {
             cuenta_id: cxcId || ventaId, tipo_cuenta: cxcId ? 'COBRAR' : 'VENTA',
             fecha: new Date(), monto: p.monto, metodo: p.metodo
           })
+        }
+
+        if (tipoPago === 'CREDITO_CUOTAS') {
+          // 1. La deuda total va completa a Cuentas por Cobrar
+          cxcId = await db.ctas_cobrar.add({
+            venta_id: ventaId, cliente: clienteFact, monto: total, fecha: new Date(),
+            vencimiento: vencFact, estado: inicial >= total - 0.01 ? 'COBRADA' : 'PENDIENTE'
+          })
+
+          // 2. Si pagó inicial, registramos el abono de una vez
+          if (inicial > 0) {
+            await db.abonos.add({
+              cuenta_id: cxcId, tipo_cuenta: 'COBRAR',
+              fecha: new Date(), monto: inicial, metodo: metodoInicial
+            })
+          }
+
+          // 3. Calculamos y creamos N registros en la nueva tabla `cuotas_credito`
+          const saldoRestante = Math.max(0, total - inicial)
+          const montoPorCuota = saldoRestante / numCuotas
+
+          for (let i = 1; i <= numCuotas; i++) {
+            // Calculadora mágica de fechas futuras según Semanal, Quincenal o Mensual
+            let fechaVenc = new Date()
+            if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + (i * 7))
+            else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + (i * 15))
+            else if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
+
+            await db.cuotas_credito.add({
+              venta_id: ventaId,
+              numero_cuota: i,
+              monto: montoPorCuota,
+              fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
+              estado: 'PENDIENTE',
+              fecha_pago: null
+            })
+          }
         }
 
         const nuevasNotas = [...(activeSession.notas_del_dia || []), ventaId]
@@ -374,6 +507,39 @@ export default function Facturacion() {
           p_pagos: payments
         })
         toast('🛰️ Guardado local (se enviará al conectar)', 'info')
+        processSyncQueue()
+      }
+
+      // Sincronización adicional vía syncManager (solo para las Cuotas)
+      if (tipoPago === 'CREDITO_CUOTAS') {
+        const { addToSyncQueue, processSyncQueue } = await import('../../utils/syncManager')
+        const devolucionCxcId = await db.ctas_cobrar.where({ venta_id: ventaId }).first();
+
+        const saldoRestante = Math.max(0, total - inicial)
+        const montoPorCuota = saldoRestante / numCuotas
+
+        for (let i = 1; i <= numCuotas; i++) {
+          let fechaVenc = new Date()
+          if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + (i * 7))
+          else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + (i * 15))
+          else if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
+
+          await addToSyncQueue('cuotas_credito', 'INSERT', {
+            venta_id: String(ventaId),
+            numero_cuota: i,
+            monto: montoPorCuota,
+            fecha_vencimiento: fechaVenc.toISOString().split('T')[0],
+            estado: 'PENDIENTE'
+          })
+        }
+
+        if (inicial > 0 && devolucionCxcId) {
+          await addToSyncQueue('abonos', 'INSERT', {
+            id: `abono-${devolucionCxcId.id}-${Date.now()}`,
+            cuenta_id: String(devolucionCxcId.id), tipo_cuenta: 'COBRAR',
+            fecha: new Date().toISOString(), monto: inicial, metodo: metodoInicial
+          })
+        }
         processSyncQueue()
       }
 
@@ -459,12 +625,45 @@ export default function Facturacion() {
     setLoading(false)
   }
 
-  const handleAddPay = () => {
+  const handleAddPay = (stayOpen = true) => {
     const usd = parseFloat(payForm.montoUSD)
-    if (!usd || usd <= 0) return
+    if (!usd || usd <= 0) {
+      toast('Ingrese un monto válido', 'warn')
+      return
+    }
     const bs = parseFloat(payForm.montoBS) || (usd * tasa)
     addPayment(payForm.metodo, usd, tasa, bs)
-    setPayForm({ ...payForm, montoUSD: '', montoBS: '' })
+
+    // Reset para el próximo
+    const remaining = Math.max(0, cartTotal() - (paymentsTotal() + usd))
+    setPayForm({
+      ...payForm,
+      montoUSD: remaining > 0 ? remaining.toFixed(2) : '',
+      montoBS: remaining > 0 ? (remaining * tasa).toFixed(2) : ''
+    })
+
+    setKeypadBufferState('')
+    toast(`✅ Pago añadido`, 'ok')
+    if (!stayOpen) setShowPaymentModal(false)
+  }
+
+  const handleKeypad = (val) => {
+    let newBuffer = keypadBuffer
+    if (val === 'DEL') {
+      newBuffer = newBuffer.slice(0, -1)
+    } else if (val === '.') {
+      if (!newBuffer.includes('.')) newBuffer += '.'
+    } else {
+      newBuffer += val
+    }
+    setKeypadBufferState(newBuffer)
+
+    // Update payForm based on buffer
+    if (activeCurrency === 'USD') {
+      updatePayAmount(newBuffer, true)
+    } else {
+      updatePayAmount(newBuffer, false)
+    }
   }
 
   const updatePayAmount = (val, fromUSD = true) => {
@@ -473,13 +672,13 @@ export default function Facturacion() {
       setPayForm(prev => ({
         ...prev,
         montoUSD: val,
-        montoBS: n > 0 ? (n * tasa).toFixed(2) : ''
+        montoBS: val === '' ? '' : (n * tasa).toFixed(2)
       }))
     } else {
       setPayForm(prev => ({
         ...prev,
         montoBS: val,
-        montoUSD: n > 0 ? (n / tasa).toFixed(2) : ''
+        montoUSD: val === '' ? '' : (n / tasa).toFixed(2)
       }))
     }
   }
@@ -557,6 +756,7 @@ export default function Facturacion() {
                 payments={payments} paymentsTotal={paymentsTotal}
                 openModalWithMethod={openModalWithMethod}
                 setShowPaymentModal={setShowPaymentModal} removePayment={removePayment}
+                handleEditPay={handleEditPay}
                 tasa={tasa} vencFact={vencFact} setVencFact={setVencFact}
                 procesarCotizacion={procesarCotizacion} clearCart={clearCart}
                 procesarNota={procesarNota} clienteFact={clienteFact} setClienteFact={setClienteFact}
@@ -596,6 +796,7 @@ export default function Facturacion() {
               payments={payments} paymentsTotal={paymentsTotal}
               openModalWithMethod={openModalWithMethod}
               setShowPaymentModal={setShowPaymentModal} removePayment={removePayment}
+              handleEditPay={handleEditPay}
               tasa={tasa} vencFact={vencFact} setVencFact={setVencFact}
               procesarCotizacion={procesarCotizacion} clearCart={clearCart}
               procesarNota={procesarNota} clienteFact={clienteFact} setClienteFact={setClienteFact}
@@ -611,91 +812,180 @@ export default function Facturacion() {
       </div>
 
       {/* MODALS */}
-      <Modal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="REGISTRAR PAGO RECIBIDO">
-        <div className="space-y-6">
-          <div className="field">
-            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)] mb-3 block">Seleccione el Método de Cobro *</label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                { id: 'EFECTIVO_USD', label: 'EFECTIVO $', icon: 'payments', color: 'bg-emerald-500' },
-                { id: 'PAGO_MOVIL', label: 'PAGO MÓVIL', icon: 'smartphone', color: 'bg-orange-500' },
-                { id: 'ZELLE', label: 'ZELLE', icon: 'bolt', color: 'bg-purple-600' },
-                { id: 'PUNTO_VENTA', label: 'PUNTO (DEBITO)', icon: 'credit_card', color: 'bg-blue-600' },
-                { id: 'EFECTIVO_BS', label: 'EFECTIVO BS', icon: 'savings', color: 'bg-teal-500' },
-                { id: 'OTRO', label: 'TRANSFERENCIA', icon: 'account_balance', color: 'bg-slate-600' },
-              ].map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setPayForm({ ...payForm, metodo: m.id })}
-                  className={`flex items-center gap-4 p-4 border-2 transition-all duration-200 rounded-2xl relative overflow-hidden group
-                    ${payForm.metodo === m.id
-                      ? 'border-[var(--teal)] bg-white shadow-xl ring-2 ring-[var(--teal)]/20 scale-[1.02]'
-                      : 'bg-slate-50 border-transparent hover:border-slate-300 grayscale-[0.5] hover:grayscale-0'
-                    }`}
-                >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${payForm.metodo === m.id ? m.color : 'bg-slate-200'} text-white`}>
-                    <span className="material-icons-round text-2xl group-hover:scale-110 transition-transform">{m.icon}</span>
+      <Modal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="" noPadding hideHeader>
+        {(() => {
+          const totalVenta = cartTotal()
+          const yaPagado = paymentsTotal()
+          const saldo = Math.max(0, totalVenta - yaPagado)
+
+          return (
+            <div className="flex flex-col bg-[#F4F6F8] rounded-3xl overflow-hidden max-w-[440px] mx-auto shadow-2xl scale-[0.98]">
+              {/* HEADER PERSONALIZADO */}
+              <div className="flex items-center justify-between p-4 bg-white border-b border-slate-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
+                    <span className="material-icons-round text-[#F36E25]">payments</span>
                   </div>
-                  <div className="text-left">
-                    <span className={`block text-[10px] font-black uppercase tracking-tight leading-none ${payForm.metodo === m.id ? 'text-[var(--teal)]' : 'text-slate-500'}`}>{m.label}</span>
-                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Seleccionar</span>
+                  <div>
+                    <h2 className="text-xl font-black text-[#131E2E] leading-tight">Registro de Pagos</h2>
+                    <p className="text-sm font-bold text-[#131E2E] opacity-90">Múltiples</p>
                   </div>
-                  {payForm.metodo === m.id && (
-                    <div className="absolute right-0 top-0 w-8 h-8 bg-[var(--teal)] text-white flex items-center justify-center rounded-bl-2xl">
-                      <span className="material-icons-round text-sm">check</span>
-                    </div>
-                  )}
+                </div>
+                <button onClick={() => setShowPaymentModal(false)} className="w-10 h-10 rounded-full hover:bg-slate-50 flex items-center justify-center text-slate-400 transition-colors">
+                  <span className="material-icons-round">close</span>
                 </button>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div className="bg-[var(--surfaceDark)] p-6 border-2 border-[var(--border-var)] shadow-inner space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
-              <div className="field !mb-0">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--teal)] mb-2 block min-h-[24px]">Monto en Dólares ($)</label>
-                <div className="relative">
-                  <input type="number"
-                    className="inp !py-4 !pl-10 font-mono text-xl font-black w-full rounded-none focus:bg-[var(--teal)]/5 transition-none shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    autoFocus
-                    placeholder="0.00"
-                    value={payForm.montoUSD}
-                    onChange={e => updatePayAmount(e.target.value, true)}
-                    inputMode="decimal"
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--teal)] font-black z-10">$</span>
+              {/* DASHBOARD DE SALDOS */}
+              <div className="p-4 bg-orange-50/30">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">TOTAL VENTA</p>
+                    <p className="text-base font-black text-[#131E2E]">{fmtUSD(totalVenta)}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">ABONADO</p>
+                    <p className="text-base font-black text-[var(--green-var)]">{fmtUSD(yaPagado)}</p>
+                    {payments.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[var(--green-var)] text-white text-[8px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">{payments.length}</span>
+                    )}
+                  </div>
+                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">FALTA POR PAGAR</p>
+                    <p className="text-base font-black text-[#F36E25]">{fmtUSD(saldo)}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="field !mb-0">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)] mb-2 block min-h-[24px]">Equivalencia en Bolívares (Bs)</label>
-                <div className="relative">
-                  <input type="number"
-                    className="inp !py-4 !pl-12 font-mono text-xl font-black w-full rounded-none focus:bg-[var(--teal)]/5 transition-none shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    placeholder="0.00"
-                    value={payForm.montoBS}
-                    onChange={e => updatePayAmount(e.target.value, false)}
-                    inputMode="decimal"
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text2)] font-black z-10 text-[10px]">BS</span>
+              {/* CONTENIDO PRINCIPAL DIVIDIDO */}
+              <div className="flex flex-1 min-h-[380px]">
+                {/* COLUMNA IZQUIERDA: MÉTODOS Y LISTA */}
+                <div className="flex-1 p-4 space-y-4 border-r border-slate-200/60">
+                  {/* SWITCHER MONEDA */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => { setActiveCurrency('USD'); setKeypadBuffer('') }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'USD' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
+                      USD
+                    </button>
+                    <button
+                      onClick={() => { setActiveCurrency('BS'); setKeypadBuffer('') }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'BS' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
+                      BS
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">MÉTODO DE PAGO</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'EFECTIVO_USD', label: 'Efectivo', icon: 'payments' },
+                        { id: 'PUNTO_VENTA', label: 'Tarjeta', icon: 'credit_card' },
+                        { id: 'ZELLE', label: 'Zelle', icon: 'bolt' },
+                        { id: 'PAGO_MOVIL', label: 'Pago Móvil', icon: 'smartphone' },
+                        { id: 'CUPON', label: 'Cupón', icon: 'confirmation_number' },
+                        { id: 'OTRO', label: 'Otro', icon: 'more_horiz' },
+                      ].map(m => (
+                        <button
+                          key={m.id}
+                          onClick={() => setPayForm({ ...payForm, metodo: m.id })}
+                          className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all aspect-square
+                            ${payForm.metodo === m.id ? 'border-[#F36E25] bg-white shadow-md scale-105' : 'border-transparent bg-white/50 opacity-60'}`}
+                        >
+                          <span className={`material-icons-round text-lg ${payForm.metodo === m.id ? 'text-[#F36E25]' : 'text-slate-400'}`}>{m.icon}</span>
+                          <span className={`text-[9px] font-black mt-1 ${payForm.metodo === m.id ? 'text-[#131E2E]' : 'text-slate-400'}`}>{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* PAGOS APLICADOS */}
+                  <div className="space-y-2 pt-3 border-t border-slate-100">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">PAGOS APLICADOS</p>
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                      {payments.length === 0 ? (
+                        <p className="text-[10px] font-bold text-slate-300 text-center py-4 italic">No hay pagos registrados</p>
+                      ) : (
+                        payments.map(p => (
+                          <div
+                            key={p.id}
+                            onClick={() => handleEditPay(p)}
+                            className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-100 shadow-sm hover:border-[#F36E25] cursor-pointer group transition-all"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-icons-round text-[var(--green-var)] text-sm group-hover:text-[#F36E25]">check_circle</span>
+                              <span className="text-[10px] font-black text-[#131E2E] uppercase tracking-tight">{p.metodo.replace(/_/g, ' ')}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-black text-[#131E2E]">{fmtUSD(p.monto)}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removePayment(p.id) }}
+                                className="text-slate-300 hover:text-red-500 transition-colors"
+                              >
+                                <span className="material-icons-round text-sm">delete</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* COLUMNA DERECHA: KEYPAD */}
+                <div className="w-[170px] p-4 bg-white/40 flex flex-col">
+                  <div className="mb-6">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">MONTO A INGRESA</p>
+                    <div className={`p-3 rounded-2xl border-2 transition-all flex items-center justify-center bg-white shadow-sm
+                      ${keypadBuffer ? 'border-[#F36E25]' : 'border-slate-100'}`}>
+                      <span className="text-xs font-black text-slate-400 mr-1">{activeCurrency === 'USD' ? '$' : 'Bs'}</span>
+                      <span className="text-xl font-mono font-black text-[#131E2E]">{keypadBuffer || '0.00'}</span>
+                    </div>
+                  </div>
+
+                  {/* KEYPAD NUMÉRICO */}
+                  <div className="grid grid-cols-3 gap-2 flex-1 mb-4">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, '.', 0, 'DEL'].map(val => (
+                      <button
+                        key={val}
+                        onClick={() => handleKeypad(val)}
+                        className={`w-full aspect-square rounded-2xl font-black text-lg transition-all flex items-center justify-center
+                          ${val === 'DEL' ? 'bg-slate-50 text-slate-500' : 'bg-white text-[#131E2E] shadow-sm hover:scale-110 active:scale-95 border border-slate-100'}`}
+                      >
+                        {val === 'DEL' ? <span className="material-icons-round">backspace</span> : val}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => handleAddPay(true)}
+                    disabled={!keypadBuffer || parseFloat(keypadBuffer) <= 0}
+                    className="w-full py-4 bg-[#F36E25] hover:bg-[#e05d1a] disabled:opacity-30 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2">
+                    Añadir Pago
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-between items-center py-2 px-3 bg-[var(--surface2)] border-l-4 border-[var(--teal)]">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text2)]">Tasa de Cambio (BCV):</span>
-              <span className="font-mono font-black text-[var(--teal)]">1 $ = {tasa.toFixed(2)} BS</span>
+              {/* FOOTER */}
+              <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 py-4 border-2 border-slate-100 rounded-2xl font-black text-xs text-[#131E2E] uppercase tracking-widest hover:bg-slate-50 transition-all">
+                  Volver
+                </button>
+                <button
+                  onClick={() => {
+                    if (payForm.montoUSD > 0 && keypadBuffer) handleAddPay(false)
+                    else setShowPaymentModal(false)
+                  }}
+                  className="flex-[1.5] py-4 bg-[#131E2E] text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-xl shadow-slate-200">
+                  Confirmar Pagos
+                  <span className="material-icons-round text-base">verified_user</span>
+                </button>
+              </div>
             </div>
-          </div>
-
-          <div className="flex gap-4 pt-2">
-            <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => setShowPaymentModal(false)}>DESCARTAR</button>
-            <button className="btn bg-[var(--teal)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={handleAddPay}>
-              <span className="material-icons-round text-base">add_task</span>
-              <span>CARGAR PAGO</span>
-            </button>
-          </div>
-        </div>
+          )
+        })()}
       </Modal>
 
       <Modal open={showPrintModal && !!lastVenta} onClose={() => setShowPrintModal(false)} title="Venta Exitosa">

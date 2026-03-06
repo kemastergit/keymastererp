@@ -89,32 +89,93 @@ export default function CuentasPagar() {
     setForm(empty); setShowModal(false)
   }
 
+  const isBS = (m) => ['EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA', 'TRANSFERENCIA'].includes(m)
+
+  const handleAddPagoPagar = () => {
+    const val = parseFloat(montoPago)
+    if (!val || val <= 0) { toast('Monto inválido', 'error'); return }
+
+    const montoUSD = isBS(metodoPago) ? val / tasa : val
+    const montoBS = isBS(metodoPago) ? val : val * tasa
+
+    setPagosCxp([...pagosCxp, {
+      id: Date.now(),
+      metodo: metodoPago,
+      monto: montoUSD,
+      montoBS,
+      tasa
+    }])
+    setMontoPago('')
+  }
+
+  const removePagoPagar = (id) => setPagosCxp(p => p.filter(x => x.id !== id))
+
+  const totalPagadoUSD = pagosCxp.reduce((s, p) => s + p.monto, 0)
+
   const procesarPago = async () => {
-    if (!pago) return
-    const monto = parseFloat(montoPago)
-    if (!monto || monto <= 0) { toast('Monto inválido', 'error'); return }
+    if (!pago || pagosCxp.length === 0) return
 
     const abonosActuales = abonos.filter(a => a.cuenta_id === pago.id).reduce((s, x) => s + x.monto, 0)
     const saldoRestante = pago.monto - abonosActuales
 
-    if (monto > saldoRestante + 0.01) {
-      toast(`⚠️ El monto excede el saldo restante (${fmtUSD(saldoRestante)})`, 'warn'); return
+    if (totalPagadoUSD > saldoRestante + 0.05) {
+      toast(`⚠️ El total excede el saldo (${fmtUSD(saldoRestante)})`, 'warn'); return
     }
 
-    await db.abonos.add({
-      cuenta_id: pago.id, tipo_cuenta: 'PAGAR',
-      fecha: new Date(), monto, metodo: metodoPago
-    })
+    try {
+      const now = new Date().toISOString()
 
-    const nuevoTotalAbonado = abonosActuales + monto
-    const nuevoEstado = nuevoTotalAbonado >= pago.monto - 0.01 ? 'PAGADA' : 'PARCIAL'
+      // 1. Procesar cada pago
+      for (const p of pagosCxp) {
+        const abonoLocalId = await db.abonos.add({
+          cuenta_id: pago.id,
+          tipo_cuenta: 'PAGAR',
+          fecha: new Date(),
+          monto: p.monto,
+          metodo: p.metodo
+        })
 
-    await db.ctas_pagar.update(pago.id, {
-      estado: nuevoEstado
-    })
+        await addToSyncQueue('abonos', 'INSERT', {
+          id: `abono-pagar-${pago.id}-${abonoLocalId}-${Date.now()}`,
+          cuenta_id: String(pago.id),
+          tipo_cuenta: 'PAGAR',
+          fecha: now,
+          monto: p.monto,
+          metodo: p.metodo
+        })
+      }
 
-    toast(`✅ Egreso registrado: ${fmtUSD(monto)}`)
-    setPago(null); setMontoPago(''); setMetodoPago('EFECTIVO_USD')
+      // 2. ACTUALIZAR CUENTA CXP
+      const nuevoTotalAbonado = abonosActuales + totalPagadoUSD
+      const nuevoEstado = nuevoTotalAbonado >= pago.monto - 0.05 ? 'PAGADA' : 'PARCIAL'
+
+      await db.ctas_pagar.update(pago.id, {
+        estado: nuevoEstado,
+        monto_pagado: nuevoTotalAbonado
+      })
+
+      // 3. Sync CXP
+      await addToSyncQueue('ctas_pagar', 'INSERT', {
+        id: pago.id,
+        id_local: pago.id,
+        proveedor: pago.proveedorLabel,
+        proveedor_id: pago.proveedor_id,
+        monto: pago.monto,
+        monto_total: pago.monto,
+        monto_pagado: nuevoTotalAbonado,
+        estado: nuevoEstado,
+        vencimiento: pago.vencimiento,
+        nro_factura: pago.nro_factura,
+        ultima_actualizacion: now
+      })
+
+      processSyncQueue()
+      toast(`✅ Egreso de ${fmtUSD(totalPagadoUSD)} procesado con éxito`)
+      setPago(null); setPagosCxp([]); setMontoPago(''); setMetodoPago('EFECTIVO_USD')
+    } catch (err) {
+      console.error('Error procesando pago:', err)
+      toast('⚠️ Error al registrar egreso', 'error')
+    }
   }
 
   return (
@@ -293,49 +354,109 @@ export default function CuentasPagar() {
         </div>
       </Modal>
 
-      <Modal open={!!pago} onClose={() => setPago(null)} title="REGISTRAR EGRESO / LIQUIDACIÓN">
-        {pago && (
-          <div className="space-y-6">
-            <div className="p-5 border-2 border-[var(--border-var)] bg-[var(--surfaceDark)] rounded-none flex items-center justify-between shadow-inner relative overflow-hidden text-left">
-              <div className="absolute right-0 top-0 bottom-0 w-32 bg-[var(--red-var)]/5 -skew-x-12 blur-xl"></div>
-              <div className="relative z-10">
-                <p className="text-[var(--red-var)] text-[10px] font-black uppercase tracking-widest mb-1">PROVEEDOR / ACREEDOR</p>
-                <p className="text-sm font-black text-[var(--text-main)] truncate max-w-[180px] uppercase">{pago.proveedorLabel}</p>
-              </div>
-              <div className="text-right relative z-10 border-l border-[var(--border-var)] pl-4">
-                <p className="text-[var(--text2)] text-[10px] font-black uppercase tracking-widest mb-1">SALDO A LIQUIDAR</p>
-                <p className="text-[var(--red-var)] font-mono font-black text-2xl">
-                  {fmtUSD(pago.monto - abonos.filter(a => a.cuenta_id === pago.id).reduce((s, x) => s + x.monto, 0))}
-                </p>
-              </div>
-            </div>
+      <Modal open={!!pago} onClose={() => { setPago(null); setPagosCxp([]); }} title="REGISTRAR PAGO A CUENTA">
+        {pago && (() => {
+          const abonosCuenta = abonos.filter(a => a.cuenta_id === pago.id).reduce((s, x) => s + x.monto, 0)
+          const saldoActual = pago.monto - abonosCuenta
+          const pendienteFinal = saldoActual - totalPagadoUSD
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="field">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">Método de Desembolso</label>
-                <select className="inp !py-3 rounded-none focus:border-[var(--red-var)] transition-none shadow-inner font-black uppercase text-xs" value={metodoPago} onChange={e => setMetodoPago(e.target.value)}>
-                  <option value="EFECTIVO_USD">EFECTIVO DOLAR ($)</option>
-                  <option value="EFECTIVO_BS">EFECTIVO BOLIVARES (BS)</option>
-                  <option value="PAGO_MOVIL">PAGO MÓVIL / ZELLE</option>
-                  <option value="PUNTO_VENTA">TRANSFERENCIA BANCARIA</option>
-                </select>
+          return (
+            <div className="space-y-6">
+              <div className="p-4 border-2 border-[var(--border-var)] bg-[var(--surfaceDark)] rounded-none grid grid-cols-1 md:grid-cols-3 gap-4 shadow-inner relative overflow-hidden">
+                <div className="relative z-10 border-r md:border-r border-[var(--border-var)] pr-4">
+                  <p className="text-[var(--text2)] text-[9px] font-black uppercase tracking-widest mb-1">DEUDA INICIAL</p>
+                  <p className="text-sm font-black text-[var(--text-main)] truncate">{fmtUSD(pago.monto)}</p>
+                </div>
+                <div className="relative z-10 border-r md:border-r border-[var(--border-var)] px-4">
+                  <p className="text-[var(--orange-var)] text-[9px] font-black uppercase tracking-widest mb-1">SALDO PENDIENTE</p>
+                  <p className="text-xl font-mono font-black text-[var(--orange-var)]">{fmtUSD(saldoActual)}</p>
+                </div>
+                <div className="text-right relative z-10 pl-4">
+                  <p className="text-[var(--teal)] text-[9px] font-black uppercase tracking-widest mb-1">POR ABONAR AHORA</p>
+                  <p className={`font-mono font-black text-xl ${pendienteFinal < -0.01 ? 'text-[var(--orange-var)]' : 'text-[var(--teal)]'}`}>
+                    {fmtUSD(totalPagadoUSD)}
+                  </p>
+                </div>
               </div>
-              <div className="field">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text2)]">Monto a Descontar ($)</label>
-                <input className="inp font-mono font-black text-xl !py-4 rounded-none bg-[var(--surface2)] focus:border-[var(--red-var)] transition-none shadow-inner" type="number"
-                  value={montoPago} onChange={e => setMontoPago(e.target.value)} step="0.01" inputMode="decimal" />
-              </div>
-            </div>
 
-            <div className="flex gap-4 pt-6 border-t border-[var(--border-var)]">
-              <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => setPago(null)}>DESCARTAR</button>
-              <button className="btn bg-[var(--red-var)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest" onClick={procesarPago}>
-                <span className="material-icons-round text-base">verified</span>
-                <span>CONFIRMAR PAGO</span>
-              </button>
+              {/* VISOR DE PAGOS AÑADIDOS */}
+              {pagosCxp.length > 0 && (
+                <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-[var(--surface2)] border border-[var(--border-var)] shadow-inner">
+                  {pagosCxp.map(p => (
+                    <div key={p.id} className="flex items-center justify-between bg-[var(--surface)] p-2 border-l-4 border-[var(--orange-var)] shadow-sm">
+                      <div>
+                        <p className="text-[10px] font-black uppercase">{p.metodo.replace(/_/g, ' ')}</p>
+                        <p className="text-[9px] text-[var(--text2)] font-mono">
+                          {isBS(p.metodo) ? `${p.montoBS.toLocaleString('es-VE')} BS @ ${p.tasa}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="font-mono font-black text-xs text-[var(--orange-var)]">{fmtUSD(p.monto)}</p>
+                        <button onClick={() => removePagoPagar(p.id)} className="material-icons-round text-sm text-[var(--red-var)] cursor-pointer hover:scale-110 transition-transform">delete</button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="pt-2 flex justify-between border-t border-[var(--border-var)]">
+                    <span className="text-[10px] font-black uppercase">Total a Procesar:</span>
+                    <span className="text-sm font-black text-[var(--orange-var)]">{fmtUSD(totalPagadoUSD)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative bg-[var(--surface2)] p-4 border border-[var(--border-var)]">
+                <div className="field">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text2)]">Canal de Egreso</label>
+                  <select className="inp !py-3 rounded-none focus:border-[var(--orange-var)] transition-none shadow-inner font-black uppercase text-[10px]" value={metodoPago} onChange={e => setMetodoPago(e.target.value)}>
+                    <option value="EFECTIVO_USD">💵 EFECTIVO DOLAR ($)</option>
+                    <option value="ZELLE">📱 ZELLE (USD)</option>
+                    <option value="EFECTIVO_BS">💸 EFECTIVO BOLIVARES (BS)</option>
+                    <option value="PAGO_MOVIL">📲 PAGO MÓVIL (BS)</option>
+                    <option value="PUNTO_VENTA">💳 PUNTO DE VENTA (BS)</option>
+                    <option value="TRANSFERENCIA">🏦 TRANSFERENCIA (BS)</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text2)]">
+                    {isBS(metodoPago) ? `Monto en Bolívares (BS @ ${tasa})` : 'Monto en Dólares ($)'}
+                  </label>
+                  <div className="relative">
+                    <input className="inp font-mono font-black text-lg !py-3 rounded-none bg-[var(--surface)] focus:border-[var(--orange-var)] transition-none shadow-inner w-full pr-20" type="number"
+                      value={montoPago} onChange={e => setMontoPago(e.target.value)} step="0.01" inputMode="decimal" placeholder="0.00" />
+
+                    {isBS(metodoPago) && montoPago > 0 && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-[var(--orange-var)]/10 px-2 py-1 border border-[var(--orange-var)]/20">
+                        <p className="text-[10px] font-black text-[var(--orange-var)]">{fmtUSD(montoPago / tasa)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <button
+                    onClick={handleAddPagoPagar}
+                    disabled={!montoPago || parseFloat(montoPago) <= 0}
+                    className="w-full btn bg-slate-800 text-white !py-3 font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span className="material-icons-round text-sm group-hover:rotate-90 transition-transform">add_circle</span>
+                    <span>AÑADIR FORMA DE PAGO</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-[var(--border-var)] pt-6">
+                <div className="flex gap-4">
+                  <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] flex-1 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={() => { setPago(null); setPagosCxp([]); }}>DESCARTAR</button>
+                  <button
+                    className="btn bg-[var(--orange-var)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest disabled:opacity-50"
+                    onClick={procesarPago}
+                    disabled={pagosCxc.length === 0}>
+                    <span className="material-icons-round text-base">verified</span>
+                    <span>{totalPagadoUSD >= saldoActual - 0.05 ? 'COMPLETAR PAGO' : 'REGISTRAR ABONO PARCIAL'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Modal de Detalle de Factura Original */}

@@ -35,6 +35,20 @@ db.version(14).stores({
   config_empresa: 'clave'
 })
 
+db.version(15).stores({
+  cuotas_credito: '++id, venta_id, numero_cuota, monto, fecha_vencimiento, estado, fecha_pago'
+})
+
+db.version(16).stores({
+  clientes: '++id, rif, nombre, estado, motivo_inactivacion, fecha_inactivacion, inactivado_por',
+  proveedores: '++id, rif, nombre, estado, motivo_inactivacion, fecha_inactivacion, inactivado_por',
+  ctas_cobrar: '++id, venta_id, cliente, monto, fecha, estado, vencimiento, clasificacion, motivo_castigo, autorizado_por'
+})
+
+db.version(17).stores({
+  ctas_pagar: '++id, proveedor, monto, fecha, estado, vencimiento, proveedor_id, nro_factura, motivo_anulacion, autorizado_por'
+})
+
 // Seed config por defecto
 db.on('ready', async () => {
   // Inicializar Admin si no hay usuarios

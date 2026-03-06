@@ -5,10 +5,10 @@ export default function ItemsAgregados({
 }) {
     return (
         <div className="col-items bg-[var(--surface)] border border-[var(--border-var)] flex flex-col overflow-hidden h-full min-h-0 w-full lg:flex-1 lg:min-w-[220px]">
-            <div className="p-4 border-b border-[var(--border-var)] bg-[var(--surface2)] flex justify-between items-center shrink-0">
+            <div className="p-4 short:p-2 border-b border-[var(--border-var)] bg-[var(--surface2)] flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
-                    <span className="material-icons-round text-[var(--teal)]">shopping_basket</span>
-                    <div className="font-['IBM_Plex_Mono'] font-bold text-[var(--text-main)] text-[11px] uppercase tracking-wider">
+                    <span className="material-icons-round text-[var(--teal)] short:text-base">shopping_basket</span>
+                    <div className="font-['IBM_Plex_Mono'] font-bold text-[var(--text-main)] text-[11px] short:text-[9px] uppercase tracking-wider">
                         Detalle <span className="text-[var(--text2)]">({cart.length})</span>
                     </div>
                 </div>
@@ -22,11 +22,11 @@ export default function ItemsAgregados({
                     </div>
                 ) : (
                     cart.map(item => (
-                        <div key={item.id} className="bg-[var(--surface)] border border-[var(--border-var)] p-3 flex flex-col group transition-none shadow-[var(--win-shadow)]">
+                        <div key={item.id} className="bg-[var(--surface)] border border-[var(--border-var)] p-3 short:p-1.5 flex flex-col group transition-none shadow-[var(--win-shadow)]">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex-1 min-w-0 pr-2 cursor-pointer" onClick={() => openEditItem(item)}>
-                                    <div className="text-[10px] font-mono font-bold text-[var(--teal)] mb-0.5">{item.codigo}</div>
-                                    <div className="text-xs font-bold text-[var(--text-main)] leading-tight group-hover:text-[var(--teal)] transition-colors">
+                                    <div className="text-[10px] short:text-[8px] font-mono font-bold text-[var(--teal)] mb-0.5">{item.codigo}</div>
+                                    <div className="text-xs short:text-[10px] short:leading-none font-bold text-[var(--text-main)] leading-tight group-hover:text-[var(--teal)] transition-colors">
                                         {item.descripcion}
                                     </div>
                                 </div>
@@ -38,8 +38,8 @@ export default function ItemsAgregados({
                                 </button>
                             </div>
 
-                            <div className="flex items-center justify-between mt-auto pt-2 border-t border-[var(--border-var)]">
-                                <div className="flex items-center bg-[var(--surface2)] border border-[var(--border-var)] h-7">
+                            <div className="flex items-center justify-between mt-auto pt-2 short:pt-1 short:mt-1 border-t border-[var(--border-var)]">
+                                <div className="flex items-center bg-[var(--surface2)] border border-[var(--border-var)] h-7 short:h-5">
                                     <button className="px-2 text-[12px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center justify-center min-w-[24px]" onClick={() => updateQty(item.id, item.qty - 1)}>-</button>
                                     <span className="w-8 text-center text-xs font-bold border-l border-r border-[var(--border-var)] bg-[var(--surface)] h-full flex items-center justify-center">{item.qty}</span>
                                     <button className="px-2 text-[12px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center justify-center min-w-[24px]" onClick={() => updateQty(item.id, item.qty + 1)}>+</button>

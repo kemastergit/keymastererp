@@ -102,7 +102,9 @@ const useStore = create(
 
       addToCart: (art, qty = 1) => {
         const cart = get().cart
-        const idx = cart.findIndex(i => i.id === art.id)
+        // Buscar por ID, o si fallamos buscar por código (por si hubo un refresco de nube y los auto-increments cambiaron)
+        const idx = cart.findIndex(i => i.id === art.id || (i.codigo && i.codigo === art.codigo))
+
         const currentQtyInCart = idx >= 0 ? cart[idx].qty : 0
         const available = (art.stock || 0) - currentQtyInCart
 
@@ -115,7 +117,7 @@ const useStore = create(
 
         if (idx >= 0) {
           const updated = [...cart]
-          updated[idx] = { ...updated[idx], qty: updated[idx].qty + qtyToAdd }
+          updated[idx] = { ...updated[idx], qty: updated[idx].qty + qtyToAdd, id: art.id } // Sanación del ID
           set({ cart: updated })
         } else {
           set({ cart: [...cart, { ...art, qty: qtyToAdd }] })

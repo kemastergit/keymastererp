@@ -18,6 +18,7 @@ const empty = {
 
 export default function Inventario() {
   const toast = useStore(s => s.toast)
+  const currentUser = useStore(s => s.currentUser)
   const [searchParams, setSearchParams] = useSearchParams()
   const filterParam = searchParams.get('filter')
 
@@ -175,20 +176,27 @@ export default function Inventario() {
 
     const performAjuste = async () => {
       try {
-        await db.transaction('rw', [db.articulos, db.auditoria], async () => {
+        const currentUser = useStore.getState().currentUser
+        let artSnapshot = null
+
+        await db.transaction('rw', [db.articulos], async () => {
           const art = await db.articulos.get(ajuste.id)
           const newStock = Math.max(0, (art.stock || 0) + qty)
-          const currentUser = useStore.getState().currentUser
-
           await db.articulos.update(ajuste.id, { stock: newStock })
+          artSnapshot = art
+        })
+
+        // La auditoría debe ir FUERA de la transacción para evitar: "Transaction committed too early"
+        if (artSnapshot) {
           await logAction(currentUser, 'AJUSTE_INVENTARIO', {
-            sku: art.codigo,
-            descripcion: art.descripcion,
+            sku: artSnapshot.codigo,
+            descripcion: artSnapshot.descripcion,
             tipo: qty > 0 ? 'SOBRANTE' : 'FALTANTE',
             cant: qty,
             motivo: ajuste.motivo
           })
-        })
+        }
+
         toast('✅ Inventario sincronizado y auditado')
         setAjuste(null)
       } catch (err) {
@@ -310,18 +318,22 @@ export default function Inventario() {
                 </div>
               </div>
               <div className="flex gap-3 mt-4 justify-end">
-                <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                  onClick={(e) => { e.stopPropagation(); setAjuste({ ...a, qty: 0, motivo: '' }) }} title="Ajuste de Stock">
-                  <span className="material-icons-round text-base">exposure</span>
-                </button>
-                <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                  onClick={(e) => { e.stopPropagation(); openEdit(a) }} title="Editar">
-                  <span className="material-icons-round text-base">edit</span>
-                </button>
-                <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                  onClick={(e) => { e.stopPropagation(); setDelId(a.id) }} title="Eliminar">
-                  <span className="material-icons-round text-base">delete</span>
-                </button>
+                {currentUser?.rol === 'ADMIN' && (
+                  <>
+                    <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                      onClick={(e) => { e.stopPropagation(); setAjuste({ ...a, qty: 0, motivo: '' }) }} title="Ajuste de Stock">
+                      <span className="material-icons-round text-base">exposure</span>
+                    </button>
+                    <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                      onClick={(e) => { e.stopPropagation(); openEdit(a) }} title="Editar">
+                      <span className="material-icons-round text-base">edit</span>
+                    </button>
+                    <button className="w-10 h-10 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                      onClick={(e) => { e.stopPropagation(); setDelId(a.id) }} title="Eliminar">
+                      <span className="material-icons-round text-base">delete</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
@@ -364,20 +376,22 @@ export default function Inventario() {
                   <td className="py-3 px-4 font-mono text-[var(--text2)] text-right text-[11px] font-black italic">{fmtUSD(a.costo)}</td>
                   <td className="py-3 px-4 font-mono text-[var(--teal)] text-right font-black text-sm">{fmtUSD(a.precio)}</td>
                   <td className="py-3 px-4 text-right pr-6 whitespace-nowrap">
-                    <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-none">
-                      <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                        onClick={(e) => { e.stopPropagation(); setAjuste({ ...a, qty: 0, motivo: '' }) }} title="Ajuste de Stock">
-                        <span className="material-icons-round text-sm">exposure</span>
-                      </button>
-                      <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                        onClick={(e) => { e.stopPropagation(); openEdit(a) }} title="Editar">
-                        <span className="material-icons-round text-sm">edit</span>
-                      </button>
-                      <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
-                        onClick={(e) => { e.stopPropagation(); setDelId(a.id) }} title="Eliminar">
-                        <span className="material-icons-round text-sm">delete</span>
-                      </button>
-                    </div>
+                    {currentUser?.rol === 'ADMIN' && (
+                      <div className="flex gap-2 justify-end transition-none">
+                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                          onClick={(e) => { e.stopPropagation(); setAjuste({ ...a, qty: 0, motivo: '' }) }} title="Ajuste de Stock">
+                          <span className="material-icons-round text-sm">exposure</span>
+                        </button>
+                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                          onClick={(e) => { e.stopPropagation(); openEdit(a) }} title="Editar">
+                          <span className="material-icons-round text-sm">edit</span>
+                        </button>
+                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                          onClick={(e) => { e.stopPropagation(); setDelId(a.id) }} title="Eliminar">
+                          <span className="material-icons-round text-sm">delete</span>
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

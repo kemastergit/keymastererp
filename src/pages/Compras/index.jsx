@@ -3,6 +3,7 @@ import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import { fmtUSD, fmtBS, today } from '../../utils/format'
 import { logAction } from '../../utils/audit'
+import { printEtiquetas } from '../../utils/print'
 import Modal from '../../components/UI/Modal'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
@@ -15,7 +16,9 @@ export default function Compras() {
         fecha: today(),
         moneda: 'USD',
         tasa: tasa || 0,
-        tipo_tasa: 'BCV'
+        tipo_tasa: 'BCV',
+        condicion: 'CREDITO',
+        metodo_pago: 'EFECTIVO_USD'
     })
 
     const [items, setItems] = useState([])
@@ -25,7 +28,7 @@ export default function Compras() {
 
     const proveedores = useLiveQuery(() => db.proveedores.orderBy('nombre').toArray(), [], [])
     const articulos = useLiveQuery(() =>
-        busq.trim().length > 1
+        busq.trim().length > 0
             ? db.articulos.filter(a =>
                 a.descripcion.toLowerCase().includes(busq.toLowerCase()) ||
                 a.codigo.toLowerCase().includes(busq.toLowerCase()) ||
@@ -65,8 +68,10 @@ export default function Compras() {
         if (items.length === 0) return toast('No hay productos en la factura', 'error')
 
         try {
+            let compraId = null;
+
             await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria], async () => {
-                const compraId = await db.compras.add({
+                compraId = await db.compras.add({
                     ...header,
                     total_usd: totalUSD,
                     usuario_id: currentUser.id,
@@ -97,24 +102,40 @@ export default function Compras() {
                 }
 
                 // Crear Cuenta por Pagar
-                await db.ctas_pagar.add({
+                ctaPagarId = await db.ctas_pagar.add({
                     proveedor_id: parseInt(header.proveedor_id),
                     nro_factura: header.nro_factura,
                     monto: totalUSD,
                     fecha: header.fecha,
-                    estado: 'PENDIENTE',
+                    estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
                     vencimiento: header.fecha // Simplificado
                 })
 
+                if (header.condicion === 'CONTADO') {
+                    abonoId = await db.abonos.add({
+                        cuenta_id: ctaPagarId,
+                        tipo_cuenta: 'PAGAR',
+                        fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0],
+                        monto: totalUSD,
+                        metodo: header.metodo_pago,
+                        usuario_id: currentUser.id
+                    })
+                }
+
                 await logAction(currentUser, 'COMPRA_PROVEEDOR', {
                     factura: header.nro_factura,
-                    total: totalUSD
+                    total: totalUSD,
+                    condicion: header.condicion
                 })
             })
 
             toast('✅ Compra procesada e inventario actualizado')
+
+            // 🏷️ Imprimir etiquetas automático
+            printEtiquetas(items, header.tasa || tasa, 'mediana')
+
             setItems([])
-            setHeader({ ...header, nro_factura: '' })
+            setHeader({ ...header, nro_factura: '', condicion: 'CREDITO', metodo_pago: 'EFECTIVO_USD' })
 
             // ☁️ SYNC A SUPABASE — El Cacique ve todo desde su choza
             const compraData = { ...header, total_usd: totalUSD, usuario_id: currentUser.id, created_at: new Date().toISOString() }
@@ -126,9 +147,15 @@ export default function Compras() {
                 })
             }
             await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
-                proveedor_id: parseInt(header.proveedor_id), nro_factura: header.nro_factura,
-                monto: totalUSD, fecha: header.fecha, estado: 'PENDIENTE', vencimiento: header.fecha
+                id: ctaPagarId, proveedor_id: parseInt(header.proveedor_id), nro_factura: header.nro_factura,
+                monto: totalUSD, fecha: header.fecha, estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE', vencimiento: header.fecha
             })
+            if (header.condicion === 'CONTADO') {
+                await addToSyncQueue('abonos', 'INSERT', {
+                    id: abonoId, cuenta_id: ctaPagarId, tipo_cuenta: 'PAGAR',
+                    fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], monto: totalUSD, metodo: header.metodo_pago, usuario_id: currentUser.id
+                })
+            }
             processSyncQueue()
         } catch (err) {
             console.error(err)
@@ -153,13 +180,37 @@ export default function Compras() {
                     <h1 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter">Entrada de Compras</h1>
                     <p className="text-[var(--text2)] font-bold text-xs uppercase tracking-widest mt-1">Recepción de Facturas de Proveedores</p>
                 </div>
-                <button
-                    className="btn bg-[var(--teal)] text-white !py-3 !px-8 font-black text-sm transition-none shadow-[var(--win-shadow)] cursor-pointer"
-                    onClick={handleProcess}
-                >
-                    <span className="material-icons-round text-base">save</span>
-                    <span>PROCESAR FACTURA</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Condición</label>
+                        <select className="inp !py-2.5 !px-3 rounded-lg text-xs focus:ring-2 focus:ring-blue-100 font-bold bg-white border border-slate-200 shadow-sm"
+                            value={header.condicion || 'CREDITO'}
+                            onChange={e => setHeader({ ...header, condicion: e.target.value })}>
+                            <option value="CREDITO">A CRÉDITO</option>
+                            <option value="CONTADO">DE CONTADO</option>
+                        </select>
+                    </div>
+                    {header.condicion === 'CONTADO' && (
+                        <div className="flex flex-col items-end">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Método de Pago</label>
+                            <select className="inp !py-2.5 !px-3 rounded-lg text-xs focus:ring-2 focus:ring-emerald-100 font-bold bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-sm"
+                                value={header.metodo_pago || 'EFECTIVO_USD'}
+                                onChange={e => setHeader({ ...header, metodo_pago: e.target.value })}>
+                                <option value="EFECTIVO_USD">EFECTIVO USD</option>
+                                <option value="EFECTIVO_BS">EFECTIVO BS</option>
+                                <option value="ZELLE">ZELLE / BOFA</option>
+                                <option value="BANCO_BS">BANCO NACIONAL</option>
+                            </select>
+                        </div>
+                    )}
+                    <button
+                        className="btn bg-[#009c85] hover:bg-[#007b69] text-white !py-3 !px-6 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all shadow-md active:scale-[0.98] self-end h-[42px] flex items-center justify-center gap-2"
+                        onClick={handleProcess}
+                    >
+                        <span className="material-icons-round text-[18px]">save</span>
+                        <span>PROCESAR FACTURA</span>
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

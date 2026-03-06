@@ -380,49 +380,114 @@ export function printNotaTermica(venta, items, tasa, options = {}) {
 export function printEtiquetas(productos, tasa, tamano = 'mediana') {
   // tamano: 'pequena' (5x3cm), 'mediana' (7x4cm), 'grande' (10x5cm)
   const sizes = {
-    pequena: { w: '50mm', h: '30mm', font: '8px', fontPrecio: '14px' },
-    mediana: { w: '70mm', h: '40mm', font: '9px', fontPrecio: '18px' },
-    grande: { w: '100mm', h: '50mm', font: '10px', fontPrecio: '22px' }
+    pequena: { w: '50mm', h: '30mm', font: '8px', fontPrecio: '12px', fontCod: '11px' },
+    mediana: { w: '70mm', h: '40mm', font: '10px', fontPrecio: '16px', fontCod: '15px' },
+    grande: { w: '100mm', h: '50mm', font: '12px', fontPrecio: '22px', fontCod: '18px' }
   }
   const s = sizes[tamano] || sizes.mediana
 
   const etiquetas = productos.map(p => {
-    const bs = ((p.precio || 0) * (tasa || 0)).toFixed(2)
-    return `< div class="etq" >
-      <div class="codigo">${p.codigo || ''}</div>
-      <div class="desc">${(p.descripcion || '').substring(0, 40)}</div>
-      <div class="marca">${p.marca || ''}</div>
-      <div class="precio">$ ${(p.precio || 0).toFixed(2)}</div>
-      <div class="bs">Bs ${bs}</div>
-      ${p.referencia ? `<div class="ref">Ref: ${p.referencia}</div>` : ''}
-    </div > `
+    const bs = ((p.precio || 0) * (tasa || 1)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const usd = (p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    return `<div class="etq">
+      <div class="etq-inner">
+        <div class="codigo-box">
+          <div class="codigo">${p.codigo || ''}</div>
+        </div>
+        <div class="info-box">
+          <div class="desc">${(p.descripcion || '')}</div>
+          ${p.marca ? `<div class="marca">${p.marca}</div>` : ''}
+        </div>
+        <div class="bottom-box">
+          <div class="ref-box">
+            ${p.referencia ? `<div class="ref">REF: ${p.referencia}</div>` : ''}
+          </div>
+          <div class="price-box">
+            <div class="precio">REF $${usd}</div>
+            <div class="bs">Bs ${bs}</div>
+          </div>
+        </div>
+      </div>
+    </div>`
   }).join('')
 
-  const html = `< html ><head>
+  const html = `<!DOCTYPE html>
+<html><head>
   <style>
-    @page { margin: 5mm; }
-    body { font-family: Arial, sans-serif; margin: 0; padding: 5mm; }
+    @page { margin: 2mm; }
+    body { font-family: 'Arial', sans-serif; margin: 0; padding: 2mm; background: #fff; }
+    
     .etq {
       width: ${s.w}; height: ${s.h};
-      border: 1px solid #ccc; border-radius: 3px;
-      padding: 2mm; margin: 2mm;
+      border: 1px dashed #ccc; border-radius: 4px;
+      padding: 3mm; margin: 1mm;
       display: inline-block; vertical-align: top;
       overflow: hidden; box-sizing: border-box;
       page-break-inside: avoid;
+      background: #fff;
     }
-    .codigo { font-family: 'Courier New', monospace; font-size: ${s.font}; color: #0078d4; font-weight: bold; }
-    .desc { font-size: ${s.font}; font-weight: bold; margin: 1mm 0; line-height: 1.2; color: #201f1e; }
-    .marca { font-size: 7px; color: #605e5c; text-transform: uppercase; }
-    .precio { font-size: ${s.fontPrecio}; font-weight: bold; color: #201f1e; margin-top: 1mm; }
-    .bs { font-size: ${s.font}; color: #605e5c; }
-    .ref { font-size: 7px; color: #a19f9d; margin-top: 1mm; }
-  </style></head><body>${etiquetas}</body></html > `
+    
+    .etq-inner {
+      display: flex; flex-direction: column; justify-content: space-between; height: 100%;
+    }
+    
+    .codigo-box { 
+      border-bottom: 2px solid #000; 
+      padding-bottom: 2px; margin-bottom: 3px; 
+      text-align: center; 
+    }
+    .codigo { 
+      font-family: 'Courier New', monospace; 
+      font-size: ${s.fontCod}; color: #000; 
+      font-weight: 900; letter-spacing: 0.5px; 
+    }
+    
+    .info-box { 
+      flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-start; 
+    }
+    .desc { 
+      font-size: ${s.font}; font-weight: 800; line-height: 1.1; color: #000; text-transform: uppercase;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .marca { 
+      font-size: 8px; color: #444; text-transform: uppercase; font-weight: 700; margin-top: 2px; 
+    }
+    
+    .bottom-box { 
+      display: flex; justify-content: space-between; align-items: flex-end; 
+    }
+    .ref-box { flex: 1; }
+    .ref { 
+      font-size: 8px; color: #333; font-family: monospace; font-weight: bold; 
+      background: #eee; padding: 1px 4px; border-radius: 2px; display: inline-block;
+    }
+    
+    .price-box { text-align: right; }
+    .precio { 
+      font-size: ${s.fontPrecio}; font-weight: 900; color: #000; 
+      letter-spacing: -0.5px; line-height: 1; 
+    }
+    .bs { 
+      font-size: 9px; color: #000; font-weight: bold; margin-top: 2px; 
+    }
+    
+    @media print {
+      .etq { border-color: transparent !important; }
+    }
+  </style>
+</head><body>${etiquetas}</body></html>`
 
   const w = window.open('', '_blank', 'width=800,height=600')
+  if (!w) {
+    console.error('Ventana emergente bloqueada por el navegador')
+    return alert('Por favor, permita las ventanas emergentes (pop-ups) para poder imprimir las etiquetas.')
+  }
+
   w.document.write(html)
   w.document.close()
   w.focus()
-  w.print()
+  setTimeout(() => w.print(), 300)
 }
 
 export function printEtiquetaDespacho(venta, items) {

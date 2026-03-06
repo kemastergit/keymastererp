@@ -45,7 +45,6 @@ export async function processSyncQueue() {
       console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation}) - Intento ${item.intentos}...`)
 
       if (item.table === 'rpc_venta' && item.operation === 'RPC') {
-        // 🚀 Súper Función — Venta completa atómica
         const { data: rpcResult, error: rpcError } = await supabase.rpc('procesar_venta_completa', item.data)
         if (rpcError || !rpcResult?.ok) {
           error = rpcError || { message: rpcResult?.error }
@@ -58,7 +57,7 @@ export async function processSyncQueue() {
           .update({ stock: item.data.stock })
           .eq('codigo', item.data.codigo)
         error = err
-      } else if (item.table === 'cuentas_por_cobrar' && item.operation === 'INSERT') {
+      } else if ((item.table === 'cuentas_por_cobrar' || item.table === 'ctas_cobrar') && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('cuentas_por_cobrar').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'abonos' && item.operation === 'INSERT') {
@@ -67,39 +66,32 @@ export async function processSyncQueue() {
       } else if (item.table === 'auditoria' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('auditoria').upsert([item.data], { onConflict: 'id' })
         error = err
-      } else if (item.table === 'cuentas_por_pagar' && item.operation === 'INSERT') {
+      } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('cuentas_por_pagar').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'compras' && item.operation === 'INSERT') {
-        // 🛒 COMPRAS: Historial de facturas de proveedores
         const { error: err } = await supabase.from('compras').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'compra_items' && item.operation === 'INSERT') {
-        // 📦 ÍTEMS DE COMPRA: Detalle de productos recibidos
         const { error: err } = await supabase.from('compra_items').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'cotizaciones' && item.operation === 'INSERT') {
-        // 📋 COTIZACIONES: Presupuestos emitidos a clientes
         const payload = { ...item.data, fecha: item.data.fecha instanceof Date ? item.data.fecha.toISOString() : item.data.fecha }
         const { error: err } = await supabase.from('cotizaciones').upsert([payload], { onConflict: 'id' })
         error = err
       } else if (item.table === 'cot_items' && item.operation === 'INSERT') {
-        // 📝 ÍTEMS DE COTIZACIÓN: Detalle de artículos cotizados
         const { error: err } = await supabase.from('cot_items').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'ordenes_compra' && item.operation === 'INSERT') {
-        // 📦 ÓRDENES DE COMPRA
         const payload = { ...item.data, fecha: item.data.fecha instanceof Date ? item.data.fecha.toISOString() : item.data.fecha }
         const { error: err } = await supabase.from('ordenes_compra').upsert([payload], { onConflict: 'nro' })
         error = err
       } else if (item.table === 'ordenes_compra' && item.operation === 'UPDATE_ESTADO') {
-        // 🔄 CAMBIO DE ESTADO DE OC
         const { error: err } = await supabase.from('ordenes_compra')
           .update({ estado: item.data.estado })
           .eq('nro', item.data.nro)
         error = err
       } else if (item.table === 'oc_items' && item.operation === 'INSERT') {
-        // 📝 ÍTEMS DE ORDEN DE COMPRA
         const { error: err } = await supabase.from('oc_items').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'devoluciones' && item.operation === 'INSERT') {
@@ -117,8 +109,16 @@ export async function processSyncQueue() {
       } else if (item.table === 'proveedores' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('proveedores').upsert([item.data], { onConflict: 'rif' })
         error = err
+      } else if (item.table === 'cuotas_credito' && item.operation === 'INSERT') {
+        const { error: err } = await supabase.from('cuotas_credito').upsert([item.data], { onConflict: 'id' })
+        error = err
+      } else if (item.table === 'cuotas_credito' && item.operation === 'UPDATE_ESTADO') {
+        const { error: err } = await supabase.from('cuotas_credito')
+          .update({ estado: item.data.estado, fecha_pago: item.data.fecha_pago })
+          .eq('venta_id', item.data.venta_id)
+          .eq('numero_cuota', item.data.numero_cuota)
+        error = err
       } else {
-        // Si la tabla no existe o no se maneja, la eliminamos para no trabar la cola
         console.warn(`⚠️ Tabla desconocida en SyncQueue: ${item.table}`)
         await db.sync_queue.delete(item.id)
         continue
@@ -131,12 +131,9 @@ export async function processSyncQueue() {
       } else {
         console.error(`❌ Error Supabase para ${item.table}:`, error)
 
-        // 📢 NOTIFICAR AL USUARIO EL ERROR REAL
         const { getState } = (await import('../store/useStore')).default
         getState().toast(`❌ Error Nube (${item.table}): ${error.message || 'Error desconocido'}`, 'error')
 
-        // Marcamos el error para no reintentar eternamente si es un fallo de esquema
-        // 42P01: Tabla no existe, 42703: Columna no existe, PGRST204: Recurso no hallado
         if (['42P01', '42703', 'PGRST204'].includes(error.code)) {
           console.warn(`⚠️ Error de esquema detectado. Eliminando item conflictivo de la cola: ${item.table}`)
           await db.sync_queue.delete(item.id)

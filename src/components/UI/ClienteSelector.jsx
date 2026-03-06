@@ -48,7 +48,8 @@ export default function ClienteSelector({ value, onChange, placeholder = 'Nombre
     }
 
     const selectCliente = (c) => {
-        onChange(c.nombre)
+        const displayName = c.rif ? `${c.rif} ${c.nombre}`.trim() : c.nombre
+        onChange(displayName)
         setBusq('')
         setOpen(false)
     }
