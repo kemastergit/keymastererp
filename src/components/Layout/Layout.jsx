@@ -11,6 +11,7 @@ import HelpModal from '../UI/HelpModal'
 import MdiWindow from '../UI/MdiWindow'
 import PedidosWebModal from '../UI/PedidosWebModal'
 import SupabaseListener from '../SupabaseListener'
+import LoadingOverlay from '../UI/LoadingOverlay'
 
 export default function Layout() {
   const [showWebOrders, setShowWebOrders] = useState(false)
@@ -113,6 +114,7 @@ export default function Layout() {
       <HelpModal />
       <PedidosWebModal open={showWebOrders} onClose={() => setShowWebOrders(false)} />
       <SupabaseListener />
+      <LoadingOverlay {...useStore(s => s.syncStatus)} />
     </div>
   )
 }

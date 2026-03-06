@@ -146,6 +146,10 @@ const useStore = create(
       setVencFact: (v) => set({ vencFact: v }),
       setIvaEnabled: (v) => set({ ivaEnabled: v }),
 
+      // Dashboard & Sync UI
+      syncStatus: null, // { message, submessage, progress, total }
+      setSyncStatus: (v) => set({ syncStatus: v }),
+
       addPayment: (metodo, monto, tasa, montoBS) => {
         set(s => ({
           payments: [...s.payments, {
@@ -199,6 +203,12 @@ const useStore = create(
       loadConfigEmpresa: async () => {
         const config = await db.config_empresa.get('main')
         if (config) set({ configEmpresa: config })
+        else {
+          // Si no existe, crear un config vacio por defecto
+          const defaultCfg = { id: 'main', nombre: 'KEYMASTER ERP', terminal_prefix: '' }
+          await db.config_empresa.add(defaultCfg)
+          set({ configEmpresa: defaultCfg })
+        }
       },
       updateConfigEmpresa: async (newConfig) => {
         await db.config_empresa.update('main', newConfig)

@@ -23,6 +23,8 @@ export async function processSyncQueue() {
     return 0
   }
 
+  const { getSyncStatus, setSyncStatus } = (await import('../store/useStore')).default.getState()
+
   const pending = await db.sync_queue.where('status').equals('PENDING').toArray()
   if (pending.length === 0) return 0
 
@@ -249,37 +251,52 @@ export async function pullRecentInvoices() {
 
 // 🔹 Sincronización inicial de inventario desde Supabase hacia Dexie
 export async function syncArticulosFromSupabase() {
+  const { setSyncStatus, toast } = (await import('../store/useStore')).default.getState()
+
   try {
     let allData = []
     let from = 0
     let to = 999
     let finished = false
+    let totalCount = 0
 
     console.log("🔄 Iniciando descarga completa de inventario...")
 
     while (!finished) {
-      const { data, error } = await supabase
+      setSyncStatus({
+        message: 'Descargando Inventario',
+        submessage: 'Obteniendo catálogo completo desde la nube...',
+        progress: allData.length,
+        total: totalCount > 0 ? totalCount : allData.length + 1000
+      })
+
+      const { data, error, count } = await supabase
         .from('articulos')
-        .select('id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad, activo, mostrar_en_web')
+        .select('id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad, activo, mostrar_en_web', { count: 'exact' })
         .eq('activo', true)
         .range(from, to)
 
       if (error) throw error
+      if (count !== null) totalCount = count
 
       if (data && data.length > 0) {
         allData = [...allData, ...data]
-        if (data.length < 1000) {
-          finished = true
-        } else {
-          from += 1000
-          to += 1000
-        }
-      } else {
-        finished = true
-      }
+        if (data.length < 1000) finished = true
+        else { from += 1000; to += 1000 }
+      } else { finished = true }
     }
 
-    if (allData.length === 0) return
+    if (allData.length === 0) {
+      setSyncStatus(null)
+      return
+    }
+
+    setSyncStatus({
+      message: 'Guardando Datos',
+      submessage: `Procesando ${allData.length} productos en base de datos local...`,
+      progress: allData.length,
+      total: allData.length
+    })
 
     await db.transaction('rw', db.articulos, async () => {
       await db.articulos.clear()
@@ -296,9 +313,20 @@ export async function syncArticulosFromSupabase() {
       )
     })
 
+    setSyncStatus({
+      message: 'Sincronización Exitosa',
+      submessage: `✅ ${allData.length} productos actualizados desde la nube.`,
+      progress: allData.length,
+      total: allData.length
+    })
+
+    await new Promise(r => setTimeout(r, 1500))
     console.log(`✅ Inventario sincronizado desde Supabase (${allData.length} artículos)`)
   } catch (e) {
     console.error('❌ Error syncArticulosFromSupabase:', e)
+    toast(`❌ Error al sincronizar inventario: ${e.message}`, 'error')
+  } finally {
+    setSyncStatus(null)
   }
 }
 
@@ -339,11 +367,14 @@ export function subscribeArticulosRealtime() {
 
 // 🔹 Pull de clientes desde Supabase hacia Dexie (con paginación)
 export async function syncClientesFromSupabase() {
+  const { setSyncStatus } = (await import('../store/useStore')).default.getState()
   try {
     let allData = []
     let from = 0
     let to = 999
     let finished = false
+
+    setSyncStatus({ message: 'Sincronizando Clientes', submessage: 'Actualizando directorio...', progress: 0, total: 100 })
 
     while (!finished) {
       const { data, error } = await supabase
@@ -359,7 +390,10 @@ export async function syncClientesFromSupabase() {
       } else { finished = true }
     }
 
-    if (allData.length === 0) return
+    if (allData.length === 0) {
+      setSyncStatus(null)
+      return
+    }
 
     for (const c of allData) {
       const existe = await db.clientes.filter(l => l.rif === c.rif).first()
@@ -383,6 +417,8 @@ export async function syncClientesFromSupabase() {
     console.log(`✅ Clientes sincronizados desde nube: ${allData.length}`)
   } catch (err) {
     console.error('Error pull clientes:', err)
+  } finally {
+    setSyncStatus(null)
   }
 }
 
@@ -429,11 +465,14 @@ export async function syncOrdenesCompraFromSupabase() {
 
 // 🔹 Pull de Proveedores desde Supabase (con paginación)
 export async function syncProveedoresFromSupabase() {
+  const { setSyncStatus } = (await import('../store/useStore')).default.getState()
   try {
     let allData = []
     let from = 0
     let to = 999
     let finished = false
+
+    setSyncStatus({ message: 'Sincronizando Proveedores', submessage: 'Trayendo datos de la nube...', progress: 0, total: 100 })
 
     while (!finished) {
       const { data, error } = await supabase.from('proveedores').select('*').range(from, to)
@@ -445,7 +484,10 @@ export async function syncProveedoresFromSupabase() {
       } else { finished = true }
     }
 
-    if (allData.length === 0) return
+    if (allData.length === 0) {
+      setSyncStatus(null)
+      return
+    }
 
     const existingProv = await db.proveedores.toArray()
     const rifMap = new Map(existingProv.map(p => [p.rif, p.id]))
@@ -459,6 +501,8 @@ export async function syncProveedoresFromSupabase() {
     console.log(`✅ Proveedores sincronizados: ${allData.length}`)
   } catch (e) {
     console.warn('syncProveedores offline:', e.message)
+  } finally {
+    setSyncStatus(null)
   }
 }
 
@@ -514,6 +558,8 @@ export async function syncComisionesFromSupabase() {
 
 // 🔹 Inicializador sencillo para usar en el arranque de la app
 export async function initInventorySync() {
+  const { toast } = (await import('../store/useStore')).default.getState()
+
   await syncArticulosFromSupabase()
   await syncClientesFromSupabase()
   await syncProveedoresFromSupabase()
@@ -521,5 +567,7 @@ export async function initInventorySync() {
   await syncCajaChicaFromSupabase()
   await syncDevolucionesFromSupabase()
   await syncComisionesFromSupabase()
+
+  toast('🚀 SINCRONIZACIÓN INICIAL COMPLETADA', 'success')
   subscribeArticulosRealtime()
 }
