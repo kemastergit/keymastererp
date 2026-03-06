@@ -250,18 +250,41 @@ export async function pullRecentInvoices() {
 // 🔹 Sincronización inicial de inventario desde Supabase hacia Dexie
 export async function syncArticulosFromSupabase() {
   try {
-    const { data, error } = await supabase
-      .from('articulos')
-      .select('id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad, activo, mostrar_en_web')
-      .eq('activo', true)
+    let allData = []
+    let from = 0
+    let to = 999
+    let finished = false
 
-    if (error) throw error
-    if (!data) return
+    console.log("🔄 Iniciando descarga completa de inventario...")
+
+    while (!finished) {
+      const { data, error } = await supabase
+        .from('articulos')
+        .select('id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad, activo, mostrar_en_web')
+        .eq('activo', true)
+        .range(from, to)
+
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        allData = [...allData, ...data]
+        if (data.length < 1000) {
+          finished = true
+        } else {
+          from += 1000
+          to += 1000
+        }
+      } else {
+        finished = true
+      }
+    }
+
+    if (allData.length === 0) return
 
     await db.transaction('rw', db.articulos, async () => {
       await db.articulos.clear()
       await db.articulos.bulkAdd(
-        data.map(a => {
+        allData.map(a => {
           const { id, ...rest } = a
           return {
             ...rest,
@@ -273,7 +296,7 @@ export async function syncArticulosFromSupabase() {
       )
     })
 
-    console.log(`✅ Inventario sincronizado desde Supabase (${data.length} artículos)`)
+    console.log(`✅ Inventario sincronizado desde Supabase (${allData.length} artículos)`)
   } catch (e) {
     console.error('❌ Error syncArticulosFromSupabase:', e)
   }
@@ -314,16 +337,31 @@ export function subscribeArticulosRealtime() {
   }
 }
 
-// 🔹 Pull de clientes desde Supabase hacia Dexie (para que todas las terminales compartan la misma base)
+// 🔹 Pull de clientes desde Supabase hacia Dexie (con paginación)
 export async function syncClientesFromSupabase() {
   try {
-    const { data, error } = await supabase
-      .from('clientes')
-      .select('rif, nombre, telefono, direccion, email, limite_credito')
-    if (error) throw error
-    if (!data || data.length === 0) return
+    let allData = []
+    let from = 0
+    let to = 999
+    let finished = false
 
-    for (const c of data) {
+    while (!finished) {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('rif, nombre, telefono, direccion, email, limite_credito')
+        .range(from, to)
+
+      if (error) throw error
+      if (data && data.length > 0) {
+        allData = [...allData, ...data]
+        if (data.length < 1000) finished = true
+        else { from += 1000; to += 1000 }
+      } else { finished = true }
+    }
+
+    if (allData.length === 0) return
+
+    for (const c of allData) {
       const existe = await db.clientes.filter(l => l.rif === c.rif).first()
       if (existe) {
         await db.clientes.update(existe.id, {
@@ -342,7 +380,7 @@ export async function syncClientesFromSupabase() {
         })
       }
     }
-    console.log(`✅ Clientes sincronizados desde nube: ${data.length}`)
+    console.log(`✅ Clientes sincronizados desde nube: ${allData.length}`)
   } catch (err) {
     console.error('Error pull clientes:', err)
   }
@@ -389,18 +427,39 @@ export async function syncOrdenesCompraFromSupabase() {
   }
 }
 
-// 🔹 Pull de Proveedores desde Supabase
+// 🔹 Pull de Proveedores desde Supabase (con paginación)
 export async function syncProveedoresFromSupabase() {
   try {
-    const { data, error } = await supabase.from('proveedores').select('*')
-    if (error || !data) return
-    for (const p of data) {
-      const existe = await db.proveedores.filter(l => l.rif === p.rif).first()
-      if (!existe) await db.proveedores.add({ ...p, id: undefined })
-      else await db.proveedores.update(existe.id, { ...p })
+    let allData = []
+    let from = 0
+    let to = 999
+    let finished = false
+
+    while (!finished) {
+      const { data, error } = await supabase.from('proveedores').select('*').range(from, to)
+      if (error) throw error
+      if (data && data.length > 0) {
+        allData = [...allData, ...data]
+        if (data.length < 1000) finished = true
+        else { from += 1000; to += 1000 }
+      } else { finished = true }
     }
-    console.log(`✅ Proveedores sincronizados: ${data.length}`)
-  } catch (e) { console.warn('syncProveedores offline') }
+
+    if (allData.length === 0) return
+
+    const existingProv = await db.proveedores.toArray()
+    const rifMap = new Map(existingProv.map(p => [p.rif, p.id]))
+
+    const finalBatch = allData.map(p => {
+      if (rifMap.has(p.rif)) return { ...p, id: rifMap.get(p.rif) }
+      return { ...p, id: undefined }
+    })
+
+    await db.proveedores.bulkPut(finalBatch)
+    console.log(`✅ Proveedores sincronizados: ${allData.length}`)
+  } catch (e) {
+    console.warn('syncProveedores offline:', e.message)
+  }
 }
 
 // 🔹 Pull de Caja Chica (últimos 100 movimientos)
