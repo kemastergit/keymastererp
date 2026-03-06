@@ -128,14 +128,23 @@ export default function Clientes() {
         return
       }
 
-      if (cliente?.rif) {
-        // 1. Borrar primero en la nube para que el PULL no lo traiga de vuelta
-        const { error: syncError } = await supabase.from('clientes').delete().eq('rif', cliente.rif)
+      // ☁️ SYNC: Borrar primero en Supabase
+      // Importante: Muchos datos de prueba tienen RIF vacío (""), debemos asegurar el borrado
+      const identifier = cliente.rif?.trim() || cliente.nombre?.trim();
+      const column = cliente.rif?.trim() ? 'rif' : 'nombre';
+
+      if (identifier) {
+        console.log(`🗑️ Solicitando borrado en nube (${column}: ${identifier})...`);
+        const { error: syncError } = await supabase.from('clientes').delete().eq(column, identifier);
 
         if (syncError) {
-          console.error("Error borrando en Supabase:", syncError)
-          toast('⚠️ No se pudo borrar en la nube, se borrará solo localmente', 'warn')
+          console.error("❌ Error borrando en Supabase:", syncError);
+          toast('⚠️ Fallo en sincronización: ' + syncError.message, 'warn');
+        } else {
+          console.log(`✅ Borrado exitoso en nube para ${identifier}`);
         }
+      } else {
+        console.warn("⚠️ Cliente sin RIF ni nombre. No se puede borrar en nube.");
       }
 
       // 2. Borrar localmente

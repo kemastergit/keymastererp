@@ -138,14 +138,23 @@ export default function Proveedores() {
         return
       }
 
-      if (p?.rif) {
-        // 1. Borrar en la nube primero con await para asegurar que no se sincronice de vuelta
-        const { error: syncError } = await supabase.from('proveedores').delete().eq('rif', p.rif)
+      // ☁️ SYNC: Borrar primero en Supabase
+      // En datos de prueba el RIF puede estar vacío, usamos nombre como fallback
+      const identifier = p.rif?.trim() || p.nombre?.trim();
+      const column = p.rif?.trim() ? 'rif' : 'nombre';
+
+      if (identifier) {
+        console.log(`🗑️ Borrando proveedor en nube (${column}: ${identifier})...`);
+        const { error: syncError } = await supabase.from('proveedores').delete().eq(column, identifier);
 
         if (syncError) {
-          console.error("Error borrando en Supabase:", syncError)
-          toast('⚠️ No se pudo borrar en la nube, se borrará solo localmente', 'warn')
+          console.error("❌ Error borrando proveedor en Supabase:", syncError);
+          toast('⚠️ Fallo al borrar en nube: ' + syncError.message, 'warn');
+        } else {
+          console.log(`✅ Proveedor '${identifier}' eliminado en Supabase`);
         }
+      } else {
+        console.warn("⚠️ Proveedor sin datos identificables. No se puede borrar en nube.");
       }
 
       // 2. Borrar localmente
