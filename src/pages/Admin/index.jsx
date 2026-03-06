@@ -407,7 +407,27 @@ export default function Admin() {
                     })
 
                     await db.proveedores.bulkPut(finalProv)
-                    toast(`✅ ¡Éxito! ${finalProv.length} proveedores procesados.`)
+                    toast(`✅ ¡Éxito! ${finalProv.length} proveedores procesados localmente.`)
+
+                    // ☁️ SYNC A LA NUBE (En bloques)
+                    try {
+                      const batchSize = 100
+                      for (let i = 0; i < finalProv.length; i += batchSize) {
+                        const batch = finalProv.slice(i, i + batchSize).map(p => ({
+                          rif: p.rif,
+                          nombre: p.nombre,
+                          telefono: p.telefono,
+                          direccion: p.direccion,
+                          estado: p.estado || 'ACTIVO'
+                        }))
+                        const { error } = await supabase.from('proveedores').upsert(batch, { onConflict: 'rif' })
+                        if (error) throw error
+                      }
+                      toast('☁️ Directorio de Proveedores sincronizado en la Nube', 'success')
+                    } catch (err) {
+                      console.error('Error sync proveedores:', err)
+                      toast('⚠️ Importado local, pero falló sincronización a la nube', 'warn')
+                    }
 
                   } else if (importType === 'clientes') {
                     // MODO CLIENTES
@@ -433,7 +453,27 @@ export default function Admin() {
                     })
 
                     await db.clientes.bulkPut(finalClie)
-                    toast(`✅ ¡Éxito! ${finalClie.length} clientes procesados.`)
+                    toast(`✅ ¡Éxito! ${finalClie.length} clientes procesados localmente.`)
+
+                    // ☁️ SYNC A LA NUBE (En bloques)
+                    try {
+                      const batchSize = 100
+                      for (let i = 0; i < finalClie.length; i += batchSize) {
+                        const batch = finalClie.slice(i, i + batchSize).map(c => ({
+                          rif: c.rif,
+                          nombre: c.nombre,
+                          telefono: c.telefono,
+                          direccion: c.direccion,
+                          estado: c.estado || 'ACTIVO'
+                        }))
+                        const { error } = await supabase.from('clientes').upsert(batch, { onConflict: 'rif' })
+                        if (error) throw error
+                      }
+                      toast('☁️ Directorio de Clientes sincronizado en la Nube', 'success')
+                    } catch (err) {
+                      console.error('Error sync clientes:', err)
+                      toast('⚠️ Importado local, pero falló sincronización a la nube', 'warn')
+                    }
                   }
 
                   e.target.value = ''
