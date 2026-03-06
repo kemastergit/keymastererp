@@ -68,9 +68,10 @@ export default function Dashboard() {
         const articulos = await db.articulos.toArray()
         const ventaItems = await db.venta_items.toArray()
         const cobrar = await db.ctas_cobrar.where('estado').equals('PENDIENTE').toArray()
+        const cuotas = await db.cuotas_credito.where('estado').equals('PENDIENTE').toArray()
         const cajaChica = await db.caja_chica.toArray()
 
-        return calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica)
+        return calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica, false, cuotas)
     }, [])
 
     // ─── CARGA REMOTA (SUPABASE) ───
@@ -85,9 +86,9 @@ export default function Dashboard() {
             const { data: facturas } = await supabase.from('facturas').select('*')
             const { data: articulos } = await supabase.from('articulos').select('*')
             const { data: cobrar } = await supabase.from('cuentas_por_cobrar').select('*').eq('estado', 'PENDIENTE')
-            const { data: cierres } = await supabase.from('cierres_caja').select('*')
+            const { data: cuotas } = await supabase.from('cuotas_credito').select('*').eq('estado', 'PENDIENTE')
 
-            setCloudData(calculateStats(facturas || [], articulos || [], [], cobrar || [], [], true))
+            setCloudData(calculateStats(facturas || [], articulos || [], [], cobrar || [], [], true, cuotas || []))
             toast('🛰️ Dashboard Remoto (Datos Reales de la Nube)', 'success')
         } catch (e) {
             toast('❌ Error cargando datos remotos', 'error')
@@ -96,7 +97,7 @@ export default function Dashboard() {
         }
     }
 
-    function calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica, isFromCloud = false) {
+    function calculateStats(ventas, articulos, ventaItems, cobrar, cajaChica, isFromCloud = false, cuotas = []) {
         // Normalización para Cloud vs Local
         const normalizedVentas = ventas.map(v => ({
             ...v,
@@ -104,6 +105,10 @@ export default function Dashboard() {
             fecha: v.fecha || v.fecha_apertura,
             estado: v.estado
         }))
+
+        // Alertas de Cobranza (4C)
+        const hoy = new Date().toISOString().split('T')[0]
+        const cuotasVencidas = cuotas.filter(c => c.fecha_vencimiento <= hoy)
 
         // 1. Histórico de Ventas (últimos 15 días)
         const last15Days = [...Array(15)].map((_, i) => {
@@ -147,7 +152,7 @@ export default function Dashboard() {
         const stockMarcas = Object.entries(marcasMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6)
 
         return {
-            ventasHist, radialData, stockMarcas,
+            ventasHist, radialData, stockMarcas, cuotasVencidas,
             totalVentas: normalizedVentas.reduce((s, v) => s + v.total, 0),
             totalUtilidad: isFromCloud
                 ? normalizedVentas.reduce((s, v) => s + (v.total - (v.costo_total || 0)), 0)
@@ -212,6 +217,30 @@ export default function Dashboard() {
                     </div>
                 )}
             </div>
+
+            {/* ALERTAS DE COBRANZA (PASO 4C) */}
+            {data.cuotasVencidas?.length > 0 && (
+                <div className="bg-red-600 text-white p-5 shadow-lg flex flex-col md:flex-row items-center justify-between border-l-[10px] border-red-900 border-t border-r border-b border-red-800 animate-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center gap-4 mb-4 md:mb-0">
+                        <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center animate-pulse">
+                            <span className="material-icons-round text-3xl">notification_important</span>
+                        </div>
+                        <div>
+                            <p className="font-black text-[10px] uppercase tracking-widest text-red-200">Alerta: Compromisos de Pago</p>
+                            <p className="text-[15px] font-black uppercase tracking-tighter">
+                                Hay {data.cuotasVencidas.length} cuotas de crédito vencidas el día de hoy
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate('/cobrar')}
+                        className="bg-white text-red-600 px-6 py-2.5 font-black text-[10px] uppercase tracking-[0.2em] hover:bg-red-50 transition-all shadow-xl active:scale-95 flex items-center gap-2"
+                    >
+                        <span className="material-icons-round text-sm">payments</span>
+                        Gestionar Cobros
+                    </button>
+                </div>
+            )}
 
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">

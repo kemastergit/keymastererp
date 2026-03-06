@@ -283,17 +283,42 @@ export default function Facturacion() {
 
   const articulos = useLiveQuery(
     async () => {
-      if (busq.trim().length === 0) {
-        return await db.articulos.orderBy('descripcion').toArray();
+      const b = busq.trim().toLowerCase()
+      if (b.length === 0) {
+        return await db.articulos.orderBy('descripcion').toArray()
       }
 
-      const allArts = await db.articulos.toArray();
-      const fuse = new Fuse(allArts, {
-        keys: ['descripcion', 'marca', 'referencia', 'codigo'],
-        threshold: 0.3
-      });
+      const allArts = await db.articulos.toArray()
 
-      return fuse.search(busq).slice(0, 100).map(r => r.item);
+      // Regla: Para 1-3 letras, priorizar estrictamente el inicio (Prefix matching)
+      // Si escribes 'am', solo queremos lo que EMPIEZA con 'am'
+      if (b.length <= 3) {
+        const exactMatches = allArts.filter(a =>
+          a.codigo?.toLowerCase().startsWith(b) ||
+          a.descripcion?.toLowerCase().startsWith(b) ||
+          a.marca?.toLowerCase().startsWith(b) ||
+          a.referencia?.toLowerCase().startsWith(b)
+        ).sort((x, y) => x.descripcion.localeCompare(y.descripcion))
+
+        // Si encontramos suficientes coincidencias exactas al inicio, devolvemos esas
+        if (exactMatches.length > 0) return exactMatches.slice(0, 100)
+      }
+
+      // Si es más larga la búsqueda o no hubo inicio exacto, usamos Fuse con ponderación
+      const fuse = new Fuse(allArts, {
+        keys: [
+          { name: 'codigo', weight: 3 },      // Código manda
+          { name: 'descripcion', weight: 2 }, // Luego descripción
+          { name: 'marca', weight: 1 }       // Marca al final
+        ],
+        threshold: 0.2,      // Más estricto (0.3 era muy permisivo)
+        location: 0,         // Buscar preferiblemente al inicio
+        distance: 100,
+        useExtendedSearch: true
+      })
+
+      const results = fuse.search(b).map(r => r.item)
+      return results.slice(0, 100)
     },
     [busq], []
   ) || []
