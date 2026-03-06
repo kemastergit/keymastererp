@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { addToSyncQueue } from '../../utils/syncManager'
+import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
 import useStore from '../../store/useStore'
@@ -18,6 +18,10 @@ export default function CuentasPagar() {
   const [selectedCompra, setSelectedCompra] = useState(null)
   const [compraItems, setCompraItems] = useState([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const [pagosCxp, setPagosCxp] = useState([])
+
+  const tasaRaw = useLiveQuery(() => db.config.get('tasa_bcv'), [], { valor: 1 })
+  const tasa = parseFloat(tasaRaw?.valor) || 1
 
   const cuentasRaw = useLiveQuery(() => db.ctas_pagar.orderBy('vencimiento').toArray(), [], [])
   const abonos = useLiveQuery(() => db.abonos.where('tipo_cuenta').equals('PAGAR').toArray(), [], [])
@@ -448,7 +452,7 @@ export default function CuentasPagar() {
                   <button
                     className="btn bg-[var(--orange-var)] text-white flex-2 justify-center py-4 font-black uppercase text-xs transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest disabled:opacity-50"
                     onClick={procesarPago}
-                    disabled={pagosCxc.length === 0}>
+                    disabled={pagosCxp.length === 0}>
                     <span className="material-icons-round text-base">verified</span>
                     <span>{totalPagadoUSD >= saldoActual - 0.05 ? 'COMPLETAR PAGO' : 'REGISTRAR ABONO PARCIAL'}</span>
                   </button>

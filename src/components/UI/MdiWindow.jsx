@@ -20,45 +20,32 @@ export default function MdiWindow({ children, title, icon }) {
 
                 {/* The Window Frame */}
                 <div
-                    className="flex flex-col w-full h-full bg-[var(--surface)] shadow-[var(--win-shadow)] overflow-hidden"
+                    className="flex flex-col w-full h-full bg-[var(--surface)] shadow-2xl overflow-hidden rounded-[1.5rem] border border-slate-200 transition-all"
                     style={{
                         maxWidth: '100%',
-                        // In tablet/desktop, we could constrain width or let it fill.
-                        // Following rules: Tablet 95%, Desktop floats (here we let it fill its container but it could be constrained)
                     }}
                 >
-                    {/* Titlebar (24px) */}
-                    <div className="flex items-center justify-between px-2 min-h-[24px] bg-[var(--teal)] text-white select-none">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[12px]">{windowIcon}</span>
-                            <span className="font-['IBM_Plex_Mono'] font-bold text-[11px] uppercase tracking-wider">
+                    {/* Titlebar (32px) */}
+                    <div className="flex items-center justify-between px-4 min-h-[42px] bg-slate-900 text-white select-none shrink-0 border-b border-white/5">
+                        <div className="flex items-center gap-3">
+                            <span className="text-[16px] filter grayscale opacity-80">{windowIcon}</span>
+                            <span className="font-['Outfit'] font-black text-[12px] uppercase tracking-[0.2em] opacity-90">
                                 {windowTitle}
                             </span>
                         </div>
 
                         {/* Window Controls */}
-                        <div className="flex items-center gap-1">
-                            <button
-                                className="w-[18px] h-[16px] flex items-center justify-center border border-white/40 hover:bg-white/20 transition-colors"
-                                title="Minimizar"
-                            >
-                                <span className="block w-2.5 h-[1px] bg-white"></span>
-                            </button>
-                            <button
-                                className="w-[18px] h-[16px] flex items-center justify-center border border-white/40 hover:bg-white/20 transition-colors"
-                                title="Maximizar"
-                            >
-                                <div className="w-2.5 h-2.5 border border-white"></div>
-                            </button>
+                        <div className="flex items-center gap-3">
+                            <div className="flex gap-2">
+                                <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                                <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                            </div>
                             <button
                                 onClick={() => navigate('/')}
-                                className="w-[18px] h-[16px] flex items-center justify-center border border-white/40 hover:bg-red-500 hover:border-red-500 transition-colors"
+                                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-600 transition-all active:scale-90 group"
                                 title="Cerrar"
                             >
-                                <div className="relative w-2.5 h-2.5">
-                                    <span className="absolute top-1/2 left-0 w-full h-[1px] bg-white rotate-45 -translate-y-1/2"></span>
-                                    <span className="absolute top-1/2 left-0 w-full h-[1px] bg-white -rotate-45 -translate-y-1/2"></span>
-                                </div>
+                                <span className="material-icons-round text-lg text-slate-500 group-hover:text-white">close</span>
                             </button>
                         </div>
                     </div>

@@ -8,6 +8,7 @@ export default function Admin() {
   const toast = useStore(s => s.toast)
   const [newClave, setNewClave] = useState('')
   const [confirm2, setConfirm2] = useState(false)
+  const [importType, setImportType] = useState('articulos') // 'articulos' | 'proveedores' | 'clientes'
 
   const exportDB = async () => {
     const rawData = {
@@ -100,6 +101,26 @@ export default function Admin() {
     inp.click()
   }
 
+  const clearInventory = async () => {
+    if (!window.confirm('¿ELIMINAR TODO EL INVENTARIO? Esta acción borrará todos los productos pero mantendrá clientes y ventas.')) return
+    await db.articulos.clear()
+    toast('📦 Inventario vaciado correctamente', 'success')
+    setTimeout(() => location.reload(), 1000)
+  }
+
+  const clearCloudInventory = async () => {
+    if (!window.confirm('🚨 ¡ATENCIÓN! Esto borrará el inventario de la NUBE. Todas las terminales perderán sus productos al sincronizar. ¿Continuar?')) return
+    const { error } = await supabase.from('articulos').delete().neq('codigo', '_')
+    if (error) {
+      toast('❌ Error borrando nube: ' + error.message, 'error')
+    } else {
+      toast('☁️ Inventario borrado en la Nube', 'success')
+      await db.articulos.clear()
+      toast('📦 Inventario local también limpiado', 'info')
+      setTimeout(() => location.reload(), 1500)
+    }
+  }
+
   const clearAll = async () => {
     if (!confirm2) { setConfirm2(true); toast('⚠ Presiona de nuevo para confirmar', 'warn'); return }
     await db.transaction('rw',
@@ -128,19 +149,22 @@ export default function Admin() {
   }
 
   const Card = ({ title, children }) => (
-    <div className="panel">
-      <div className="panel-title">{title}</div>
+    <div className="panel !rounded-[2rem] shadow-xl border-slate-100 hover:shadow-2xl transition-all duration-300">
+      <div className="panel-title !border-none !pb-4 !mb-2 !text-slate-800 !font-black !tracking-tighter !text-xl uppercase">{title}</div>
       {children}
     </div>
   )
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 pr-2 pb-10">
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
-        <span className="material-icons-round text-amber-500 text-2xl">security</span>
+      <div className="bg-amber-100/50 border border-amber-200 rounded-[2rem] px-8 py-6 flex items-center gap-5 shadow-2xl relative overflow-hidden backdrop-blur-sm">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
+        <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/10 shrink-0">
+          <span className="material-icons-round text-white text-3xl">admin_panel_settings</span>
+        </div>
         <div>
-          <p className="font-black text-amber-800 uppercase text-[10px] tracking-widest">Panel de Control Maestro</p>
-          <p className="text-sm font-medium text-amber-700">Área restringida. Todas las acciones aquí afectan la integridad de los datos.</p>
+          <p className="font-black text-amber-800 uppercase text-[11px] tracking-[0.2em] mb-1">ACCESO ADMINISTRATIVO RESTRINGIDO</p>
+          <p className="text-[13px] font-bold text-amber-900/70 leading-relaxed uppercase tracking-tight">Área crítica. Todas las acciones aquí impactan la integridad global de los datos y la configuración del sistema.</p>
         </div>
       </div>
 
@@ -174,11 +198,36 @@ export default function Admin() {
         </div>
       </Card>
 
-      <Card title="📊 Carga Masiva de Artículos">
+      <Card title="📊 Carga Masiva (Inventario / Proveedores)">
+        <div className="flex gap-4 mb-6 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+          <button
+            className={`flex-1 py-2 px-4 rounded-lg font-black text-[10px] tracking-widest transition-all ${importType === 'articulos' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-slate-400'}`}
+            onClick={() => setImportType('articulos')}>
+            <span className="material-icons-round text-sm mr-2 align-middle">inventory_2</span>
+            ARTÍCULOS
+          </button>
+          <button
+            className={`flex-1 py-2 px-4 rounded-lg font-black text-[10px] tracking-widest transition-all ${importType === 'proveedores' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-slate-400'}`}
+            onClick={() => setImportType('proveedores')}>
+            <span className="material-icons-round text-sm mr-2 align-middle">local_shipping</span>
+            PROVEEDORES
+          </button>
+          <button
+            className={`flex-1 py-2 px-4 rounded-lg font-black text-[10px] tracking-widest transition-all ${importType === 'clientes' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-slate-400'}`}
+            onClick={() => setImportType('clientes')}>
+            <span className="material-icons-round text-sm mr-2 align-middle">people</span>
+            CLIENTES
+          </button>
+        </div>
+
         <p className="text-xs text-slate-500 mb-4 font-medium">
-          Importa una lista completa de inventario desde archivos <strong>Excel (.xlsx, .xls)</strong>, <strong>CSV</strong> o <strong>JSON</strong>.
-          Asegúrate de que las columnas tengan nombres como: <em>codigo, descripcion, precio, stock, costo, marca, depto</em>.
+          {importType === 'articulos'
+            ? 'Importa inventario. Columnas: codigo, descripcion, precio, stock, costo, marca, depto.'
+            : importType === 'proveedores'
+              ? 'Importa proveedores. Columnas: rif, nombre, telefono, direccion.'
+              : 'Importa clientes. Columnas: rif, nombre, telefono, direccion.'}
         </p>
+
         <div className="flex gap-3 flex-wrap">
           <input
             type="file"
@@ -187,74 +236,209 @@ export default function Admin() {
             accept=".xlsx,.xls,.csv,.json"
             onChange={async (e) => {
               const file = e.target.files[0]
-              if (!file) return
+              if (!file) { console.log("❌ No se seleccionó ningún archivo"); return }
+              console.log("📂 Archivo seleccionado:", file.name, "Tipo:", importType)
 
               const reader = new FileReader()
               reader.onload = async (evt) => {
+                console.log("📖 Archivo leído con éxito. Procesando data...")
                 try {
-                  let articles = []
+                  let rawRows = []
                   const ext = file.name.split('.').pop().toLowerCase()
 
                   if (ext === 'json') {
-                    articles = JSON.parse(evt.target.result)
+                    rawRows = JSON.parse(evt.target.result)
                   } else if (ext === 'csv') {
                     const text = evt.target.result
                     const lines = text.split('\n')
                     const headers = lines[0].split(',')
-                    articles = lines.slice(1).map(line => {
+                    rawRows = lines.slice(1).map(line => {
                       const values = line.split(',')
                       const obj = {}
                       headers.forEach((h, i) => obj[h.trim()] = values[i]?.trim())
                       return obj
                     })
                   } else {
-                    // Excel
                     const { read, utils } = await import('xlsx')
                     const data = new Uint8Array(evt.target.result)
                     const workbook = read(data, { type: 'array' })
                     const sheetName = workbook.SheetNames[0]
-                    articles = utils.sheet_to_json(workbook.Sheets[sheetName])
+                    const sheet = workbook.Sheets[sheetName]
+
+                    // Intentamos leer normal primero
+                    rawRows = utils.sheet_to_json(sheet)
+
+                    // Si detectamos que la primera fila es un tÃ­tulo (como el tuyo), saltamos una fila
+                    if (rawRows.length > 0 && Object.keys(rawRows[0])[0].toLowerCase().includes('listado')) {
+                      console.log("⚠️ Título detectado en Fila 1. Saltando a Fila 2 para buscar encabezados...");
+                      rawRows = utils.sheet_to_json(sheet, { range: 1 })
+                    }
                   }
 
-                  if (!Array.isArray(articles)) throw new Error('Formato inválido')
-
-                  // Clean and format items
-                  const formatted = articles.map(a => ({
-                    codigo: String(a.codigo || a.cod || a.id || ''),
-                    referencia: String(a.referencia || a.ref || ''),
-                    descripcion: String(a.descripcion || a.nombre || a.desc || ''),
-                    marca: String(a.marca || ''),
-                    departamento: String(a.departamento || a.depto || ''),
-                    sub_depto: String(a.sub_depto || ''),
-                    proveedor: String(a.proveedor || ''),
-                    unidad: String(a.unidad || 'UNI'),
-                    stock: parseFloat(a.stock || a.existencia || 0) || 0,
-                    precio: parseFloat(a.precio || a.venta || 0) || 0,
-                    costo: parseFloat(a.costo || 0) || 0,
-                    ubicacion: String(a.ubicacion || '')
-                  })).filter(a => a.codigo && a.descripcion)
+                  console.log(`📊 Filas detectadas en el archivo: ${rawRows.length}`)
+                  if (!Array.isArray(rawRows) || rawRows.length === 0) {
+                    toast('El archivo está vacío o tiene un formato inválido', 'error')
+                    return
+                  }
 
                   const currentUser = useStore.getState().currentUser
-                  // Logica Anti-Duplicados: Obtener todos los artículos actuales para comparar
-                  const existingItems = await db.articulos.toArray()
-                  const codeMap = new Map(existingItems.map(item => [item.codigo, item.id]))
+                  console.log("👤 Usuario procesando:", currentUser?.nombre)
+                  if (rawRows.length > 0) {
+                    console.log("🔑 Columnas detectadas en el archivo:", Object.keys(rawRows[0]))
+                  }
 
-                  const finalItems = formatted.map(item => {
-                    if (codeMap.has(item.codigo)) {
-                      return { ...item, id: codeMap.get(item.codigo) }
+                  if (importType === 'articulos') {
+                    // Helpers para limpieza de datos
+                    const cleanNum = (val) => {
+                      if (typeof val === 'number') return val;
+                      if (!val || typeof val !== 'string') return 0;
+                      // Eliminar todo lo que no sea nÃºmero, punto o coma
+                      const clean = val.replace(/[^0-9.,-]/g, '');
+                      // Manejar formato Latino (1.250,50 -> 1250.50)
+                      // Si hay coma y punto, asumimos punto es miles. Si solo hay coma, es decimal.
+                      if (clean.includes(',') && clean.includes('.')) {
+                        return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
+                      }
+                      return parseFloat(clean.replace(',', '.')) || 0;
                     }
-                    return item
-                  })
 
-                  await db.articulos.bulkPut(finalItems)
-                  const updates = finalItems.filter(i => i.id).length
-                  const news = finalItems.length - updates
+                    const getVal = (row, ...targets) => {
+                      const keys = Object.keys(row);
+                      // 1. Precise match
+                      for (const target of targets) {
+                        const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                        const exactMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedTarget);
+                        if (exactMatch) return row[exactMatch];
+                      }
+                      // 2. Fuzzy match (includes)
+                      for (const target of targets) {
+                        const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                        const fuzzyMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().includes(normalizedTarget));
+                        if (fuzzyMatch) return row[fuzzyMatch];
+                      }
+                      return null;
+                    }
 
-                  logAction(currentUser, 'IMPORTACION_MASIVA', { nuevos: news, actualizados: updates })
-                  toast(`✅ ¡Carga Exitosa! ${news} nuevos y ${updates} actualizados.`)
-                  e.target.value = '' // Clear input
+                    const formatted = rawRows.map(a => {
+                      const row = {
+                        codigo: String(getVal(a, 'Código', 'Codigo', 'Cod', 'Referencia') || '').trim(),
+                        referencia: String(getVal(a, 'Ref', 'Parte', 'Referencia') || ''),
+                        descripcion: String(getVal(a, 'Descripción', 'Descripcion', 'Nombre', 'Articulo') || '').trim(),
+                        marca: String(getVal(a, 'Marca', 'Fabricante') || 'GENERICO').toUpperCase(),
+                        departamento: String(getVal(a, 'Departamento', 'Categoria', 'Depto', 'Grupo') || 'GENERAL').toUpperCase(),
+                        unidad: String(getVal(a, 'Unidad', 'Medida', 'U.M.') || 'UNI').toUpperCase(),
+                        stock: cleanNum(getVal(a, 'Total Existe', 'Total', 'Stock', 'Existencia', 'Cant') || 0),
+                        precio: cleanNum(getVal(a, 'Precio Venta', 'Precio 1', 'Precio', 'Venta') || 0),
+                        costo: cleanNum(getVal(a, 'Costo Unitario', 'Costo Unit', 'Costo Full', 'Costo') || 0),
+                      };
+                      return row;
+                    }).filter(a => a.codigo && a.descripcion);
+
+                    console.log("📝 Muestra de artículos procesados (primeros 3):", formatted.slice(0, 3));
+
+                    const existingItems = await db.articulos.toArray()
+                    // Crear un mapa de normalización (trim, uppercase, quitar el '#' inicial si existe)
+                    const normalize = (c) => String(c || '').trim().toUpperCase().replace(/^#/, '')
+                    const codeMap = new Map()
+                    existingItems.forEach(item => {
+                      const norm = normalize(item.codigo)
+                      if (norm) codeMap.set(norm, item.id)
+                    })
+
+                    let updated = 0
+                    let created = 0
+
+                    const finalItems = formatted.map(item => {
+                      const norm = normalize(item.codigo)
+                      if (codeMap.has(norm)) {
+                        updated++
+                        return { ...item, id: codeMap.get(norm) }
+                      }
+                      created++
+                      return item
+                    })
+
+                    await db.articulos.bulkPut(finalItems)
+                    console.log(`📦 Resumen Carga: Actualizados: ${updated}, Nuevos: ${created}`)
+                    toast(`✅ Éxito: ${updated} actualizados y ${created} nuevos.`, 'success')
+
+                  } else if (importType === 'proveedores') {
+                    // MODO PROVEEDORES
+                    let seqCounter = 1
+                    const formatted = rawRows.map(p => {
+                      // Buscamos el nombre en múltiples variaciones
+                      const nombre = String(
+                        p['Nombre de Empresa / Proveedor'] ||
+                        p['Nombre de Empresa / Proveedor'] ||
+                        p['Nombre'] ||
+                        p.nombre ||
+                        p['NOMBRE'] ||
+                        p['PROVEEDOR'] ||
+                        p.empresa ||
+                        p.proveedor ||
+                        p.company ||
+                        ''
+                      ).trim()
+
+                      let rif = String(p.rif || p.RIF || p['RIF'] || p.Id || p.id || p.ID || '').trim()
+
+                      // LOGICA GENERACIÓN SECUENCIAL PARA RIF VACÍO/CERO
+                      if (!rif || rif === '0' || rif === '00000000' || rif === 'undefined' || rif === '') {
+                        rif = `GEN-${String(seqCounter++).padStart(7, '0')}`
+                      }
+
+                      return {
+                        rif: rif,
+                        nombre: nombre,
+                        telefono: String(p.telefono || p.Telefono || p.tel || p['Teléfono'] || p['Telefono'] || '0'),
+                        direccion: String(p.direccion || p.Direccion || p.dir || p['Dirección'] || p['Direccion'] || 'N/A'),
+                        estado: 'ACTIVO'
+                      }
+                    }).filter(p => p.nombre && p.nombre !== '' && p.nombre !== 'undefined')
+
+                    console.log(`✅ Proveedores formateados: ${formatted.length}`)
+
+                    const existingProv = await db.proveedores.toArray()
+                    const rifMap = new Map(existingProv.map(item => [item.rif, item.id]))
+
+                    const finalProv = formatted.map(prov => {
+                      if (rifMap.has(prov.rif)) return { ...prov, id: rifMap.get(prov.rif) }
+                      return prov
+                    })
+
+                    await db.proveedores.bulkPut(finalProv)
+                    toast(`✅ ¡Éxito! ${finalProv.length} proveedores procesados.`)
+
+                  } else if (importType === 'clientes') {
+                    // MODO CLIENTES
+                    const formatted = rawRows.map(c => {
+                      const rif = String(c.rif || c.RIF || c.Id || c.id || '').trim()
+                      const nombre = String(c.nombre || c['Nombre'] || c.cliente || '').trim()
+
+                      return {
+                        rif: rif,
+                        nombre: nombre || 'CLIENTE SIN NOMBRE',
+                        telefono: String(c.telefono || c.Telefono || c.tel || '0'),
+                        direccion: String(c.direccion || c.Direccion || c.dir || 'N/A'),
+                        estado: 'ACTIVO'
+                      }
+                    }).filter(c => c.rif && c.nombre !== 'CLIENTE SIN NOMBRE')
+
+                    const existingClie = await db.clientes.toArray()
+                    const rifMap = new Map(existingClie.map(item => [item.rif, item.id]))
+
+                    const finalClie = formatted.map(clie => {
+                      if (rifMap.has(clie.rif)) return { ...clie, id: rifMap.get(clie.rif) }
+                      return clie
+                    })
+
+                    await db.clientes.bulkPut(finalClie)
+                    toast(`✅ ¡Éxito! ${finalClie.length} clientes procesados.`)
+                  }
+
+                  e.target.value = ''
                 } catch (err) {
-                  toast('❌ Error al procesar el archivo. Revisa el formato.', 'error')
+                  toast('❌ Error al procesar el archivo.', 'error')
                   console.error(err)
                 }
               }
@@ -266,50 +450,10 @@ export default function Admin() {
               }
             }}
           />
-          <button className="btn btn-r shadow-md w-full sm:w-auto" onClick={() => document.getElementById('bulk-import').click()}>
+          <button className="btn btn-r shadow-md w-full" onClick={() => document.getElementById('bulk-import').click()}>
             <span className="material-icons-round text-base">file_upload</span>
-            <span>Subir Excel / CSV / JSON</span>
+            <span>PROCESAR ARCHIVO ({importType.toUpperCase()})</span>
           </button>
-
-          <div className="w-full flex justify-center mt-2">
-            <a href="#" className="text-[10px] text-blue-500 hover:underline font-bold uppercase tracking-widest flex items-center gap-1"
-              onClick={async (e) => {
-                e.preventDefault()
-                try {
-                  const { utils, write } = await import('xlsx')
-                  const ws = utils.json_to_sheet([
-                    {
-                      codigo: "759123456",
-                      referencia: "REF-001",
-                      descripcion: "PASTILLAS DE FRENO DELANTERO",
-                      marca: "TOYOTA",
-                      departamento: "REPUESTOS",
-                      sub_depto: "FRENOS",
-                      proveedor: "PROVEEDOR A",
-                      unidad: "UNI",
-                      stock: 10,
-                      precio: 25.50,
-                      costo: 15.00,
-                      ubicacion: "PASILLO A-1"
-                    }
-                  ])
-                  const wb = utils.book_new()
-                  utils.book_append_sheet(wb, ws, "Inventario")
-
-                  const wbout = write(wb, { bookType: 'xlsx', type: 'array' })
-                  const blob = new Blob([wbout], { type: 'application/octet-stream' })
-                  const a = document.createElement('a')
-                  a.href = URL.createObjectURL(blob)
-                  a.download = 'formato_inventario_keymaster.xlsx'
-                  a.click()
-                } catch (err) {
-                  toast('Error generando el Excel', 'error')
-                }
-              }}>
-              <span className="material-icons-round text-xs">download_for_offline</span>
-              DESCARGAR PLANTILLA EXCEL (XLSX)
-            </a>
-          </div>
         </div>
       </Card>
 
@@ -321,15 +465,36 @@ export default function Admin() {
             Esta acción limpiará tablas de inventario, ventas y registros contables. No hay marcha atrás.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3">
           <button
-            className={`btn flex-1 justify-center font-black ${confirm2 ? 'btn-r scale-105' : 'btn-gr opacity-60 hover:opacity-100'}`}
+            className="btn btn-r justify-center font-black py-4 opacity-70 hover:opacity-100"
+            onClick={clearInventory}>
+            <span className="material-icons-round text-base">delete_sweep</span>
+            <span>VACIAR CATÁLOGO LOCAL (SOLO ESTA PC)</span>
+          </button>
+
+          <button
+            className="btn btn-b justify-center font-black py-4 bg-red-900/20 text-red-500 border-red-900/30 hover:bg-red-900/40"
+            onClick={clearCloudInventory}>
+            <span className="material-icons-round text-base">cloud_off</span>
+            <span>ELIMINAR INVENTARIO DE LA NUBE (GLOBAL)</span>
+          </button>
+
+          <p className="text-[9px] text-slate-500 font-bold uppercase text-center mt-1">
+            Nota: Si borras local y no borras la Nube, el sistema bajará los datos viejos al reiniciar.
+          </p>
+
+          <div className="h-px bg-red-200 my-2"></div>
+
+          <button
+            className={`btn justify-center font-black py-4 ${confirm2 ? 'btn-r scale-105' : 'btn-gr opacity-40 hover:opacity-100'}`}
             onClick={clearAll}>
             <span className="material-icons-round text-base">{confirm2 ? 'report_problem' : 'delete_forever'}</span>
-            <span>{confirm2 ? 'SÍ, BORRAR TODO DEFINITIVAMENTE' : 'LIMPIAR BASE DE DATOS'}</span>
+            <span>{confirm2 ? 'SÍ, BORRAR TODO EL SISTEMA DEFINITIVAMENTE' : 'LIMPIAR BASE DE DATOS COMPLETA'}</span>
           </button>
+
           {confirm2 && (
-            <button className="btn btn-gr flex-1 justify-center" onClick={() => setConfirm2(false)}>CANCELAR</button>
+            <button className="btn btn-gr justify-center" onClick={() => setConfirm2(false)}>CANCELAR ACCIÓN</button>
           )}
         </div>
       </Card>

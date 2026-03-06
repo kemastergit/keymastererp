@@ -60,12 +60,12 @@ export default function EtiquetasPage() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] md:h-full p-3 md:p-8 animate-fade-in overflow-hidden lg:overflow-hidden">
-            <header className="mb-4 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+            <header className="mb-4 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-6 rounded-[2rem] border border-slate-800 shadow-2xl">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3 tracking-tighter uppercase leading-none">
-                        <span className="text-red-600">🏷️</span> MÓDULO DE <span className="text-red-600">ETIQUETAS</span>
+                        <span className="text-red-600">🏷️</span> ETIQUETADO DE <span className="text-red-500">MERCANCÍA</span>
                     </h1>
-                    <p className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Generación de etiquetas de precio y despacho.</p>
+                    <p className="text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-widest mt-2 opacity-80">GENERACIÓN DE ETIQUETAS TÉRMICAS Y DE DESPACHO</p>
                 </div>
 
                 <div className="flex gap-2 shrink-0">
@@ -82,7 +82,7 @@ export default function EtiquetasPage() {
 
             <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-2 gap-4 md:gap-8 pb-4 overflow-hidden">
                 {/* Selector de Productos */}
-                <div className="bg-[#0f0f0f] border border-gray-800 p-4 md:p-6 rounded-2xl shadow-2xl flex flex-col h-[400px] lg:h-full min-h-0">
+                <div className="bg-[#0a0a0a] border border-gray-800 p-4 md:p-6 rounded-[2rem] shadow-2xl flex flex-col h-[400px] lg:h-full min-h-0 transition-all hover:shadow-red-900/5">
                     <div className="flex items-center justify-between mb-4 shrink-0">
                         <h2 className="text-xs md:text-sm font-black text-white uppercase tracking-widest">1. Seleccionar Productos</h2>
                         <div className="flex gap-1">
@@ -122,7 +122,7 @@ export default function EtiquetasPage() {
                                     <div
                                         key={art.id}
                                         onClick={() => handleSelect(art)}
-                                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between group active:scale-[0.98] ${isSelected ? 'bg-red-900/20 border-red-600 shadow-lg shadow-red-900/10' : 'bg-black border-transparent hover:border-gray-800'
+                                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group active:scale-[0.98] hover:scale-[1.02] ${isSelected ? 'bg-red-600/10 border-red-600 shadow-lg shadow-red-900/20' : 'bg-black border-transparent hover:border-gray-800 hover:bg-gray-900/50'
                                             }`}
                                     >
                                         <div className="flex flex-col min-w-0 pr-2">
@@ -138,7 +138,7 @@ export default function EtiquetasPage() {
                 </div>
 
                 {/* Lista de Selección & Preview */}
-                <div className="bg-[#0f0f0f] border border-gray-800 p-4 md:p-6 rounded-2xl shadow-2xl flex flex-col h-[500px] lg:h-full min-h-0">
+                <div className="bg-[#0a0a0a] border border-gray-800 p-4 md:p-6 rounded-[2rem] shadow-2xl flex flex-col h-[500px] lg:h-full min-h-0 transition-all hover:shadow-red-900/5">
                     <h2 className="text-xs md:text-sm font-black text-white uppercase tracking-widest mb-4 shrink-0">2. Cantidades y Vista Previa</h2>
 
                     <div className="flex-1 min-h-0 space-y-2 overflow-y-auto mb-4 pr-1 custom-scrollbar">

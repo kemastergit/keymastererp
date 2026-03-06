@@ -152,53 +152,92 @@ export default function Proveedores() {
   }
 
   return (
-    <div className="pr-2 pb-6 space-y-4">
-      <div className="panel">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="panel-title flex-1" style={{ margin: 0, paddingBottom: 0, border: 'none' }}>PROVEEDORES</span>
-          <button className="btn btn-r btn-sm" onClick={openNew}>+ NUEVO</button>
+    <div className="flex flex-col h-full min-h-0 pb-2 md:pb-6 space-y-4">
+      <div className="panel flex-1 flex flex-col min-h-0 overflow-hidden transition-all shadow-xl">
+        <div className="shrink-0 p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="panel-title flex-1 !m-0 !p-0 !border-none !text-[var(--text-main)]">DIRECTORIO DE PROVEEDORES</span>
+            <button className="btn bg-[var(--teal)] text-white btn-sm transition-all shadow-md cursor-pointer hover:scale-105" onClick={openNew}>+ NUEVO PROVEEDOR</button>
+          </div>
+          <input className="inp w-full focus:border-[var(--teal)] transition-all shadow-inner" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
         </div>
-        <input className="inp mb-2" placeholder="🔍 Buscar..." value={busq} onChange={e => setBusq(e.target.value)} />
-        <div className="tabla-wrap tabla-scroll overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0">
-            <thead>
-              <tr className="bg-slate-800 text-white">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">RIF</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">NOMBRE</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">ESTADO</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TELÉFONO</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">CIUDAD</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">ACCIONES</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {proveedores.map(p => (
-                <tr key={p.id} className={`${p.estado === 'INACTIVO' ? 'bg-slate-50 opacity-60' : ''}`}>
-                  <td className="font-mono2 text-rojo-bright">{p.rif}</td>
-                  <td className="font-semibold uppercase">{p.nombre}</td>
-                  <td>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${p.estado === 'INACTIVO' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {p.estado || 'ACTIVO'}
-                    </span>
-                  </td>
-                  <td className="text-muted">{p.telefono}</td>
-                  <td className="text-muted uppercase">{p.ciudad}</td>
-                  <td>
-                    <div className="flex gap-1 justify-end">
-                      <button className="btn btn-y btn-sm" onClick={() => openEdit(p)} title="Editar">✏</button>
-                      {p.estado !== 'INACTIVO' && (
-                        <button className="btn bg-slate-500 text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => setInactivating(p)} title="Inactivar">🔒</button>
-                      )}
-                      <button className="btn btn-r btn-sm" onClick={() => setDelId(p.id)} title="Eliminar">🗑</button>
+
+        <div className="flex-1 overflow-auto bg-[var(--bg)] md:bg-transparent pb-24">
+          {/* VISTA MÓVIL (TARJETAS) */}
+          <div className="md:hidden flex flex-col gap-2 p-3">
+            {proveedores.map(p => (
+              <div key={p.id} className={`bg-[var(--surface)] border-l-8 ${p.estado === 'INACTIVO' ? 'border-l-slate-400 opacity-60' : 'border-l-[var(--teal)]'} border-y border-r border-[var(--border-var)] shadow-sm p-4 relative flex flex-col gap-3 rounded-2xl hover:scale-[1.02] transition-all mb-2`}>
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-[var(--text-main)] text-sm leading-tight truncate uppercase">{p.nombre}</h3>
+                      {p.estado === 'INACTIVO' && <span className="bg-slate-200 text-slate-600 text-[8px] px-1 font-black rounded">INACTIVO</span>}
                     </div>
-                  </td>
+                    <p className="font-mono text-[var(--red-var)] font-black text-[11px] uppercase tracking-wider">{p.rif}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button className="text-[var(--orange-var)] hover:opacity-70 p-1" onClick={() => openEdit(p)}>
+                      <span className="material-icons-round text-sm">edit</span>
+                    </button>
+                    <button className="text-[var(--red-var)] hover:opacity-70 p-1" onClick={() => setDelId(p.id)}>
+                      <span className="material-icons-round text-sm">delete</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-y-2 gap-x-3 bg-[var(--surfaceDark)] p-2 -mx-2 opacity-90">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="material-icons-round text-[12px] text-[var(--text2)] shrink-0">phone</span>
+                    <span className="text-[10px] font-bold text-[var(--text-main)] truncate">{p.telefono || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="material-icons-round text-[12px] text-[var(--text2)] shrink-0">location_on</span>
+                    <span className="text-[10px] font-bold text-[var(--text-main)] truncate uppercase">{p.ciudad || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {proveedores.length === 0 && (
+              <div className="text-center text-[var(--text2)] py-12 tracking-widest font-bold uppercase text-xs">SIN PROVEEDORES</div>
+            )}
+          </div>
+
+          {/* VISTA ESCRITORIO (TABLA) */}
+          <div className="hidden md:block tabla-wrap tabla-scroll">
+            <table className="w-full border-separate border-spacing-0">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">RIF</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">NOMBRE</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">ESTADO</th>
+                  <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">TELÉFONO</th>
+                  <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">ACCIONES</th>
                 </tr>
-              ))}
-              {proveedores.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-muted py-6 tracking-widest">SIN PROVEEDORES</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {proveedores.map(p => (
+                  <tr key={p.id} className={`${p.estado === 'INACTIVO' ? 'bg-slate-50 opacity-60' : ''} hover:bg-[var(--teal)]/5 transition-all cursor-pointer group hover:scale-[1.005]`}>
+                    <td className="font-mono text-[var(--red-var)] font-bold">{p.rif}</td>
+                    <td className="font-bold text-[var(--text-main)] uppercase">{p.nombre}</td>
+                    <td>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${p.estado === 'INACTIVO' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {p.estado || 'ACTIVO'}
+                      </span>
+                    </td>
+                    <td className="text-[var(--text2)] text-[11px] font-bold">{p.telefono}</td>
+                    <td className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button className="btn bg-[var(--orange-var)] text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => openEdit(p)} title="Editar">✏</button>
+                        {p.estado !== 'INACTIVO' && (
+                          <button className="btn bg-slate-500 text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => setInactivating(p)} title="Inactivar">🔒</button>
+                        )}
+                        <button className="btn bg-[var(--red-var)] text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => setDelId(p.id)} title="Eliminar">🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

@@ -108,6 +108,7 @@ export default function HelpModal() {
                                     <h2 className="text-2xl font-black text-[var(--text-main)] uppercase tracking-tight mb-4">Facturación</h2>
                                     <div className="space-y-4">
                                         <HelpItem title="Búsqueda Inteligente" desc="Puede buscar por nombre, código o marca. Bloqueo automático sin stock." icon="search" />
+                                        <HelpItem title="Edición de Pagos" desc="¿Se equivocó en un monto? Toque el pago en la lista para recargarlo en el teclado y corregirlo sin borrar nada." icon="edit" />
                                         <HelpItem title="Impuestos (IGTF 3%)" desc="Cálculo automático del 3% de IGTF al pagar en divisas según la ley." icon="receipt_long" />
                                         <HelpItem title="Nota vs Cotización" desc="Las notas descuentan stock y cobran. Las cotizaciones son solo presupuestos." icon="description" />
                                     </div>
@@ -128,7 +129,8 @@ export default function HelpModal() {
                                 <div className="space-y-6">
                                     <h2 className="text-2xl font-black text-[var(--text-main)] uppercase tracking-tight mb-4">Reportes</h2>
                                     <div className="space-y-4">
-                                        <HelpItem title="Estado de Resultados (P&L)" desc="Reporte contable completo: Ventas Netas − CMV = Utilidad Bruta − Gastos = Utilidad Neta. Con márgenes, barras de progreso y desglose de gastos por categoría." icon="analytics" />
+                                        <HelpItem title="Estado de Resultados (P&L)" desc="Reporte contable completo: Ventas Netas − CMV = Utilidad Bruta − Gastos = Utilidad Neta." icon="analytics" />
+                                        <HelpItem title="Protección de Deuda" desc="El sistema impide borrar clientes o proveedores con deudas pendientes para proteger su contabilidad." icon="security" />
                                         <HelpItem title="Anulación de Ventas" desc="Requiere PIN. Devuelve stock y resta dinero de caja automáticamente." icon="block" />
                                         <HelpItem title="WhatsApp Cobranzas" desc="Envío de recordatorio automático de deuda a clientes." icon="whatsapp" />
                                     </div>

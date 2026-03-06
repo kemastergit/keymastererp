@@ -78,29 +78,30 @@ export default function Auditoria() {
 
     return (
         <div className="space-y-6 flex flex-col min-h-0 pb-6 pr-2">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 py-4">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter">Trazabilidad de Auditoría</h1>
-                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Registro inmutable de acciones operativas y administrativas</p>
+                    <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter leading-none mb-1">AUDITORÍA DE SISTEMA</h1>
+                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest opacity-80">TRAZABILIDAD INTEGRAL Y REGISTRO DE EVENTOS</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <button
                         onClick={pullFromCloud}
                         disabled={loadingCloud}
-                        className="btn bg-[var(--teal)] text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 px-4 py-2 hover:brightness-110 disabled:opacity-50"
+                        className="btn bg-blue-600 text-white !py-3 !px-6 transition-all shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50"
                     >
                         <span className={`material-icons-round text-sm ${loadingCloud ? 'animate-spin' : ''}`}>sync</span>
-                        {loadingCloud ? 'ACTUALIZANDO...' : 'REFRESCAR DESDE NUBE'}
+                        <span>{loadingCloud ? 'ACTUALIZANDO...' : 'REFRESCAR NUBE'}</span>
                     </button>
-                    <span className="badge bg-slate-800 text-white shadow-lg">MOVIMIENTOS EN VIVO</span>
+                    <div className="bg-slate-800 text-white text-[9px] font-black px-4 py-3 rounded-xl shadow-lg border border-slate-700 tracking-[0.2em]">LIVE STATUS</div>
                 </div>
             </div>
 
-            <div className="panel p-0 flex flex-col min-h-0 flex-1 overflow-hidden shadow-[var(--win-shadow)]">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4">
+            <div className="panel p-0 flex flex-col min-h-0 flex-1 overflow-hidden shadow-xl border-none">
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row gap-4">
                     <div className="relative flex-1">
                         <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                        <input className="inp !py-3 !pl-12 !pr-5 w-full font-bold" placeholder="Filtrar por usuario, acción, tabla o detalle..."
+                        <input className="inp !py-4 !pl-12 !pr-5 w-full font-bold shadow-inner !bg-white focus:scale-[1.01] transition-all"
+                            placeholder="FILTRAR POR USUARIO, ACCIÓN, TABLA O DETALLE..."
                             value={busq} onChange={e => setBusq(e.target.value)} />
                     </div>
                 </div>
@@ -121,7 +122,7 @@ export default function Auditoria() {
                             {logs?.map(l => {
                                 const changes = (l.old_value || l.new_value)
                                 return (
-                                    <tr key={l.id} className="hover:bg-slate-50 transition-colors border-l-4 border-transparent hover:border-[#0d9488]">
+                                    <tr key={l.id} className="hover:bg-[var(--teal)]/5 transition-all group hover:scale-[1.005] cursor-default">
                                         <td className="p-4 whitespace-nowrap">
                                             <div className="text-[11px] font-black text-slate-700">{fmtDate(l.fecha)}</div>
                                             <div className="text-[10px] font-mono text-slate-400 font-bold">

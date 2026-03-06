@@ -143,22 +143,22 @@ export default function Clientes() {
 
   return (
     <div className="flex flex-col h-full min-h-0 pb-2 md:pb-6 space-y-4">
-      <div className="panel flex-1 flex flex-col min-h-0 overflow-hidden transition-none">
+      <div className="panel flex-1 flex flex-col min-h-0 overflow-hidden transition-all shadow-xl">
         <div className="shrink-0 p-4 border-b border-[var(--border-var)] bg-[var(--surface2)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="panel-title flex-1 !m-0 !p-0 !border-none !text-[var(--text-main)]">FICHA DE CLIENTES</span>
             {useStore.getState().currentUser?.rol !== 'VENDEDOR' && (
-              <button className="btn bg-[var(--teal)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer" onClick={openNew}>+ NUEVO</button>
+              <button className="btn bg-[var(--teal)] text-white btn-sm transition-all shadow-md cursor-pointer hover:scale-105" onClick={openNew}>+ NUEVO CLIENTE</button>
             )}
           </div>
-          <input className="inp w-full focus:border-[var(--teal)] transition-none rounded-none" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
+          <input className="inp w-full focus:border-[var(--teal)] transition-all shadow-inner" placeholder="🔍 Buscar por RIF o nombre..." value={busq} onChange={e => setBusq(e.target.value)} />
         </div>
         <div className="flex-1 overflow-auto bg-[var(--bg)] md:bg-transparent pb-24">
 
           {/* VISTA MÓVIL (TARJETAS) */}
           <div className="md:hidden flex flex-col gap-2 p-3">
             {clientes.map(c => (
-              <div key={c.id} className={`bg-[var(--surface)] border-l-4 ${c.estado === 'INACTIVO' ? 'border-l-slate-400 opacity-60' : 'border-l-[var(--teal)]'} border-y border-r border-[var(--border-var)] shadow-sm p-4 relative flex flex-col gap-3`}>
+              <div key={c.id} className={`bg-[var(--surface)] border-l-8 ${c.estado === 'INACTIVO' ? 'border-l-slate-400 opacity-60' : 'border-l-[var(--teal)]'} border-y border-r border-[var(--border-var)] shadow-sm p-4 relative flex flex-col gap-3 rounded-2xl hover:scale-[1.02] transition-all mb-2`}>
 
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -226,7 +226,7 @@ export default function Clientes() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {clientes.map(c => (
-                  <tr key={c.id} className={`${c.estado === 'INACTIVO' ? 'bg-slate-50 opacity-60' : ''} hover:bg-[var(--surfaceDark)] transition-none`}>
+                  <tr key={c.id} className={`${c.estado === 'INACTIVO' ? 'bg-slate-50 opacity-60' : ''} hover:bg-[var(--teal)]/5 transition-all cursor-pointer group hover:scale-[1.005]`}>
                     <td className="font-mono text-[var(--red-var)] font-bold">{c.rif}</td>
                     <td className="font-bold text-[var(--text-main)] uppercase">{c.nombre}</td>
                     <td className="text-[var(--text2)] text-[11px] font-bold uppercase">{c.ciudad}</td>
@@ -239,11 +239,11 @@ export default function Clientes() {
                     <td className="text-right">
                       {useStore.getState().currentUser?.rol !== 'VENDEDOR' && (
                         <div className="flex gap-1 justify-end">
-                          <button className="btn bg-[var(--orange-var)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => openEdit(c)} title="Editar">✏</button>
+                          <button className="btn bg-[var(--orange-var)] text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => openEdit(c)} title="Editar">✏</button>
                           {c.estado !== 'INACTIVO' && (
-                            <button className="btn bg-slate-500 text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => setInactivating(c)} title="Inactivar">🔒</button>
+                            <button className="btn bg-slate-500 text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => setInactivating(c)} title="Inactivar">🔒</button>
                           )}
-                          <button className="btn bg-[var(--red-var)] text-white btn-sm transition-none shadow-[var(--win-shadow)] cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold" onClick={() => setDelId(c.id)} title="Eliminar">🗑</button>
+                          <button className="btn bg-[var(--red-var)] text-white btn-sm transition-all shadow-md cursor-pointer !w-8 !h-8 !p-0 flex items-center justify-center font-bold hover:scale-110" onClick={() => setDelId(c.id)} title="Eliminar">🗑</button>
                         </div>
                       )}
                     </td>

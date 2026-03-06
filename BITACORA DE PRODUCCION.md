@@ -7,6 +7,14 @@ Este documento registra la evolución técnica, hitos de desarrollo y proteccion
 
 ## 🚀 Fase actual: Blindaje y Resiliencia (Marzo 2026)
 
+### [2026-03-06] - Refinamiento de Cobranza y Blindaje de Datos 💳🛡️
+*   **Hito:** Interfaz de pagos más fluida y protección de integridad referencial en deudas.
+*   **Cambios:**
+    *   **Edición de Pagos Directa (P21):** En el modal de facturación, se habilitó el "Click to Edit". Al tocar un pago ya registrado, este se recarga en el teclado numérico para corrección inmediata de monto o método.
+    *   **UI de Pagos Compacta:** Rediseño dimensional del modal de pagos. Menos padding, fuentes más precisas y ancho reducido (440px) para maximizar la velocidad visual del cajero.
+    *   **Bloqueo de Borrado por Deuda (P22):** Se integró una validación bloqueante en Clientes y Proveedores. El sistema impide la eliminación si el ente posee facturas pendientes en `ctas_cobrar` o `ctas_pagar`.
+    *   **Análisis de Portabilidad Local:** Auditoría de arquitectura completada para despliegue en Servidores Locales con Docker (Supabase Local Sync).
+
 ### [2026-03-04] - Control de Riesgos Restrictivo y Base de Conocimientos (FAQ) 🚦📚
 *   **Hito:** Bloqueos automáticos operativos, revisión exhaustiva de permisos y puesta a punto de la documentación de ayuda (FAQ) para terminal y nube.
 *   **Cambios:**

@@ -60,26 +60,28 @@ export default function Layout() {
 
       {/* BLOQUEO FORZOSO: Nombre de PC Requerido */}
       {configEmpresa && (!configEmpresa.terminal_prefix || configEmpresa.terminal_prefix.trim() === '') && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 shadow-2xl">
-          <div className="bg-[var(--surfaceDark)] border-2 border-[var(--orange-var)] p-10 max-w-lg w-full shadow-[0_0_80px_rgba(245,158,11,0.15)] rounded-none relative overflow-hidden">
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[var(--orange-var)] to-transparent opacity-50"></div>
+        <div className="fixed inset-0 z-[9999] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-slate-800 p-10 max-w-lg w-full shadow-2xl rounded-[2.5rem] relative overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-50"></div>
 
             <div className="text-center mb-8">
-              <span className="material-icons-round text-7xl text-[var(--orange-var)] mb-3 animate-pulse drop-shadow-md">important_devices</span>
-              <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Bautice esta Estación</h2>
-              <p className="text-[10px] text-[var(--text2)] font-bold uppercase tracking-[0.2em] mt-3 leading-relaxed max-w-sm mx-auto">
-                ATENCIÓN: Para operar y evitar choque de facturas en la Nube, es <span className="text-[var(--orange-var)]">MANDATORIO</span> asignarle un nombre único a esta PC.
+              <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-orange-500/20 shadow-lg shadow-orange-500/5">
+                <span className="material-icons-round text-5xl text-orange-500 animate-pulse">important_devices</span>
+              </div>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tighter leading-none mb-3">Identidad de la Estación</h2>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] leading-relaxed max-w-xs mx-auto opacity-80">
+                ES OBLIGATORIO ASIGNAR UN NOMBRE ÚNICO PARA <span className="text-orange-500">IDENTIFICAR ESTA PC</span> EN LA NUBE.
               </p>
             </div>
 
             <div className="space-y-6 relative z-10">
-              <div>
-                <label className="block text-[10px] text-center uppercase font-black text-[var(--orange-var)] tracking-[0.3em] mb-2">Nombre Único del Equipo</label>
+              <div className="group">
+                <label className="block text-[9px] text-center uppercase font-black text-orange-500 tracking-[0.4em] mb-3 opacity-60 group-focus-within:opacity-100 transition-opacity">Nombre del Equipo</label>
                 <input
                   type="text"
                   id="forcedTerminalInput"
-                  placeholder="EJEMPLO: CAJA-PRINCIPAL"
-                  className="w-full bg-slate-900 border-2 border-slate-700 focus:border-[var(--orange-var)] p-4 text-center text-xl font-black uppercase text-white outline-none shadow-inner transition-colors placeholder:text-slate-600"
+                  placeholder="EJ: CAJA-01"
+                  className="w-full bg-black border border-slate-800 focus:border-orange-500 p-5 text-center text-2xl font-black uppercase text-white outline-none rounded-2xl shadow-inner transition-all placeholder:text-slate-800"
                   autoFocus
                   onKeyDown={async (e) => {
                     if (e.key === 'Enter') {
@@ -96,9 +98,9 @@ export default function Layout() {
                   if (!val) return useStore.getState().toast('⚠️ Ingrese un nombre válido', 'error')
                   await useStore.getState().updateConfigEmpresa({ terminal_prefix: val })
                 }}
-                className="w-full bg-[var(--orange-var)] text-white font-black text-xs uppercase tracking-[0.2em] py-4 hover:bg-orange-600 transition-none shadow-[var(--win-shadow)] active:translate-y-0.5 cursor-pointer flex justify-center items-center gap-2"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-[0.25em] py-5 rounded-2xl transition-all shadow-xl active:scale-95 cursor-pointer flex justify-center items-center gap-2"
               >
-                <span className="material-icons-round text-sm">save</span> CONECTAR TERMINAL
+                <span className="material-icons-round text-sm">rocket_launch</span> VINCULAR ESTACIÓN
               </button>
             </div>
           </div>

@@ -256,7 +256,7 @@ export default function Inventario() {
 
   return (
     <div className="flex flex-col min-h-0 pb-2 md:pb-6 relative">
-      <div className="panel p-0 flex flex-col min-h-0 flex-1 relative rounded-none shadow-[var(--win-shadow)] transition-none border-t-4 border-t-[var(--teal)]">
+      <div className="panel p-0 flex flex-col min-h-0 flex-1 relative overflow-hidden">
         <div className="p-5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-5 shrink-0">
           <div>
             <div className="text-xl font-black text-[var(--text-main)] mb-1 uppercase tracking-tighter">MAESTRO DE INVENTARIO Y ALMACÉN</div>
@@ -265,21 +265,21 @@ export default function Inventario() {
           <div className="flex items-center gap-3">
             <button
               disabled={syncing}
-              className={`px-5 py-3 rounded-none text-[10px] font-black uppercase tracking-widest transition-none flex items-center gap-2 cursor-pointer border shadow-[var(--win-shadow)]
-                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}
+              className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer shadow-md
+                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700 hover:scale-105'}`}
               onClick={handleSincronizarNube}>
               <span className={`material-icons-round text-sm ${syncing ? 'animate-spin' : ''}`}>
                 {syncing ? 'sync' : 'cloud_upload'}
               </span>
               <span>{syncing ? 'SINCRONIZANDO...' : 'SINCRONIZAR NUBE'}</span>
             </button>
-            <button className={`px-5 py-3 rounded-none text-[10px] font-black uppercase tracking-widest transition-none flex items-center gap-2 cursor-pointer border shadow-[var(--win-shadow)]
-              ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)]'}`}
+            <button className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer shadow-md
+                ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)] hover:scale-105'}`}
               onClick={() => toggleFilter('agotados')}>
               <span className="material-icons-round text-sm">{filter === 'agotados' ? 'filter_list_off' : 'error'}</span>
               <span>{filter === 'agotados' ? 'MOSTRAR TODO' : 'VER SIN STOCK'}</span>
             </button>
-            <button className="btn bg-[var(--teal)] text-white px-6 py-3 shadow-[var(--win-shadow)] font-black cursor-pointer rounded-none uppercase text-[10px] tracking-widest" onClick={openNew}>
+            <button className="btn bg-[var(--teal)] text-white px-6 shadow-md font-black cursor-pointer rounded-xl uppercase text-[10px] tracking-widest hover:scale-105" onClick={openNew}>
               <span className="material-icons-round text-base">add_box</span>
               <span>ALTA DE PRODUCTO</span>
             </button>
@@ -288,7 +288,7 @@ export default function Inventario() {
 
         <div className="px-5 py-4 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
           <div className="field !m-0">
-            <input className="inp !py-4 !px-6 !bg-[var(--surfaceDark)] !rounded-none text-[11px] font-black uppercase tracking-widest transition-none focus:border-[var(--teal)] shadow-inner"
+            <input className="inp !py-4 !px-6 !bg-[var(--surfaceDark)] text-[11px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
               placeholder="🔍 BUSCAR POR CÓDIGO, DESCRIPCIÓN, MARCA O CATEGORÍA..."
               value={busq} onChange={e => setBusq(e.target.value.toUpperCase())} />
           </div>
@@ -297,7 +297,7 @@ export default function Inventario() {
         {/* ─── MOBILE: Card View ─── */}
         <div className="block md:hidden divide-y-2 divide-[var(--border-var)] flex-1 min-h-0">
           {articulos.map(a => (
-            <div key={a.id} className="p-5 hover:bg-[var(--surfaceDark)] transition-none active:bg-[var(--surface2)] cursor-pointer" onClick={() => openEdit(a)}>
+            <div key={a.id} className="p-5 hover:bg-[var(--surfaceDark)] transition-all hover:scale-[1.02] border-b border-[var(--border-var)] bg-white mb-2 rounded-2xl shadow-sm cursor-pointer" onClick={() => openEdit(a)}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
@@ -359,7 +359,7 @@ export default function Inventario() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {articulos.map(a => (
-                <tr key={a.id} className="hover:bg-[var(--surface2)] transition-none cursor-pointer group" onClick={() => openEdit(a)}>
+                <tr key={a.id} className="hover:bg-[var(--teal)]/5 transition-all cursor-pointer group hover:scale-[1.005]" onClick={() => openEdit(a)}>
                   <td className="py-3 px-4 sticky-col !bg-[var(--surface)]">
                     <div className="font-mono text-[var(--teal)] font-black text-xs uppercase tracking-tighter">
                       #{a.codigo}
