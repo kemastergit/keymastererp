@@ -384,10 +384,22 @@ export default function Admin() {
                     toast(`✅ ¡Éxito! ${finalProv.length} proveedores procesados localmente.`)
 
                     try {
-                      console.log("☁️ Sincronizando proveedores con Supabase...")
+                      console.log("☁️ Sincronizando proveedores con Supabase...");
+
+                      // 🛡️ DEDUP EN LOTE: Evita error "ON CONFLICT" si el Excel trae duplicados
+                      const uniqueBatch = [];
+                      const rifSet = new Set();
+                      for (const p of finalProv.reverse()) { // Reversa para quedarnos con el último si hay duplicados
+                        if (!rifSet.has(p.rif)) {
+                          uniqueBatch.push(p);
+                          rifSet.add(p.rif);
+                        }
+                      }
+                      const toSync = uniqueBatch.reverse();
+
                       const batchSize = 100
-                      for (let i = 0; i < finalProv.length; i += batchSize) {
-                        const batch = finalProv.slice(i, i + batchSize).map(p => ({
+                      for (let i = 0; i < toSync.length; i += batchSize) {
+                        const batch = toSync.slice(i, i + batchSize).map(p => ({
                           rif: p.rif,
                           nombre: p.nombre,
                           telefono: p.telefono,
@@ -433,9 +445,21 @@ export default function Admin() {
 
                     try {
                       console.log("☁️ Sincronizando clientes con Supabase...")
+
+                      // 🛡️ DEDUP EN LOTE: Evita error "ON CONFLICT" si el Excel trae duplicados
+                      const uniqueBatch = [];
+                      const rifSet = new Set();
+                      for (const c of finalClie.reverse()) {
+                        if (!rifSet.has(c.rif)) {
+                          uniqueBatch.push(c);
+                          rifSet.add(c.rif);
+                        }
+                      }
+                      const toSync = uniqueBatch.reverse();
+
                       const batchSize = 100
-                      for (let i = 0; i < finalClie.length; i += batchSize) {
-                        const batch = finalClie.slice(i, i + batchSize).map(c => ({
+                      for (let i = 0; i < toSync.length; i += batchSize) {
+                        const batch = toSync.slice(i, i + batchSize).map(c => ({
                           rif: c.rif,
                           nombre: c.nombre,
                           telefono: c.telefono,
