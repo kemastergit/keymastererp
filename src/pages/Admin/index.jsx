@@ -283,56 +283,45 @@ export default function Admin() {
 
                   const currentUser = useStore.getState().currentUser
                   console.log("👤 Usuario procesando:", currentUser?.nombre)
-                  if (rawRows.length > 0) {
-                    console.log("🔑 Columnas detectadas en el archivo:", Object.keys(rawRows[0]))
+
+                  // 🛠️ HELPERS GLOBALES DE IMPORTACIÓN
+                  const cleanNum = (val) => {
+                    if (typeof val === 'number') return val;
+                    if (!val || typeof val !== 'string') return 0;
+                    const clean = val.replace(/[^0-9.,-]/g, '');
+                    if (clean.includes(',') && clean.includes('.')) {
+                      return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
+                    }
+                    return parseFloat(clean.replace(',', '.')) || 0;
+                  }
+
+                  const getVal = (row, ...targets) => {
+                    const keys = Object.keys(row);
+                    for (const target of targets) {
+                      const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                      const exactMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedTarget);
+                      if (exactMatch) return row[exactMatch];
+                    }
+                    for (const target of targets) {
+                      const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                      const fuzzyMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().includes(normalizedTarget));
+                      if (fuzzyMatch) return row[fuzzyMatch];
+                    }
+                    return null;
                   }
 
                   if (importType === 'articulos') {
-                    // Helpers para limpieza de datos
-                    const cleanNum = (val) => {
-                      if (typeof val === 'number') return val;
-                      if (!val || typeof val !== 'string') return 0;
-                      // Eliminar todo lo que no sea nÃºmero, punto o coma
-                      const clean = val.replace(/[^0-9.,-]/g, '');
-                      // Manejar formato Latino (1.250,50 -> 1250.50)
-                      // Si hay coma y punto, asumimos punto es miles. Si solo hay coma, es decimal.
-                      if (clean.includes(',') && clean.includes('.')) {
-                        return parseFloat(clean.replace(/\./g, '').replace(',', '.')) || 0;
-                      }
-                      return parseFloat(clean.replace(',', '.')) || 0;
-                    }
-
-                    const getVal = (row, ...targets) => {
-                      const keys = Object.keys(row);
-                      // 1. Precise match
-                      for (const target of targets) {
-                        const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                        const exactMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() === normalizedTarget);
-                        if (exactMatch) return row[exactMatch];
-                      }
-                      // 2. Fuzzy match (includes)
-                      for (const target of targets) {
-                        const normalizedTarget = target.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                        const fuzzyMatch = keys.find(k => k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().includes(normalizedTarget));
-                        if (fuzzyMatch) return row[fuzzyMatch];
-                      }
-                      return null;
-                    }
-
-                    const formatted = rawRows.map(a => {
-                      const row = {
-                        codigo: String(getVal(a, 'Código', 'Codigo', 'Cod', 'Referencia') || '').trim(),
-                        referencia: String(getVal(a, 'Ref', 'Parte', 'Referencia') || ''),
-                        descripcion: String(getVal(a, 'Descripción', 'Descripcion', 'Nombre', 'Articulo') || '').trim(),
-                        marca: String(getVal(a, 'Marca', 'Fabricante') || 'GENERICO').toUpperCase(),
-                        departamento: String(getVal(a, 'Departamento', 'Categoria', 'Depto', 'Grupo') || 'GENERAL').toUpperCase(),
-                        unidad: String(getVal(a, 'Unidad', 'Medida', 'U.M.') || 'UNI').toUpperCase(),
-                        stock: cleanNum(getVal(a, 'Total Existe', 'Total', 'Stock', 'Existencia', 'Cant') || 0),
-                        precio: cleanNum(getVal(a, 'Precio Venta', 'Precio 1', 'Precio', 'Venta') || 0),
-                        costo: cleanNum(getVal(a, 'Costo Unitario', 'Costo Unit', 'Costo Full', 'Costo') || 0),
-                      };
-                      return row;
-                    }).filter(a => a.codigo && a.descripcion);
+                    const formatted = rawRows.map(a => ({
+                      codigo: String(getVal(a, 'Código', 'Codigo', 'Cod', 'Referencia') || '').trim(),
+                      referencia: String(getVal(a, 'Ref', 'Parte', 'Referencia') || ''),
+                      descripcion: String(getVal(a, 'Descripción', 'Descripcion', 'Nombre', 'Articulo') || '').trim(),
+                      marca: String(getVal(a, 'Marca', 'Fabricante') || 'GENERICO').toUpperCase(),
+                      departamento: String(getVal(a, 'Departamento', 'Categoria', 'Depto', 'Grupo') || 'GENERAL').toUpperCase(),
+                      unidad: String(getVal(a, 'Unidad', 'Medida', 'U.M.') || 'UNI').toUpperCase(),
+                      stock: cleanNum(getVal(a, 'Total Existe', 'Total', 'Stock', 'Existencia', 'Cant') || 0),
+                      precio: cleanNum(getVal(a, 'Precio Venta', 'Precio 1', 'Precio', 'Venta') || 0),
+                      costo: cleanNum(getVal(a, 'Costo Unitario', 'Costo Unit', 'Costo Full', 'Costo') || 0),
+                    })).filter(a => a.codigo && a.descripcion);
 
                     console.log("📝 Muestra de artículos procesados (primeros 3):", formatted.slice(0, 3));
 
@@ -363,54 +352,38 @@ export default function Admin() {
                     toast(`✅ Éxito: ${updated} actualizados y ${created} nuevos.`, 'success')
 
                   } else if (importType === 'proveedores') {
-                    // MODO PROVEEDORES
                     let seqCounter = 1
                     const formatted = rawRows.map(p => {
-                      // Buscamos el nombre en múltiples variaciones
-                      const nombre = String(
-                        p['Nombre de Empresa / Proveedor'] ||
-                        p['Nombre de Empresa / Proveedor'] ||
-                        p['Nombre'] ||
-                        p.nombre ||
-                        p['NOMBRE'] ||
-                        p['PROVEEDOR'] ||
-                        p.empresa ||
-                        p.proveedor ||
-                        p.company ||
-                        ''
-                      ).trim()
-
-                      let rif = String(p.rif || p.RIF || p['RIF'] || p.Id || p.id || p.ID || '').trim()
-
-                      // LOGICA GENERACIÓN SECUENCIAL PARA RIF VACÍO/CERO
-                      if (!rif || rif === '0' || rif === '00000000' || rif === 'undefined' || rif === '') {
+                      const nombre = String(getVal(p, 'Nombre', 'Proveedor', 'Empresa', 'Nombre de Empresa') || '').trim()
+                      let rif = String(getVal(p, 'RIF', 'RIF / CI', 'ID', 'Id', 'Cedula', 'Rif') || '').trim()
+                      if (!rif || rif === '0' || rif === '' || rif === 'undefined') {
                         rif = `GEN-${String(seqCounter++).padStart(7, '0')}`
                       }
-
                       return {
                         rif: rif,
-                        nombre: nombre,
-                        telefono: String(p.telefono || p.Telefono || p.tel || p['Teléfono'] || p['Telefono'] || '0'),
-                        direccion: String(p.direccion || p.Direccion || p.dir || p['Dirección'] || p['Direccion'] || 'N/A'),
+                        nombre: nombre || 'PROVEEDOR SIN NOMBRE',
+                        telefono: String(getVal(p, 'Telefono', 'Celular', 'Principal') || '0'),
+                        direccion: String(getVal(p, 'Direccion', 'Ubicacion', 'Sede') || 'N/A'),
                         estado: 'ACTIVO'
                       }
-                    }).filter(p => p.nombre && p.nombre !== '' && p.nombre !== 'undefined')
+                    }).filter(p => (p.rif && p.nombre && p.nombre !== 'PROVEEDOR SIN NOMBRE'))
 
-                    console.log(`✅ Proveedores formateados: ${formatted.length}`)
+                    console.log(`✅ Proveedores formateados: ${formatted.length}`, formatted.slice(0, 2))
 
                     const existingProv = await db.proveedores.toArray()
-                    const rifMap = new Map(existingProv.map(item => [item.rif, item.id]))
+                    const rifMap = new Map(existingProv.map(item => [String(item.rif), item.id]))
 
                     const finalProv = formatted.map(prov => {
                       if (rifMap.has(prov.rif)) return { ...prov, id: rifMap.get(prov.rif) }
                       return prov
                     })
 
+                    console.log("💾 Guardando proveedores en Dexie:", finalProv.length)
                     await db.proveedores.bulkPut(finalProv)
                     toast(`✅ ¡Éxito! ${finalProv.length} proveedores procesados localmente.`)
 
-                    // ☁️ SYNC A LA NUBE (En bloques)
                     try {
+                      console.log("☁️ Sincronizando proveedores con Supabase...")
                       const batchSize = 100
                       for (let i = 0; i < finalProv.length; i += batchSize) {
                         const batch = finalProv.slice(i, i + batchSize).map(p => ({
@@ -424,39 +397,41 @@ export default function Admin() {
                         if (error) throw error
                       }
                       toast('☁️ Directorio de Proveedores sincronizado en la Nube', 'success')
+                      console.log("✅ Sincronización de proveedores terminada.")
                     } catch (err) {
                       console.error('Error sync proveedores:', err)
                       toast('⚠️ Importado local, pero falló sincronización a la nube', 'warn')
                     }
 
                   } else if (importType === 'clientes') {
-                    // MODO CLIENTES
                     const formatted = rawRows.map(c => {
-                      const rif = String(c.rif || c.RIF || c.Id || c.id || '').trim()
-                      const nombre = String(c.nombre || c['Nombre'] || c.cliente || '').trim()
-
+                      const rif = String(getVal(c, 'RIF', 'Cedula', 'Id', 'ID', 'Rif', 'RIF / CI') || '').trim()
+                      const nombre = String(getVal(c, 'Nombre', 'Cliente', 'Nombre y Apellido') || '').trim()
                       return {
                         rif: rif,
                         nombre: nombre || 'CLIENTE SIN NOMBRE',
-                        telefono: String(c.telefono || c.Telefono || c.tel || '0'),
-                        direccion: String(c.direccion || c.Direccion || c.dir || 'N/A'),
+                        telefono: String(getVal(c, 'Telefono', 'Celular', 'Telf') || '0'),
+                        direccion: String(getVal(c, 'Direccion', 'Ubicacion', 'Hogar') || 'N/A'),
                         estado: 'ACTIVO'
                       }
-                    }).filter(c => c.rif && c.nombre !== 'CLIENTE SIN NOMBRE')
+                    }).filter(c => c.rif && c.nombre && c.nombre !== 'CLIENTE SIN NOMBRE')
+
+                    console.log(`✅ Clientes formateados: ${formatted.length}`, formatted.slice(0, 2))
 
                     const existingClie = await db.clientes.toArray()
-                    const rifMap = new Map(existingClie.map(item => [item.rif, item.id]))
+                    const rifMap = new Map(existingClie.map(item => [String(item.rif), item.id]))
 
                     const finalClie = formatted.map(clie => {
                       if (rifMap.has(clie.rif)) return { ...clie, id: rifMap.get(clie.rif) }
                       return clie
                     })
 
+                    console.log("💾 Guardando clientes en Dexie:", finalClie.length)
                     await db.clientes.bulkPut(finalClie)
                     toast(`✅ ¡Éxito! ${finalClie.length} clientes procesados localmente.`)
 
-                    // ☁️ SYNC A LA NUBE (En bloques)
                     try {
+                      console.log("☁️ Sincronizando clientes con Supabase...")
                       const batchSize = 100
                       for (let i = 0; i < finalClie.length; i += batchSize) {
                         const batch = finalClie.slice(i, i + batchSize).map(c => ({
@@ -470,6 +445,7 @@ export default function Admin() {
                         if (error) throw error
                       }
                       toast('☁️ Directorio de Clientes sincronizado en la Nube', 'success')
+                      console.log("✅ Sincronización de clientes terminada.")
                     } catch (err) {
                       console.error('Error sync clientes:', err)
                       toast('⚠️ Importado local, pero falló sincronización a la nube', 'warn')
