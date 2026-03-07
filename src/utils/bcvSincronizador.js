@@ -14,13 +14,13 @@ export async function syncOfficialBcvRate() {
     try {
         console.log("🏛️ Consultando Tasa BCV Oficial...")
 
-        // Usamos dolarapi.com que es gratuito y confiable en Venezuela
-        const response = await fetch('https://ve.dolarapi.com/v1/dolares/bcv')
+        // Usamos ve.dolarapi.com/v1/dolares/oficial que es el endpoint correcto
+        const response = await fetch('https://ve.dolarapi.com/v1/dolares/oficial')
 
         if (!response.ok) throw new Error('Error al conectar con DolarAPI')
 
         const data = await response.json()
-        const nuevaTasa = parseFloat(data.promedio) || parseFloat(data.monto)
+        const nuevaTasa = parseFloat(data.promedio) || parseFloat(data.monto) || parseFloat(data.valor)
 
         if (nuevaTasa && nuevaTasa !== tasaOficial) {
             console.log(`✅ Nueva Tasa BCV detectada: Bs ${nuevaTasa}`)

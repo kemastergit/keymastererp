@@ -155,29 +155,31 @@ export default function SupabaseListener() {
     useEffect(() => {
         if (!currentUser) return
 
-        const doSync = async () => {
+        // 1. Ciclo Rápido (30 segundos): Datos críticos de ventas y stock
+        const fastSync = async () => {
             const { processSyncQueue, pullRecentInvoices } = await import('../utils/syncManager')
-            const { syncOfficialBcvRate } = await import('../utils/bcvSincronizador')
-
-            // 1. Empujar lo que hicimos nosotros (Upsync)
             await processSyncQueue()
-
-            // 2. 📥 Traer lo que hicieron los demás (Pullsync)
             const pulled = await pullRecentInvoices()
-            if (pulled > 0) {
-                toast(`📥 ${pulled} VENTAS EXTERNAS DESCARGADAS`, 'info')
-            }
+            if (pulled > 0) toast(`📥 ${pulled} VENTAS EXTERNAS DESCARGADAS`, 'info')
+        }
 
-            // 3. 🏛️ Sincronizar Tasa BCV Oficial (Modo Vista)
+        // 2. Ciclo Lento (30 minutos): Tasa BCV Oficial
+        const slowSync = async () => {
+            const { syncOfficialBcvRate } = await import('../utils/bcvSincronizador')
             await syncOfficialBcvRate()
         }
 
-        // Ejecutar inmediatamente al cargar
-        doSync()
+        // Ejecutar inmediatamente
+        fastSync()
+        slowSync()
 
-        const syncInterval = setInterval(doSync, 30000)
+        const fastInterval = setInterval(fastSync, 30000)
+        const slowInterval = setInterval(slowSync, 1800000)
 
-        return () => clearInterval(syncInterval)
+        return () => {
+            clearInterval(fastInterval)
+            clearInterval(slowInterval)
+        }
     }, [currentUser])
 
     return null

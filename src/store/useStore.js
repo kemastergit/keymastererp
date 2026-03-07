@@ -33,29 +33,33 @@ const useStore = create(
       },
       // Tasa (Manual/Paralelo para cálculos)
       tasa: 0,
+      tasaTime: null,
       setTasa: async (val) => {
         const n = parseFloat(val) || 0
-        set({ tasa: n })
+        const now = new Date()
+        set({ tasa: n, tasaTime: now })
         await setConfig('tasa_bcv', n)
 
         try {
           await supabase
             .from('config_global')
-            .upsert({ clave: 'tasa_bcv', valor: { monto: n }, ultima_actualizacion: new Date() })
+            .upsert({ clave: 'tasa_bcv', valor: { monto: n, updated_at: now }, ultima_actualizacion: now })
         } catch (e) { console.error("Error sincronizando tasa:", e) }
       },
 
       // Tasa Oficial BCV (Solo modo vista)
       tasaOficial: 0,
+      tasaOficialTime: null,
       setTasaOficial: async (val) => {
         const n = parseFloat(val) || 0
-        set({ tasaOficial: n })
+        const now = new Date()
+        set({ tasaOficial: n, tasaOficialTime: now })
         await setConfig('tasa_bcv_oficial', n)
 
         try {
           await supabase
             .from('config_global')
-            .upsert({ clave: 'tasa_bcv_oficial', valor: { monto: n }, ultima_actualizacion: new Date() })
+            .upsert({ clave: 'tasa_bcv_oficial', valor: { monto: n, updated_at: now }, ultima_actualizacion: now })
         } catch (e) { }
       },
 
@@ -73,18 +77,20 @@ const useStore = create(
         try {
           const { data, error } = await supabase
             .from('config_global')
-            .select('clave, valor')
+            .select('clave, valor, ultima_actualizacion')
             .in('clave', ['tasa_bcv', 'tasa_bcv_oficial'])
 
           if (!error && data) {
             data.forEach(async d => {
               const val = parseFloat(d.valor?.monto) || 0
+              const cloudTime = d.ultima_actualizacion ? new Date(d.ultima_actualizacion) : null
+
               if (d.clave === 'tasa_bcv' && val !== nLocal) {
-                set({ tasa: val })
+                set({ tasa: val, tasaTime: cloudTime })
                 await setConfig('tasa_bcv', val)
               }
               if (d.clave === 'tasa_bcv_oficial' && val !== nLocalOficial) {
-                set({ tasaOficial: val })
+                set({ tasaOficial: val, tasaOficialTime: cloudTime })
                 await setConfig('tasa_bcv_oficial', val)
               }
             })

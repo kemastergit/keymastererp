@@ -137,7 +137,14 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
               {/* Tasa BCV Oficial (Reference only) */}
               <div className="hidden lg:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-2xl">
                 <div className="text-right">
-                  <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">BCV Oficial</div>
+                  <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                    BCV Oficial
+                    {useStore.getState().tasaOficialTime && (
+                      <span className="text-[6px] text-slate-500 lowercase font-normal">
+                        ({new Date(useStore.getState().tasaOficialTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                      </span>
+                    )}
+                  </div>
                   <div className="font-mono text-sm font-black text-slate-300 leading-none">
                     {useStore.getState().tasaOficial ? parseFloat(useStore.getState().tasaOficial).toFixed(2) : '0.00'}
                   </div>
@@ -166,7 +173,14 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
                 }}
               >
                 <div className="text-right">
-                  <div className="text-[8px] font-black text-cyan-400 uppercase tracking-widest">Tasa Sistema</div>
+                  <div className="text-[8px] font-black text-cyan-400 uppercase tracking-widest flex items-center justify-end gap-1">
+                    Tasa Sistema
+                    {useStore.getState().tasaTime && (
+                      <span className="text-[7px] text-cyan-600/70 lowercase font-normal">
+                        ({new Date(useStore.getState().tasaTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                      </span>
+                    )}
+                  </div>
                   <div className="font-mono text-lg font-black text-white leading-none">
                     {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
                   </div>
