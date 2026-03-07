@@ -40,7 +40,12 @@ export default function SupabaseListener() {
                 if (clave === 'tasa_bcv' && valor?.monto) {
                     const nMonto = parseFloat(valor.monto)
                     useStore.getState().setTasa(nMonto)
-                    toast(`📈 TASA ACTUALIZADA: Bs ${nMonto}`, 'success')
+                    toast(`📈 TASA SISTEMA ACTUALIZADA: Bs ${nMonto}`, 'success')
+                }
+                if (clave === 'tasa_bcv_oficial' && valor?.monto) {
+                    const nMontoOficial = parseFloat(valor.monto)
+                    useStore.getState().setTasaOficial(nMontoOficial)
+                    toast(`🏛️ TASA BCV ACTUALIZADA: Bs ${nMontoOficial}`, 'info')
                 }
             })
             .subscribe()
@@ -150,8 +155,9 @@ export default function SupabaseListener() {
     useEffect(() => {
         if (!currentUser) return
 
-        const syncInterval = setInterval(async () => {
+        const doSync = async () => {
             const { processSyncQueue, pullRecentInvoices } = await import('../utils/syncManager')
+            const { syncOfficialBcvRate } = await import('../utils/bcvSincronizador')
 
             // 1. Empujar lo que hicimos nosotros (Upsync)
             await processSyncQueue()
@@ -161,7 +167,15 @@ export default function SupabaseListener() {
             if (pulled > 0) {
                 toast(`📥 ${pulled} VENTAS EXTERNAS DESCARGADAS`, 'info')
             }
-        }, 30000) // Procesar cada 30 segundos (un poco más lento para no saturar)
+
+            // 3. 🏛️ Sincronizar Tasa BCV Oficial (Modo Vista)
+            await syncOfficialBcvRate()
+        }
+
+        // Ejecutar inmediatamente al cargar
+        doSync()
+
+        const syncInterval = setInterval(doSync, 30000)
 
         return () => clearInterval(syncInterval)
     }, [currentUser])

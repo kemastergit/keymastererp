@@ -31,47 +31,66 @@ const useStore = create(
 
         set({ activeSession: session || null })
       },
-      // Tasa BCV (Global Realtime)
+      // Tasa (Manual/Paralelo para cálculos)
       tasa: 0,
       setTasa: async (val) => {
         const n = parseFloat(val) || 0
         set({ tasa: n })
-        await setConfig('tasa_bcv', n) // Guardado local (respaldo offline)
+        await setConfig('tasa_bcv', n)
 
         try {
-          // Sincronización global con la Nube
           await supabase
             .from('config_global')
             .upsert({ clave: 'tasa_bcv', valor: { monto: n }, ultima_actualizacion: new Date() })
-        } catch (e) {
-          console.error("Error al sincronizar tasa en la nube:", e);
-        }
+        } catch (e) { console.error("Error sincronizando tasa:", e) }
       },
+
+      // Tasa Oficial BCV (Solo modo vista)
+      tasaOficial: 0,
+      setTasaOficial: async (val) => {
+        const n = parseFloat(val) || 0
+        set({ tasaOficial: n })
+        await setConfig('tasa_bcv_oficial', n)
+
+        try {
+          await supabase
+            .from('config_global')
+            .upsert({ clave: 'tasa_bcv_oficial', valor: { monto: n }, ultima_actualizacion: new Date() })
+        } catch (e) { }
+      },
+
       loadTasa: async () => {
         // 1. CARGA INSTANTÁNEA (DEXIE)
         const local = await getConfig('tasa_bcv')
         const nLocal = parseFloat(local) || 0
-        if (nLocal > 0) {
-          set({ tasa: nLocal })
-        }
+        if (nLocal > 0) set({ tasa: nLocal })
+
+        const localOficial = await getConfig('tasa_bcv_oficial')
+        const nLocalOficial = parseFloat(localOficial) || 0
+        if (nLocalOficial > 0) set({ tasaOficial: nLocalOficial })
 
         // 2. ACTUALIZACIÓN EN SEGUNDO PLANO (SUPABASE)
         try {
           const { data, error } = await supabase
             .from('config_global')
-            .select('valor')
-            .eq('clave', 'tasa_bcv')
-            .single()
+            .select('clave, valor')
+            .in('clave', ['tasa_bcv', 'tasa_bcv_oficial'])
 
-          if (!error && data?.valor?.monto) {
-            const nMonto = parseFloat(data.valor.monto)
-            if (nMonto !== nLocal) {
-              set({ tasa: nMonto })
-              await setConfig('tasa_bcv', nMonto)
-            }
+          if (!error && data) {
+            data.forEach(async d => {
+              const val = parseFloat(d.valor?.monto) || 0
+              if (d.clave === 'tasa_bcv' && val !== nLocal) {
+                set({ tasa: val })
+                await setConfig('tasa_bcv', val)
+              }
+              if (d.clave === 'tasa_bcv_oficial' && val !== nLocalOficial) {
+                set({ tasaOficial: val })
+                await setConfig('tasa_bcv_oficial', val)
+              }
+            })
           }
         } catch (e) {
-          console.warn("⚠️ No se pudo actualizar la tasa desde la nube, usando local.")
+          console.warn("⚠️ Error cargando tasas desde nube.")
         }
       },
       // Bluetooth Printer State

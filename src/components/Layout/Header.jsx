@@ -131,31 +131,49 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
             </a>
           )}
 
-          {/* Tasa BCV */}
+          {/* Tasas (Sistema y BCV) */}
           {!hideTasa && (
-            <div className={`flex items-center gap-3 bg-white/5 border border-white/10 p-2 rounded-2xl group transition-all ${currentUser?.rol === 'VENDEDOR' ? 'cursor-default opacity-90' : 'cursor-pointer hover:bg-white/10'}`}
-              onClick={() => {
-                if (currentUser?.rol === 'VENDEDOR') {
-                  toast('Solo Administradores o Cajeros pueden actualizar la tasa', 'warn')
-                  return
-                }
-
-                const edit = () => {
-                  const val = prompt('Nueva Tasa BCV:', tasa)
-                  if (val && !isNaN(parseFloat(val))) setTasa(parseFloat(val))
-                }
-
-                if (currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO') edit()
-                else askAdmin(edit)
-              }}>
-              <div className="text-right">
-                <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Tasa BCV</div>
-                <div className="font-mono text-lg font-black text-white leading-none">
-                  {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
+            <div className="flex items-center gap-2">
+              {/* Tasa BCV Oficial (Reference only) */}
+              <div className="hidden lg:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-2xl">
+                <div className="text-right">
+                  <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">BCV Oficial</div>
+                  <div className="font-mono text-sm font-black text-slate-300 leading-none">
+                    {useStore.getState().tasaOficial ? parseFloat(useStore.getState().tasaOficial).toFixed(2) : '0.00'}
+                  </div>
+                </div>
+                <div className="w-6 h-6 bg-slate-800 flex items-center justify-center text-slate-400 border border-white/10">
+                  <span className="material-icons-round text-xs">account_balance</span>
                 </div>
               </div>
-              <div className="w-8 h-8 bg-[var(--tealDark)] flex items-center justify-center text-white border border-white/20">
-                <span className="material-icons-round text-sm">currency_exchange</span>
+
+              {/* Tasa Sistema (Manual/Paralelo para cálculos) */}
+              <div
+                className={`flex items-center gap-3 bg-white/5 border border-white/20 p-2 rounded-2xl group transition-all ${currentUser?.rol === 'VENDEDOR' ? 'cursor-default opacity-90' : 'cursor-pointer hover:bg-white/10 hover:border-white/40'}`}
+                onClick={() => {
+                  if (currentUser?.rol === 'VENDEDOR') {
+                    toast('Solo Administradores o Cajeros pueden actualizar la tasa', 'warn')
+                    return
+                  }
+
+                  const edit = () => {
+                    const val = prompt('Nueva Tasa del Sistema (para cálculos):', tasa)
+                    if (val && !isNaN(parseFloat(val))) setTasa(parseFloat(val))
+                  }
+
+                  if (currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO') edit()
+                  else askAdmin(edit)
+                }}
+              >
+                <div className="text-right">
+                  <div className="text-[8px] font-black text-cyan-400 uppercase tracking-widest">Tasa Sistema</div>
+                  <div className="font-mono text-lg font-black text-white leading-none">
+                    {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
+                  </div>
+                </div>
+                <div className="w-8 h-8 bg-[var(--tealDark)] flex items-center justify-center text-white border border-white/20">
+                  <span className="material-icons-round text-sm">currency_exchange</span>
+                </div>
               </div>
             </div>
           )}
