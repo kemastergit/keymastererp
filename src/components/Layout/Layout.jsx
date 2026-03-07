@@ -12,10 +12,12 @@ import MdiWindow from '../UI/MdiWindow'
 import PedidosWebModal from '../UI/PedidosWebModal'
 import SupabaseListener from '../SupabaseListener'
 import LoadingOverlay from '../UI/LoadingOverlay'
+import SubtleSync from '../UI/SubtleSync'
 
 export default function Layout() {
   const [showWebOrders, setShowWebOrders] = useState(false)
-  const { configEmpresa } = useStore()
+  const { configEmpresa, syncStatus } = useStore()
+  const isInitialSync = syncStatus?.isInitialSync
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -42,10 +44,15 @@ export default function Layout() {
 
       {/* Premium Footer Band */}
       <footer className="flex-none bg-slate-900 text-white py-3 px-6 border-t border-slate-800 relative z-10 hidden md:block">
-        <div className="max-w-[1700px] mx-auto flex justify-between items-center">
+        <div className="max-w-[1700px] mx-auto flex justify-between items-center relative">
           <div className="flex flex-col">
             <div className="font-bebas text-xl tracking-[0.3em] text-white">KEYMASTER</div>
             <div className="text-[8px] uppercase font-black text-slate-500 tracking-[0.3em]">Sistema de Gestión Profesional v2.5.0</div>
+          </div>
+
+          {/* Subtle Sync Loading In the Center */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2">
+            <SubtleSync />
           </div>
 
           <div className="text-right">

@@ -250,7 +250,7 @@ export async function pullRecentInvoices() {
 }
 
 // 🔹 Sincronización inicial de inventario desde Supabase hacia Dexie
-export async function syncArticulosFromSupabase() {
+export async function syncArticulosFromSupabase(isInitial = false) {
   const { setSyncStatus, toast } = (await import('../store/useStore')).default.getState()
 
   try {
@@ -267,7 +267,8 @@ export async function syncArticulosFromSupabase() {
         message: 'Descargando Inventario',
         submessage: 'Obteniendo catálogo completo desde la nube...',
         progress: allData.length,
-        total: totalCount > 0 ? totalCount : allData.length + 1000
+        total: totalCount > 0 ? totalCount : allData.length + 1000,
+        isInitialSync: isInitial
       })
 
       const { data, error, count } = await supabase
@@ -295,7 +296,8 @@ export async function syncArticulosFromSupabase() {
       message: 'Guardando Datos',
       submessage: `Procesando ${allData.length} productos en base de datos local...`,
       progress: allData.length,
-      total: allData.length
+      total: allData.length,
+      isInitialSync: isInitial
     })
 
     await db.transaction('rw', db.articulos, async () => {
@@ -317,7 +319,8 @@ export async function syncArticulosFromSupabase() {
       message: 'Sincronización Exitosa',
       submessage: `✅ ${allData.length} productos actualizados desde la nube.`,
       progress: allData.length,
-      total: allData.length
+      total: allData.length,
+      isInitialSync: isInitial
     })
 
     await new Promise(r => setTimeout(r, 1500))
@@ -560,7 +563,7 @@ export async function syncComisionesFromSupabase() {
 export async function initInventorySync() {
   const { toast } = (await import('../store/useStore')).default.getState()
 
-  await syncArticulosFromSupabase()
+  await syncArticulosFromSupabase(true)
   await syncClientesFromSupabase()
   await syncProveedoresFromSupabase()
   await syncOrdenesCompraFromSupabase()

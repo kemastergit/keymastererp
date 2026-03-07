@@ -172,7 +172,7 @@ const useStore = create(
       setIvaEnabled: (v) => set({ ivaEnabled: v }),
 
       // Dashboard & Sync UI
-      syncStatus: null, // { message, submessage, progress, total }
+      syncStatus: null, // { message, submessage, progress, total, isInitialSync }
       setSyncStatus: (v) => set({ syncStatus: v }),
 
       addPayment: (metodo, monto, tasa, montoBS) => {

@@ -1,7 +1,7 @@
 import React from 'react';
 
-export default function LoadingOverlay({ message, submessage, progress, total }) {
-    if (!message) return null;
+export default function LoadingOverlay({ message, submessage, progress, total, isInitialSync }) {
+    if (!message || !isInitialSync) return null;
 
     return (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300">
