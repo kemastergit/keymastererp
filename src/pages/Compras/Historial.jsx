@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { fmtUSD, fmtDate } from '../../utils/format'
 import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
+import { addToSyncQueue } from '../../utils/syncManager'
 
 export default function ComprasHistorial() {
     const { toast } = useStore()
@@ -48,6 +49,47 @@ export default function ComprasHistorial() {
         } finally {
             setLoadingItems(false)
         }
+    }
+
+    const handleDelete = async (compra) => {
+        const { askAdmin } = useStore.getState()
+
+        askAdmin(async () => {
+            if (!confirm(`¿Estás seguro de ELIMINAR la factura ${compra.nro_factura}? Esto revertirá el stock de los productos ingresados.`)) return
+
+            try {
+                await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.sync_queue], async () => {
+                    // 1. Revertir Stock
+                    const items = await db.compra_items.where('compra_id').equals(compra.id).toArray()
+                    for (const item of items) {
+                        const art = await db.articulos.get(item.articulo_id)
+                        if (art) {
+                            const nuevoStock = (art.stock || 0) - item.qty
+                            await db.articulos.update(art.id, { stock: nuevoStock })
+                            // Sincronizar stock
+                            await addToSyncQueue('articulos', 'UPDATE_STOCK', { codigo: art.codigo, stock: nuevoStock })
+                        }
+                    }
+
+                    // 2. Eliminar de Dexie
+                    await db.compra_items.where('compra_id').equals(compra.id).delete()
+                    await db.compras.delete(compra.id)
+
+                    // 3. Eliminar Cuenta por Pagar
+                    const cta = await db.ctas_pagar.where('nro_factura').equals(compra.nro_factura).and(c => c.proveedor_id === parseInt(compra.proveedor_id)).first()
+                    if (cta) await db.ctas_pagar.delete(cta.id)
+
+                    // 4. Cola de Sincronización (Nube)
+                    await addToSyncQueue('compras', 'DELETE', { id: compra.id })
+                    await addToSyncQueue('compra_items', 'DELETE', { compra_id: compra.id })
+                    await addToSyncQueue('cuentas_por_pagar', 'DELETE', { nro_factura: compra.nro_factura, proveedor_id: parseInt(compra.proveedor_id) })
+                })
+                toast('✅ Compra eliminada y stock revertido', 'ok')
+            } catch (err) {
+                console.error(err)
+                toast('❌ Error al eliminar compra', 'error')
+            }
+        })
     }
 
     return (
@@ -101,12 +143,22 @@ export default function ComprasHistorial() {
                                     </td>
                                     <td className="py-3 px-4 text-right font-mono font-bold text-[var(--text2)]">{c.tasa?.toFixed(2)}</td>
                                     <td className="py-3 px-4 text-center">
-                                        <button
-                                            onClick={() => handleViewDetails(c)}
-                                            className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--teal)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
-                                        >
-                                            <span className="material-icons-round text-sm">visibility</span>
-                                        </button>
+                                        <div className="flex justify-center gap-2">
+                                            <button
+                                                onClick={() => handleViewDetails(c)}
+                                                className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--teal)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
+                                                title="Ver Detalle"
+                                            >
+                                                <span className="material-icons-round text-sm">visibility</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(c)}
+                                                className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--red-var)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
+                                                title="Eliminar Compra"
+                                            >
+                                                <span className="material-icons-round text-sm">delete</span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

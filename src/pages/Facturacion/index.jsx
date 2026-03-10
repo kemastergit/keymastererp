@@ -363,7 +363,7 @@ export default function Facturacion() {
       // 🔍 VALIDACIÓN DE PRECIOS (P4): detectar si algún precio cambió mientras el carrito estaba abierto
       const cambiosPrecio = []
       for (const item of cart) {
-        const freshArt = await db.articulos.get(item.id)
+        const freshArt = item.id ? await db.articulos.get(item.id) : null
         if (freshArt && Math.abs(freshArt.precio - item.precio) > 0.001) {
           cambiosPrecio.push({ desc: item.descripcion, viejo: item.precio, nuevo: freshArt.precio })
         }
@@ -386,7 +386,7 @@ export default function Facturacion() {
       ], async () => {
         // Validación de stock local final (con reparación de IDs huérfanos)
         for (const item of cart) {
-          let freshArticle = await db.articulos.get(item.id)
+          let freshArticle = item.id ? await db.articulos.get(item.id) : null
           // Si el ID del carrito caducó por una recarga de la nube, buscar por código maestro
           if (!freshArticle && item.codigo) {
             freshArticle = await db.articulos.where('codigo').equals(item.codigo).first()
@@ -406,7 +406,7 @@ export default function Facturacion() {
         ventaId = await db.ventas.add(ventaCalculada)
 
         for (const item of cart) {
-          let freshArt = await db.articulos.get(item.id)
+          let freshArt = item.id ? await db.articulos.get(item.id) : null
           if (!freshArt && item.codigo) {
             freshArt = await db.articulos.where('codigo').equals(item.codigo).first()
           }

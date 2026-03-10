@@ -69,6 +69,8 @@ export default function Compras() {
 
         try {
             let compraId = null;
+            let ctaPagarId = null;
+            let abonoId = null;
 
             await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria], async () => {
                 compraId = await db.compras.add({
@@ -101,9 +103,14 @@ export default function Compras() {
                     })
                 }
 
+                // Buscar nombre del proveedor para las cuentas por pagar
+                const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
+
                 // Crear Cuenta por Pagar
                 ctaPagarId = await db.ctas_pagar.add({
                     proveedor_id: parseInt(header.proveedor_id),
+                    proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                    proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                     nro_factura: header.nro_factura,
                     monto: totalUSD,
                     fecha: header.fecha,
@@ -146,17 +153,27 @@ export default function Compras() {
                     qty: item.qty, costo_unit: item.costo_unit, costo_anterior: item.costo_anterior
                 })
             }
-            await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
-                id: ctaPagarId, proveedor_id: parseInt(header.proveedor_id), nro_factura: header.nro_factura,
-                monto: totalUSD, fecha: header.fecha, estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE', vencimiento: header.fecha
-            })
-            if (header.condicion === 'CONTADO') {
-                await addToSyncQueue('abonos', 'INSERT', {
-                    id: abonoId, cuenta_id: ctaPagarId, tipo_cuenta: 'PAGAR',
-                    fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], monto: totalUSD, metodo: header.metodo_pago, usuario_id: currentUser.id
+            const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
+            if (ctaPagarId) {
+                await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
+                    id: ctaPagarId,
+                    proveedor_id: parseInt(header.proveedor_id),
+                    proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                    proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                    nro_factura: header.nro_factura,
+                    monto: totalUSD,
+                    fecha: header.fecha,
+                    estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
+                    vencimiento: header.fecha
                 })
+                if (header.condicion === 'CONTADO') {
+                    await addToSyncQueue('abonos', 'INSERT', {
+                        id: abonoId, cuenta_id: ctaPagarId, tipo_cuenta: 'PAGAR',
+                        fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], monto: totalUSD, metodo: header.metodo_pago, usuario_id: currentUser.id
+                    })
+                }
+                processSyncQueue()
             }
-            processSyncQueue()
         } catch (err) {
             console.error(err)
             toast('❌ Error al procesar: ' + err.message, 'error')

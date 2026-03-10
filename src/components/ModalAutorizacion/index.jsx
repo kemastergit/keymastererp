@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../db/db'
+import { hashPin } from '../../utils/security'
 import TecladoPin from '../TecladoPin'
 
 export default function ModalAutorizacion({ accion, onAutorizado, onCancel }) {
@@ -11,8 +12,9 @@ export default function ModalAutorizacion({ accion, onAutorizado, onCancel }) {
         db.usuarios.where('rol').anyOf(['SUPERVISOR', 'ADMIN']).and(u => u.activo).toArray()
     )
 
-    const handlePin = (pin) => {
-        if (selectedUser.pin === pin) {
+    const handlePin = async (pin) => {
+        const hashed = await hashPin(pin)
+        if (selectedUser.pin === hashed) {
             onAutorizado(selectedUser)
         } else {
             alert('PIN Incorrecto')

@@ -104,6 +104,7 @@ export default function Clientes() {
   }
 
   const del = async () => {
+    if (!delId) return
     try {
       const cliente = await db.clientes.get(delId)
       if (!cliente) {

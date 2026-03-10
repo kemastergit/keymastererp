@@ -108,6 +108,7 @@ export default function Proveedores() {
   }
 
   const del = async () => {
+    if (!delId) return
     try {
       const p = await db.proveedores.get(delId)
       if (!p) {

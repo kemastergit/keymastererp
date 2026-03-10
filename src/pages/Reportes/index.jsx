@@ -12,6 +12,7 @@ import Modal from '../../components/UI/Modal'
 import { btPrinter } from '../../utils/bluetoothPrinter'
 import { logAction } from '../../utils/audit'
 import { supabase } from '../../lib/supabase'
+import { hashPin } from '../../utils/security'
 
 
 const primerDiaMes = () => {
@@ -210,12 +211,14 @@ export default function Reportes() {
     if (!motivoAnulacion.trim()) return toast('Debe ingresar un motivo', 'warn')
     if (!pinAnulacion) return toast('Debe ingresar su PIN', 'warn')
 
-    const sup = await db.usuarios.where('pin').equals(pinAnulacion).first()
+    const hashed = await hashPin(pinAnulacion)
+    const sup = await db.usuarios.where('pin').equals(hashed).first()
     if (!sup || !['ADMIN', 'SUPERVISOR'].includes(sup.rol)) {
       return toast('PIN de supervisor inválido', 'error')
     }
 
     const { anularVenta } = useStore.getState()
+    if (!ventaParaAnular.id) return toast('No se puede anular una venta sin ID local', 'error')
     const ok = await anularVenta(ventaParaAnular.id, motivoAnulacion, sup)
     if (ok) {
       setShowAnularModal(false)

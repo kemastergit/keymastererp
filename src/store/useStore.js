@@ -247,13 +247,14 @@ const useStore = create(
             db.ventas, db.venta_items, db.articulos,
             db.ctas_cobrar, db.abonos, db.auditoria
           ], async () => {
+            if (!ventaId) throw new Error('ID de venta no válido')
             const venta = await db.ventas.get(ventaId)
             if (!venta) throw new Error('Venta no encontrada')
             if (venta.estado === 'ANULADA') throw new Error('La venta ya está anulada')
 
             const items = await db.venta_items.where('venta_id').equals(ventaId).toArray()
             for (const item of items) {
-              const art = await db.articulos.get(item.articulo_id)
+              const art = item.articulo_id ? await db.articulos.get(item.articulo_id) : null
               if (art) {
                 await db.articulos.update(art.id, {
                   stock: (art.stock || 0) + item.qty
@@ -335,7 +336,7 @@ const useStore = create(
           const localFull = await Promise.all(pedidosLocales.map(async (p) => {
             const items = await db.pedido_items.where('pedido_id').equals(p.id).toArray()
             const itemsDetallados = await Promise.all(items.map(async (it) => {
-              const art = await db.articulos.get(it.articulo_id)
+              const art = it.articulo_id ? await db.articulos.get(it.articulo_id) : null
               return { ...it, descripcion: art ? art.descripcion : 'Articulo no encontrado', codigo: art ? art.codigo : '' }
             }))
             return { ...p, cliente: p.cliente_nombre, telefono: p.cliente_telefono, items: itemsDetallados, total: p.total_usd, origen: 'LOCAL' }

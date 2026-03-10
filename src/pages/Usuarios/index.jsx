@@ -100,12 +100,25 @@ export default function Usuarios() {
             invalidateRolesCache() // Limpiar cache de permisos
 
             // SINCRONIZACIÓN DE COMISIÓN
-            await supabase.from('comisiones_config').upsert({
-                user_id: userData.nombre.trim(), // Usamos nombre como ID de enlace en nube
-                commission_type: commissionForm.commission_type,
-                percentage: commissionForm.percentage,
-                active: commissionForm.active
-            }, { onConflict: 'user_id' })
+            try {
+                const commData = {
+                    user_id: userData.nombre.trim(), // Nombre como ID de enlace
+                    tipo: commissionForm.commission_type,
+                    porcentaje: commissionForm.percentage,
+                    active: commissionForm.active
+                }
+                const { error: commError } = await supabase.from('comisiones_config').upsert(commData, { onConflict: 'user_id' })
+                if (commError) throw commError
+            } catch (commErr) {
+                console.warn("⚠️ Falló sincronización de comisión, encolando...", commErr)
+                const { addToSyncQueue } = await import('../../utils/syncManager')
+                await addToSyncQueue('comisiones_config', 'UPSERT', {
+                    user_id: userData.nombre.trim(),
+                    tipo: commissionForm.commission_type,
+                    porcentaje: commissionForm.percentage,
+                    active: commissionForm.active
+                })
+            }
 
             toast('🛰️ Credenciales y Comisiones sincronizadas', 'success')
 

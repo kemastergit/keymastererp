@@ -71,11 +71,22 @@ export async function processSyncQueue() {
       } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('cuentas_por_pagar').upsert([item.data], { onConflict: 'id' })
         error = err
+      } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'DELETE') {
+        const { error: err } = await supabase.from('cuentas_por_pagar')
+          .delete()
+          .match({ nro_factura: item.data.nro_factura, proveedor_id: item.data.proveedor_id })
+        error = err
       } else if (item.table === 'compras' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('compras').upsert([item.data], { onConflict: 'id' })
         error = err
+      } else if (item.table === 'compras' && item.operation === 'DELETE') {
+        const { error: err } = await supabase.from('compras').delete().eq('id', item.data.id)
+        error = err
       } else if (item.table === 'compra_items' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('compra_items').upsert([item.data], { onConflict: 'id' })
+        error = err
+      } else if (item.table === 'compra_items' && item.operation === 'DELETE') {
+        const { error: err } = await supabase.from('compra_items').delete().eq('compra_id', item.data.compra_id)
         error = err
       } else if (item.table === 'cotizaciones' && item.operation === 'INSERT') {
         const payload = { ...item.data, fecha: item.data.fecha instanceof Date ? item.data.fecha.toISOString() : item.data.fecha }
@@ -119,6 +130,15 @@ export async function processSyncQueue() {
           .update({ estado: item.data.estado, fecha_pago: item.data.fecha_pago })
           .eq('venta_id', item.data.venta_id)
           .eq('numero_cuota', item.data.numero_cuota)
+        error = err
+      } else if (item.table === 'comisiones_config' && item.operation === 'UPSERT') {
+        const payload = {
+          user_id: item.data.user_id,
+          tipo: item.data.tipo || item.data.commission_type,
+          porcentaje: item.data.porcentaje ?? item.data.percentage,
+          active: item.data.active
+        }
+        const { error: err } = await supabase.from('comisiones_config').upsert([payload], { onConflict: 'user_id' })
         error = err
       } else {
         console.warn(`⚠️ Tabla desconocida en SyncQueue: ${item.table}`)
@@ -515,6 +535,7 @@ export async function syncCajaChicaFromSupabase() {
     const { data, error } = await supabase.from('caja_chica').select('*').order('created_at', { ascending: false }).limit(100)
     if (error || !data) return
     for (const m of data) {
+      if (!m.id) continue
       const existe = await db.caja_chica.get(m.id)
       if (!existe) await db.caja_chica.add({ ...m, fecha: m.fecha })
     }
@@ -527,12 +548,14 @@ export async function syncDevolucionesFromSupabase() {
     const { data, error } = await supabase.from('devoluciones').select('*, dev_items(*)').order('fecha', { ascending: false }).limit(50)
     if (error || !data) return
     for (const d of data) {
+      if (!d.id) continue
       const items = d.dev_items || []
       const devData = { ...d }; delete devData.dev_items
       const existe = await db.devoluciones.get(d.id)
       if (!existe) {
         await db.devoluciones.add({ ...devData, fecha: new Date(devData.fecha) })
         for (const it of items) {
+          if (!it.id) continue
           const itExiste = await db.dev_items.get(it.id)
           if (!itExiste) await db.dev_items.add(it)
         }
@@ -550,9 +573,15 @@ export async function syncComisionesFromSupabase() {
       // Intentar vincular por nombre de usuario (nombre -> user_id en nube)
       const user = await db.usuarios.where('nombre').equals(c.user_id).first()
       if (user) {
+        const localData = {
+          user_id: user.id,
+          commission_type: c.tipo || c.commission_type || 'SALES_PCT',
+          percentage: c.porcentaje ?? c.percentage ?? 0,
+          active: c.active ?? true
+        }
         const existe = await db.comisiones_config.where('user_id').equals(user.id).first()
-        if (!existe) await db.comisiones_config.add({ ...c, user_id: user.id, id: undefined })
-        else await db.comisiones_config.update(existe.id, { ...c, user_id: user.id })
+        if (!existe) await db.comisiones_config.add({ ...localData, id: undefined })
+        else await db.comisiones_config.update(existe.id, localData)
       }
     }
     console.log(`✅ Comisiones sincronizadas: ${data.length}`)

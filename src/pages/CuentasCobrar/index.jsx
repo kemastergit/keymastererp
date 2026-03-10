@@ -138,7 +138,7 @@ export default function CuentasCobrar() {
       // 4. Comisiones
       if (nuevoEstado === 'COBRADA' && cobro.venta_id) {
         try {
-          const venta = await db.ventas.get(cobro.venta_id)
+          const venta = cobro.venta_id ? await db.ventas.get(cobro.venta_id) : null
           if (venta) {
             const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
             const { processSaleCommissions } = await import('../../utils/comisiones')

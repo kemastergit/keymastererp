@@ -85,7 +85,12 @@ export default function CuentasPagar() {
 
   const save = async () => {
     if (!form.proveedor.trim() || !form.monto) { toast('Completa los campos requeridos', 'warn'); return }
-    const newCxp = { ...form, monto: parseFloat(form.monto) || 0, fecha: new Date() }
+    const newCxp = {
+      ...form,
+      monto: parseFloat(form.monto) || 0,
+      fecha: new Date(),
+      proveedor_nombre: form.proveedor
+    }
     await db.ctas_pagar.add(newCxp)
     // ☁️ Sync a Supabase — tabla cuentas_por_pagar
     await addToSyncQueue('cuentas_por_pagar', 'INSERT', newCxp)
@@ -163,6 +168,7 @@ export default function CuentasPagar() {
         id: pago.id,
         id_local: pago.id,
         proveedor: pago.proveedorLabel,
+        proveedor_nombre: pago.proveedorLabel,
         proveedor_id: pago.proveedor_id,
         monto: pago.monto,
         monto_total: pago.monto,
