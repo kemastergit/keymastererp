@@ -576,7 +576,7 @@ export default function Facturacion() {
       toast(`✅ Nota #${nro} procesada — Total: ${fmtUSD(total)}`)
       setLoading(false)
 
-      setLastVenta({ nro, fecha: new Date(), cliente: clienteFact, tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(), igtf: cartIgtf(), total, payments, items: cart })
+      setLastVenta({ nro, fecha: new Date(), cliente: clienteFact, tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(), igtf: cartIgtf(), total, payments, items: cart, tasa })
       setShowPrintModal(true)
       clearCart()
       setStep(1)
@@ -962,10 +962,20 @@ export default function Facturacion() {
                 <div className="w-[170px] p-4 bg-white/40 flex flex-col">
                   <div className="mb-6">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">MONTO A INGRESA</p>
-                    <div className={`p-3 rounded-2xl border-2 transition-all flex items-center justify-center bg-white shadow-sm
+                    <div className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center bg-white shadow-sm
                       ${keypadBuffer ? 'border-[#F36E25]' : 'border-slate-100'}`}>
-                      <span className="text-xs font-black text-slate-400 mr-1">{activeCurrency === 'USD' ? '$' : 'Bs'}</span>
-                      <span className="text-xl font-mono font-black text-[#131E2E]">{keypadBuffer || '0.00'}</span>
+                      <div className="flex items-center">
+                        <span className="text-xs font-black text-slate-400 mr-1">{activeCurrency === 'USD' ? '$' : 'Bs'}</span>
+                        <span className="text-xl font-mono font-black text-[#131E2E]">{keypadBuffer || '0.00'}</span>
+                      </div>
+                      {keypadBuffer && parseFloat(keypadBuffer) > 0 && (
+                        <div className="text-[10px] font-mono font-bold text-slate-400 leading-none mt-1">
+                          {activeCurrency === 'USD' 
+                            ? `Bs ${(parseFloat(keypadBuffer) * tasa).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `$ ${(parseFloat(keypadBuffer) / tasa).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          }
+                        </div>
+                      )}
                     </div>
                   </div>
 

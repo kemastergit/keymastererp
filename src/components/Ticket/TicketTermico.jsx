@@ -60,10 +60,10 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
                             <div className="ticket-item-main">
                                 <span style={{ flex: 2 }}>{item.descripcion}</span>
                                 <span style={{ flex: 1, textAlign: 'center' }}>x{qty}</span>
-                                <span style={{ flex: 1, textAlign: 'right' }}>${totalItem.toFixed(2)}</span>
+                                <span style={{ flex: 1, textAlign: 'right' }}>{(totalItem * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                             <div className="ticket-item-sub">
-                                <span>{item.codigo} @ ${precio.toFixed(2)}</span>
+                                <span>{item.codigo} @ Bs {(precio * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                         </div>
                     )
@@ -75,40 +75,28 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
             <div className="ticket-totals">
                 <div className="ticket-row">
                     <span>SUBTOTAL:</span>
-                    <span>$ {subtotal.toFixed(2)}</span>
+                    <span>{ (subtotal * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } Bs</span>
                 </div>
 
                 {config.aplicar_iva && (
                     <div className="ticket-row">
                         <span>IVA ({config.porcentaje_iva}%):</span>
-                        <span>$ {iva.toFixed(2)}</span>
+                        <span>{ (iva * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } Bs</span>
                     </div>
                 )}
 
                 {nota.igtf > 0 && (
                     <div className="ticket-row">
                         <span>IGTF (3%):</span>
-                        <span>$ {nota.igtf.toFixed(2)}</span>
+                        <span>{ (nota.igtf * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } Bs</span>
                     </div>
                 )}
 
-                <div className="ticket-row" style={{ fontWeight: 'bold' }}>
-                    <span>TOTAL $:</span>
-                    <span>$ {totalUsd.toFixed(2)}</span>
+                <div className="ticket-row" style={{ fontWeight: 'bold', fontSize: '14px' }}>
+                    <span>TOTAL Bs:</span>
+                    <span>{ totalBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }</span>
                 </div>
 
-                {config.mostrar_tasa && (
-                    <>
-                        <div className="ticket-row">
-                            <span>TASA BCV:</span>
-                            <span>{tasa.toFixed(2)} Bs/$</span>
-                        </div>
-                        <div className="ticket-total-bs ticket-row">
-                            <span>TOTAL Bs:</span>
-                            <span>Bs {totalBs.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                    </>
-                )}
             </div>
 
             {nota.pagos && nota.pagos.length > 0 && (
@@ -119,13 +107,13 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
                         {nota.pagos.map((p, idx) => (
                             <div key={idx} className="ticket-row">
                                 <span>{p.metodo}:</span>
-                                <span>{p.moneda === 'BS' ? `Bs ${p.monto.toLocaleString()}` : `$ ${p.monto.toFixed(2)}`}</span>
+                                <span>{p.moneda === 'BS' ? `Bs ${p.monto.toLocaleString('de-DE', { minimumFractionDigits: 2 })}` : `Bs ${(p.monto * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2 })}`}</span>
                             </div>
                         ))}
                         {nota.cambio > 0 && (
                             <div className="ticket-row" style={{ marginTop: '3px' }}>
-                                <span>SU CAMBIO $:</span>
-                                <span>$ {nota.cambio.toFixed(2)}</span>
+                                <span>SU CAMBIO:</span>
+                                <span>{(nota.cambio * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</span>
                             </div>
                         )}
                     </div>
