@@ -52,7 +52,7 @@ export async function processSyncQueue() {
           error = rpcError || { message: rpcResult?.error }
         }
       } else if (item.table === 'facturas' && item.operation === 'INSERT') {
-        const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'id' })
+        const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'numero' })
         error = err
       } else if (item.table === 'articulos' && item.operation === 'UPDATE_STOCK') {
         const { error: err } = await supabase.from('articulos')
@@ -156,8 +156,8 @@ export async function processSyncQueue() {
         const { getState } = (await import('../store/useStore')).default
         getState().toast(`❌ Error Nube (${item.table}): ${error.message || 'Error desconocido'}`, 'error')
 
-        if (['42P01', '42703', 'PGRST204'].includes(error.code)) {
-          console.warn(`⚠️ Error de esquema detectado. Eliminando item conflictivo de la cola: ${item.table}`)
+        if (['42P01', '42703', 'PGRST204', '23505'].includes(error.code)) {
+          console.warn(`⚠️ Error conocido o duplicado detectado (${error.code}). Eliminando item de la cola: ${item.table}`)
           await db.sync_queue.delete(item.id)
         }
       }
