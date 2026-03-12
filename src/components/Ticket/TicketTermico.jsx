@@ -4,15 +4,18 @@ import './TicketStyles.css'
 const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
     if (!nota || !config) return null
 
-    const items = nota.items || []
     const fecha = new Date(nota.fecha).toLocaleDateString()
     const hora = new Date(nota.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-    const subtotal = nota.subtotal || 0
-    const iva = nota.iva || 0
-    const totalUsd = nota.total || (subtotal + iva)
-    const tasa = nota.tasa || config.tasa_bcv || 1
+    const subtotal = Number(nota.subtotal ?? (nota.total - (nota.iva || 0)) ?? 0)
+    const iva = Number(nota.iva || 0)
+    const totalUsd = Number(nota.total || (subtotal + iva))
+    const tasa = Number(nota.tasa || config.tasa_bcv || 1)
     const totalBs = totalUsd * tasa
+
+    // Asegurar que items sea un array y no un string JSON
+    const itemsRaw = nota.items || []
+    const items = Array.isArray(itemsRaw) ? itemsRaw : (typeof itemsRaw === 'string' ? JSON.parse(itemsRaw) : [])
 
     return (
         <div ref={ref} className="ticket-container">
@@ -32,7 +35,7 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
             <div className="ticket-info">
                 <div className="ticket-row">
                     <span>NOTA DE ENTREGA</span>
-                    <span>N° {String(nota.nro).padStart(6, '0')}</span>
+                    <span style={{ fontWeight: 'black' }}>N° {nota.nro}</span>
                 </div>
                 <div className="ticket-row">
                     <span>Fecha: {fecha}</span>

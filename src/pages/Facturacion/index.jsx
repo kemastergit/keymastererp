@@ -107,7 +107,50 @@ export default function Facturacion() {
     const { loadTasa } = useStore.getState()
     loadTasa()
     fetchNotasVendedores() // Cargar notas al iniciar
+    syncCorrelativo()
   }, [])
+
+  const syncCorrelativo = async () => {
+    try {
+      console.log("📡 Sincronizando correlativo con la nube...");
+      // 1. Consultar la nube por las últimas facturas para detectar el número más alto
+      // Usamos el ID para asegurar que traemos lo más reciente
+      const { data, error } = await supabase
+        .from('facturas')
+        .select('numero')
+        .order('id', { ascending: false })
+        .limit(20);
+
+      let maxNum = 0;
+
+      if (!error && data) {
+        data.forEach(f => {
+          const parts = f.numero.split('-');
+          const num = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+      }
+
+      // 2. Revisar también ventas locales (por si hay ventas offline no sincronizadas aún)
+      const lastLocal = await db.ventas.orderBy('id').last();
+      if (lastLocal) {
+        const parts = lastLocal.nro.split('-');
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+
+      // 3. Si el máximo encontrado es mayor o igual al contador local, actualizarlo
+      const currentConfig = await db.config.get('nro_nota');
+      const currentVal = currentConfig?.valor || 0;
+
+      if (maxNum >= currentVal) {
+        await db.config.put({ clave: 'nro_nota', valor: maxNum + 1 });
+        console.log(`✅ Correlativo actualizado: Próxima nota será ${maxNum + 1}`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Falló sincronización de correlativo (Modo Offline activo):", e);
+    }
+  };
 
   const fetchNotasVendedores = async () => {
     try {

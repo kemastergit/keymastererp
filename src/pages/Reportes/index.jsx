@@ -175,14 +175,20 @@ export default function Reportes() {
   })
 
   const reimprimirVenta = async (venta) => {
-    const items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
+    // CAMBIO: Si la venta ya trae items (ej. de la nube), usarlos. Si no, buscarlos localmente.
+    let items = venta.items || []
+    
+    if (items.length === 0 && !venta.isCloud) {
+      items = await db.venta_items.where('venta_id').equals(venta.id).toArray()
+    }
+
     const u = venta.usuario_id ? await db.usuarios.get(venta.usuario_id) : null
 
     setSelectedVenta({
       ...venta,
       items,
-      cliente_nombre: venta.cliente,
-      cajero_nombre: u?.nombre || 'SISTEMA'
+      cliente_nombre: venta.cliente_nombre || venta.cliente,
+      cajero_nombre: u?.nombre || venta.vendedor || 'SISTEMA'
     })
 
     setShowReimprimirModal(true)
@@ -314,10 +320,15 @@ export default function Reportes() {
       id: cv.id,
       nro: cv.numero,
       fecha: cv.created_at,
-      cliente: cv.cliente_nombre,
+      cliente_nombre: cv.cliente_nombre, // Cambiado de 'cliente' a 'cliente_nombre' para consistencia
       tipo_pago: cv.metodo_pago,
       total: cv.total_usd,
-      items: cv.items,
+      tasa: cv.tasa_bcv || 1,             // CAMBIO: Asegurar tasa de la nube
+      subtotal: cv.subtotal_usd || cv.total_usd, // CAMBIO: Fallback al total si no hay subtotal
+      iva: cv.iva_usd || 0,               // CAMBIO: Asegurar IVA
+      igtf: cv.igtf_usd || 0,
+      pagos: cv.pagos_json || [],         // CAMBIO: Recuperar pagos detallados
+      items: cv.items || [],
       vendedor: cv.vendedor,
       estado: cv.estado || 'CLOUD',
       isCloud: true
