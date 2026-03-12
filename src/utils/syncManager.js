@@ -588,6 +588,239 @@ export async function syncComisionesFromSupabase() {
   } catch (e) { console.warn('syncComisiones offline') }
 }
 
+// 🔹 Pull de Compras y Compra_Items desde Supabase
+export async function syncComprasFromSupabase() {
+  console.log('🛒 [syncCompras] Iniciando descarga de compras desde Supabase...')
+  try {
+    // 1. Descargar compras
+    const { data: compras, error: errC } = await supabase
+      .from('compras')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    if (errC) {
+      console.error('🛒 [syncCompras] ERROR al consultar Supabase:', errC)
+      throw errC
+    }
+    console.log('🛒 [syncCompras] Respuesta Supabase — compras:', compras?.length ?? 'null/undefined')
+    if (!compras || compras.length === 0) {
+      console.log('🛒 [syncCompras] No hay compras en Supabase. Abortando.')
+      return
+    }
+
+    // Dexie usa ++id auto-incremental — NO podemos hacer bulkPut con el id de Supabase
+    // Estrategia: insertar solo si no existe (comparando nro_factura + proveedor_id)
+    const compraIdMap = {} // supabase_id → dexie local id
+
+    for (const c of compras) {
+      const existe = await db.compras
+        .where('nro_factura').equals(c.nro_factura)
+        .and(r => String(r.proveedor_id) === String(c.proveedor_id))
+        .first()
+
+      if (existe) {
+        compraIdMap[c.id] = existe.id
+      } else {
+        const { id: supabaseId, ...rest } = c
+        const nuevoId = await db.compras.add({
+          ...rest,
+          supabase_id: supabaseId,
+          fecha: c.fecha || c.created_at,
+          total_usd: Number(c.total_usd) || 0,
+          tasa: Number(c.tasa) || 0
+        })
+        compraIdMap[supabaseId] = nuevoId
+      }
+    }
+
+    // 2. Descargar compra_items y asociarlos al id local correcto
+    const supabaseIds = compras.map(c => c.id)
+    const { data: items, error: errI } = await supabase
+      .from('compra_items')
+      .select('*')
+      .in('compra_id', supabaseIds)
+
+    if (errI) throw errI
+
+    if (items && items.length > 0) {
+      for (const item of items) {
+        const localCompraId = compraIdMap[item.compra_id]
+        if (!localCompraId) continue
+
+        const existeItem = await db.compra_items
+          .where('compra_id').equals(localCompraId)
+          .and(r => r.articulo_id === item.articulo_id)
+          .first()
+
+        if (!existeItem) {
+          const { id: _sid, compra_id: _cid, ...itemRest } = item
+          await db.compra_items.add({
+            ...itemRest,
+            compra_id: localCompraId,
+            qty: Number(item.qty) || 0,
+            costo_unit: Number(item.costo_unit) || 0,
+            costo_anterior: Number(item.costo_anterior) || 0
+          })
+        }
+      }
+    }
+
+    console.log(`✅ Compras sincronizadas desde Supabase: ${compras.length} facturas, ${items?.length || 0} ítems`)
+  } catch (e) {
+    console.warn('syncCompras offline:', e.message)
+  }
+}
+
+// 🔹 Pull de Cuentas por Cobrar (últimos 30 días) desde Supabase
+export async function syncCtasCobrarFromSupabase() {
+  console.log('💳 [syncCtasCobrar] Iniciando descarga (últimos 30 días)...')
+  try {
+    const fechaLimite = new Date()
+    fechaLimite.setDate(fechaLimite.getDate() - 30)
+    const fechaISO = fechaLimite.toISOString()
+
+    const { data: ctas, error } = await supabase
+      .from('cuentas_por_cobrar')
+      .select('*')
+      .gte('fecha_emision', fechaISO)
+      .order('fecha_emision', { ascending: false })
+
+    if (error) {
+      console.error('💳 [syncCtasCobrar] ERROR Supabase:', error)
+      throw error
+    }
+
+    if (!ctas || ctas.length === 0) {
+      console.log('💳 [syncCtasCobrar] Sin registros recientes.')
+      return
+    }
+
+    let insertados = 0
+    for (const c of ctas) {
+      // Verificar existencia por factura_id (como venta_id en dexie) + cliente
+      const existe = await db.ctas_cobrar
+        .where('venta_id').equals(c.factura_id || '')
+        .and(r => r.cliente === c.cliente)
+        .first()
+
+      if (!existe) {
+        const { id: supabaseId, ...rest } = c
+        await db.ctas_cobrar.add({
+          ...rest,
+          supabase_id: supabaseId,
+          venta_id: c.factura_id, // Mapeo especial
+          fecha: c.fecha_emision, // Mapeo especial
+          monto: Number(c.monto) || 0,
+        })
+        insertados++
+      }
+    }
+
+    console.log(`✅ Cuentas por Cobrar: ${ctas.length} traídas, ${insertados} nuevas locales.`)
+  } catch (e) {
+    console.warn('syncCtasCobrar offline:', e.message)
+  }
+}
+
+// 🔹 Pull de Abonos (últimos 30 días) desde Supabase
+export async function syncAbonosFromSupabase() {
+  console.log('💸 [syncAbonos] Iniciando descarga (últimos 30 días)...')
+  try {
+    const fechaLimite = new Date()
+    fechaLimite.setDate(fechaLimite.getDate() - 30)
+    const fechaISO = fechaLimite.toISOString()
+
+    const { data: abonos, error } = await supabase
+      .from('abonos')
+      .select('*')
+      .gte('fecha', fechaISO)
+      .order('fecha', { ascending: false })
+
+    if (error) {
+      console.error('💸 [syncAbonos] ERROR Supabase:', error)
+      throw error
+    }
+
+    if (!abonos || abonos.length === 0) {
+      console.log('💸 [syncAbonos] Sin registros recientes.')
+      return
+    }
+
+    let insertados = 0
+    for (const a of abonos) {
+      // Verificar existencia por cuenta_id + fecha + monto
+      const existe = await db.abonos
+        .where('cuenta_id').equals(a.cuenta_id || '')
+        .and(r => r.fecha === a.fecha && Number(r.monto) === Number(a.monto))
+        .first()
+
+      if (!existe) {
+        const { id: supabaseId, ...rest } = a
+        await db.abonos.add({
+          ...rest,
+          supabase_id: supabaseId,
+          monto: Number(a.monto) || 0,
+        })
+        insertados++
+      }
+    }
+
+    console.log(`✅ Abonos: ${abonos.length} traídos, ${insertados} nuevos locales.`)
+  } catch (e) {
+    console.warn('syncAbonos offline:', e.message)
+  }
+}
+
+// 🔹 Pull de Cuentas por Pagar (últimos 30 días) desde Supabase [Admin Only]
+export async function syncCtasPagarFromSupabase() {
+  console.log('🧾 [syncCtasPagar] Iniciando descarga (últimos 30 días)...')
+  try {
+    const fechaLimite = new Date()
+    fechaLimite.setDate(fechaLimite.getDate() - 30)
+    const fechaISO = fechaLimite.toISOString()
+
+    const { data: ctas, error } = await supabase
+      .from('cuentas_por_pagar')
+      .select('*')
+      .gte('fecha', fechaISO)
+      .order('fecha', { ascending: false })
+
+    if (error) {
+      console.error('🧾 [syncCtasPagar] ERROR Supabase:', error)
+      throw error
+    }
+
+    if (!ctas || ctas.length === 0) {
+      console.log('🧾 [syncCtasPagar] Sin registros recientes.')
+      return
+    }
+
+    let insertados = 0
+    for (const c of ctas) {
+      // Verificar existencia local por nro_factura + proveedor_id
+      const existe = await db.ctas_pagar
+        .where('nro_factura').equals(c.nro_factura || '')
+        .and(r => String(r.proveedor_id) === String(c.proveedor_id))
+        .first()
+
+      if (!existe) {
+        const { id: supabaseId, ...rest } = c
+        await db.ctas_pagar.add({
+          ...rest,
+          supabase_id: supabaseId,
+          monto: Number(c.monto) || 0,
+        })
+        insertados++
+      }
+    }
+
+    console.log(`✅ Cuentas por Pagar: ${ctas.length} traídas, ${insertados} nuevas locales.`)
+  } catch (e) {
+    console.warn('syncCtasPagar offline:', e.message)
+  }
+}
+
 // 🔹 Inicializador sencillo para usar en el arranque de la app
 export async function initInventorySync() {
   const { toast } = (await import('../store/useStore')).default.getState()
@@ -599,7 +832,17 @@ export async function initInventorySync() {
   await syncCajaChicaFromSupabase()
   await syncDevolucionesFromSupabase()
   await syncComisionesFromSupabase()
+  await syncComprasFromSupabase()
 
   toast('🚀 SINCRONIZACIÓN INICIAL COMPLETADA', 'success')
   subscribeArticulosRealtime()
+
+  // Sincronizaciones en Segundo Plano (No bloqueantes)
+  setTimeout(async () => {
+    console.log('⏱️ [Background Sync] Iniciando sincronización de 2do plano...')
+    await syncCtasCobrarFromSupabase()
+    await syncAbonosFromSupabase()
+    await syncCtasPagarFromSupabase()
+    // Aquí agregaremos cuotas crédito
+  }, 3000)
 }

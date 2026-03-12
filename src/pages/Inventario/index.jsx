@@ -43,6 +43,7 @@ export default function Inventario() {
         const b = busq.toLowerCase()
         query = query.filter(a =>
           a.codigo?.toLowerCase().includes(b) ||
+          a.referencia?.toLowerCase().includes(b) ||
           a.descripcion?.toLowerCase().includes(b) ||
           a.marca?.toLowerCase().includes(b) ||
           a.departamento?.toLowerCase().includes(b) ||
@@ -255,40 +256,40 @@ export default function Inventario() {
   const val = (v) => v && v.trim() !== '' ? v : <span className="text-slate-200">—</span>
 
   return (
-    <div className="flex flex-col min-h-0 pb-2 md:pb-6 relative">
+    <div className="flex flex-col min-h-0 pb-2 relative">
       <div className="panel p-0 flex flex-col min-h-0 flex-1 relative overflow-hidden">
-        <div className="p-5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-5 shrink-0">
+        <div className="px-4 py-2.5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
           <div>
-            <div className="text-xl font-black text-[var(--text-main)] mb-1 uppercase tracking-tighter">MAESTRO DE INVENTARIO Y ALMACÉN</div>
-            <p className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS EN EL SISTEMA</p>
+            <div className="text-sm font-black text-[var(--text-main)] uppercase tracking-tight">MAESTRO DE INVENTARIO Y ALMACÉN</div>
+            <p className="text-[9px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               disabled={syncing}
-              className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer shadow-md
-                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700 hover:scale-105'}`}
+              className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer
+                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}
               onClick={handleSincronizarNube}>
               <span className={`material-icons-round text-sm ${syncing ? 'animate-spin' : ''}`}>
                 {syncing ? 'sync' : 'cloud_upload'}
               </span>
               <span>{syncing ? 'SINCRONIZANDO...' : 'SINCRONIZAR NUBE'}</span>
             </button>
-            <button className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer shadow-md
-                ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)] hover:scale-105'}`}
+            <button className={`btn btn-sm flex items-center gap-2 cursor-pointer
+                ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)]'}`}
               onClick={() => toggleFilter('agotados')}>
               <span className="material-icons-round text-sm">{filter === 'agotados' ? 'filter_list_off' : 'error'}</span>
-              <span>{filter === 'agotados' ? 'MOSTRAR TODO' : 'VER SIN STOCK'}</span>
+              <span>{filter === 'agotados' ? 'MOSTRAR TODO' : 'SIN STOCK'}</span>
             </button>
-            <button className="btn bg-[var(--teal)] text-white px-6 shadow-md font-black cursor-pointer rounded-xl uppercase text-[10px] tracking-widest hover:scale-105" onClick={openNew}>
-              <span className="material-icons-round text-base">add_box</span>
+            <button className="btn btn-sm bg-[var(--teal)] text-white cursor-pointer uppercase text-[10px] tracking-widest" onClick={openNew}>
+              <span className="material-icons-round text-sm">add_box</span>
               <span>ALTA DE PRODUCTO</span>
             </button>
           </div>
         </div>
 
-        <div className="px-5 py-4 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
+        <div className="px-4 py-2 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
           <div className="field !m-0">
-            <input className="inp !py-4 !px-6 !bg-[var(--surfaceDark)] text-[11px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
+            <input className="inp !py-2 !px-4 !bg-[var(--surfaceDark)] text-[11px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
               placeholder="🔍 BUSCAR POR CÓDIGO, DESCRIPCIÓN, MARCA O CATEGORÍA..."
               value={busq} onChange={e => setBusq(e.target.value.toUpperCase())} />
           </div>
@@ -343,50 +344,57 @@ export default function Inventario() {
         </div>
 
         {/* ─── DESKTOP: Table View ─── */}
-        <div className="hidden md:block flex-1 min-h-0 overflow-x-auto">
+        <div className="hidden md:block flex-1 min-h-0 overflow-auto">
           <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-800 text-white">
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Cód Articulo</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700 min-w-[300px]">Descripción Detallada</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
-                <th className="p-4 text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Categoría</th>
-                <th className="p-4 text-center text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Costo $</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest border-r border-slate-700">Precio $</th>
-                <th className="p-4 text-right text-[10px] font-black uppercase tracking-widest">Gestionar</th>
+            <thead className="sticky top-0 z-20">
+              <tr className="bg-slate-900 text-white">
+                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Cód Articulo</th>
+                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700 min-w-[280px]">Descripción Detallada</th>
+                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
+                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Categoría</th>
+                <th className="px-3 py-2 text-center text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Costo $</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Precio $</th>
+                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest">Gestionar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {articulos.map(a => (
-                <tr key={a.id} className="hover:bg-[var(--teal)]/5 transition-all cursor-pointer group hover:scale-[1.005]" onClick={() => openEdit(a)}>
-                  <td className="py-3 px-4 sticky-col !bg-[var(--surface)]">
-                    <div className="font-mono text-[var(--teal)] font-black text-xs uppercase tracking-tighter">
+                <tr key={a.id} className="hover:bg-[var(--teal)]/5 cursor-pointer group" onClick={() => openEdit(a)}>
+                  <td className="py-1.5 px-3 sticky-col !bg-[var(--surface)] border-b border-black/5">
+                    <div className="font-mono text-[var(--teal)] font-black text-[11px] uppercase tracking-tighter">
                       #{a.codigo}
                     </div>
                   </td>
-                  <td className="py-3 px-4 font-black text-[var(--text-main)] sticky-col-2 !bg-[var(--surface)] whitespace-normal leading-tight uppercase text-xs">{a.descripcion}</td>
-                  <td className="py-3 px-4 text-[10px] font-black text-[var(--text2)] uppercase tracking-widest">{val(a.marca)}</td>
-                  <td className="py-3 px-4 text-[10px] text-[var(--text2)] font-black uppercase tracking-widest opacity-60">{val(a.departamento)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`px-2 py-1 font-mono font-black text-[10px] shadow-inner ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)]/10 text-[var(--red-var)] border border-[var(--red-var)]/20 shadow-none' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)]/10 text-[var(--orange-var)] border border-[var(--orange-var)]/20 shadow-none' : 'bg-[var(--green-var)]/10 text-[var(--green-var)] border border-[var(--green-var)]/20 shadow-none'}`}>
+                  <td className="py-1.5 px-3 sticky-col-2 !bg-[var(--surface)] border-b border-black/5">
+                      <div className="font-black text-[var(--text-main)] whitespace-normal leading-tight uppercase text-[11px]">{a.descripcion}</div>
+                      {a.referencia && (
+                        <div className="text-[9px] font-black text-[var(--text2)] opacity-60 tracking-widest uppercase truncate max-w-[250px]">
+                          REF: {a.referencia}
+                        </div>
+                      )}
+                  </td>
+                  <td className="py-1.5 px-3 text-[10px] font-black text-[var(--text2)] uppercase tracking-widest">{val(a.marca)}</td>
+                  <td className="py-1.5 px-3 text-[10px] text-[var(--text2)] font-black uppercase tracking-widest opacity-60">{val(a.departamento)}</td>
+                  <td className="py-1.5 px-3 text-center">
+                    <span className={`px-2 py-0.5 font-mono font-black text-[10px] ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)]/10 text-[var(--red-var)] border border-[var(--red-var)]/20' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)]/10 text-[var(--orange-var)] border border-[var(--orange-var)]/20' : 'bg-[var(--green-var)]/10 text-[var(--green-var)] border border-[var(--green-var)]/20'}`}>
                       {a.stock ?? 0}
                     </span>
                   </td>
-                  <td className="py-3 px-4 font-mono text-[var(--text2)] text-right text-[11px] font-black italic">{fmtUSD(a.costo)}</td>
-                  <td className="py-3 px-4 font-mono text-[var(--teal)] text-right font-black text-sm">{fmtUSD(a.precio)}</td>
-                  <td className="py-3 px-4 text-right pr-6 whitespace-nowrap">
+                  <td className="py-1.5 px-3 font-mono text-[var(--text2)] text-right text-[11px] font-black italic">{fmtUSD(a.costo)}</td>
+                  <td className="py-1.5 px-3 font-mono text-[var(--teal)] text-right font-black text-xs">{fmtUSD(a.precio)}</td>
+                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
                     {currentUser?.rol === 'ADMIN' && (
-                      <div className="flex gap-2 justify-end transition-none">
-                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                      <div className="flex gap-1.5 justify-end">
+                        <button className="w-7 h-7 rounded bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer border border-black/5"
                           onClick={(e) => { e.stopPropagation(); setAjuste({ ...a, qty: 0, motivo: '' }) }} title="Ajuste de Stock">
                           <span className="material-icons-round text-sm">exposure</span>
                         </button>
-                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                        <button className="w-7 h-7 rounded bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--orange-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer border border-black/5"
                           onClick={(e) => { e.stopPropagation(); openEdit(a) }} title="Editar">
                           <span className="material-icons-round text-sm">edit</span>
                         </button>
-                        <button className="w-8 h-8 rounded-none bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer shadow-[var(--win-shadow)] border border-black/5"
+                        <button className="w-7 h-7 rounded bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--red-var)] hover:text-white transition-none flex items-center justify-center cursor-pointer border border-black/5"
                           onClick={(e) => { e.stopPropagation(); setDelId(a.id) }} title="Eliminar">
                           <span className="material-icons-round text-sm">delete</span>
                         </button>

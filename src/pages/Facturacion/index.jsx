@@ -308,6 +308,7 @@ export default function Facturacion() {
       const fuse = new Fuse(allArts, {
         keys: [
           { name: 'codigo', weight: 3 },      // Código manda
+          { name: 'referencia', weight: 2 },  // Referencia técnica original
           { name: 'descripcion', weight: 2 }, // Luego descripción
           { name: 'marca', weight: 1 }       // Marca al final
         ],

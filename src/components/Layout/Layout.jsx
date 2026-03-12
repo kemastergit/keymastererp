@@ -43,25 +43,15 @@ export default function Layout() {
       </div>
 
       {/* Premium Footer Band */}
-      <footer className="flex-none bg-slate-900 text-white py-3 px-6 border-t border-slate-800 relative z-10 hidden md:block">
-        <div className="max-w-[1700px] mx-auto flex justify-between items-center relative">
-          <div className="flex flex-col">
-            <div className="font-bebas text-xl tracking-[0.3em] text-white">KEYMASTER</div>
-            <div className="text-[8px] uppercase font-black text-slate-500 tracking-[0.3em]">Sistema de Gestión Profesional v2.5.0</div>
-          </div>
+      <footer className="flex-none bg-slate-900 text-white py-1.5 px-6 border-t border-slate-800 relative z-10 hidden md:flex items-center justify-between">
+        {/* Subtle Sync Loading In the Center */}
+        <div className="flex-1">
+          <SubtleSync />
+        </div>
 
-          {/* Subtle Sync Loading In the Center */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2">
-            <SubtleSync />
-          </div>
-
-          <div className="text-right">
-            <div className="text-sm font-black text-slate-300 uppercase tracking-widest mb-0.5">
-              {configEmpresa?.nombre || 'KEYMASTER ERP'}
-            </div>
-            <div className="text-[8px] uppercase font-bold text-slate-600 tracking-widest">
-              &copy; {new Date().getFullYear()} KEYMASTER &bull; SOLUCIONES TECNOLÓGICAS PARA TU NEGOCIO
-            </div>
+        <div className="text-right">
+          <div className="text-xs font-black text-slate-300 uppercase tracking-widest">
+            {configEmpresa?.nombre || 'AUTOMOTORES GUAICAIPURO C.A.'}
           </div>
         </div>
       </footer>

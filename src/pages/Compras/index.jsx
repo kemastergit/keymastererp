@@ -67,6 +67,20 @@ export default function Compras() {
         if (!header.nro_factura) return toast('Ingrese número de factura', 'error')
         if (items.length === 0) return toast('No hay productos en la factura', 'error')
 
+        // Anti-duplicado
+        const facturaExiste = await db.compras
+            .where('nro_factura')
+            .equals(header.nro_factura)
+            .and(c => String(c.proveedor_id) === String(header.proveedor_id))
+            .first()
+        
+        if (facturaExiste) {
+            return toast(
+                '❌ Ya existe una factura ' + header.nro_factura + ' para este proveedor',
+                'error'
+            )
+        }
+
         try {
             let compraId = null;
             let ctaPagarId = null;

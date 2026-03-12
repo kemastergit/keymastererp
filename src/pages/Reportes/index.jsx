@@ -63,15 +63,20 @@ export default function Reportes() {
   const [cloudCierres, setCloudCierres] = useState([])
   const [loadingCierres, setLoadingCierres] = useState(false)
 
-  // ☁️ Escuchar Ventas de TODOS los Vendedores en Tiempo Real
+  // ☁️ Escuchar Ventas de TODOS los Vendedores en Tiempo Real + Carga Inicial por Fecha
   useEffect(() => {
     const fetchCloud = async () => {
       setLoadingCloud(true)
       const { data, error } = await supabase
         .from('facturas')
         .select('*')
+        .gte('created_at', desde + 'T00:00:00')
+        .lte('created_at', hasta + 'T23:59:59')
         .order('created_at', { ascending: false })
-      if (!error && data) setCloudVentas(data)
+      if (!error && data) {
+        setCloudVentas(data)
+        console.log(`📊 Reportes: Cargadas ${data.length} ventas desde Supabase (${desde} - ${hasta})`)
+      }
       setLoadingCloud(false)
     }
 
@@ -80,26 +85,23 @@ export default function Reportes() {
     const channel = supabase.channel('radar-facturas-reporte')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facturas' }, payload => {
         const newSale = payload.new
-        setCloudVentas(prev => [newSale, ...prev])
-
-        // ✨ Efecto Radar: Resaltar la fila
-        setHighlightedIds(prev => new Set(prev).add(newSale.id))
-
-        // Quitar el brillo después de 10 segundos
-        setTimeout(() => {
-          setHighlightedIds(prev => {
-            const next = new Set(prev)
-            next.delete(newSale.id)
-            return next
-          })
-        }, 10000)
-
-        toast(`🔥 Nueva venta de ${newSale.vendedor || 'un vendedor'}: ${fmtUSD(newSale.total_usd)}`, 'ok')
+        // Solo agregar si está en el rango actual
+        const saleDate = new Date(newSale.created_at).toISOString().split('T')[0]
+        if (saleDate >= desde && saleDate <= hasta) {
+          setCloudVentas(prev => [newSale, ...prev])
+          setHighlightedIds(prev => new Set(prev).add(newSale.id))
+          setTimeout(() => {
+            setHighlightedIds(prev => {
+              const next = new Set(prev); next.delete(newSale.id); return next
+            })
+          }, 10000)
+          toast(`🔥 Nueva venta de ${newSale.vendedor || 'un vendedor'}: ${fmtUSD(newSale.total_usd)}`, 'ok')
+        }
       })
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [])
+  }, [desde, hasta])
 
   // ☁️ Cargar Cierres de la Nube al cambiar a la pestaña Cierres
   useEffect(() => {
@@ -228,6 +230,7 @@ export default function Reportes() {
     }
   }
 
+  /* Comentado: Ventas ahora se leen de Supabase directamente
   const ventas = useLiveQuery(
     () => db.ventas.filter(v => {
       const d = new Date(v.fecha).toISOString().split('T')[0]
@@ -235,6 +238,7 @@ export default function Reportes() {
     }).toArray(),
     [desde, hasta], []
   )
+  */
 
   const articulos = useLiveQuery(() => db.articulos.toArray().then(arr => [...arr].sort((a, b) => (a.stock || 0) - (b.stock || 0))), [], [])
   const ctas_cobrar = useLiveQuery(() => db.ctas_cobrar.where('estado').anyOf('PENDIENTE', 'PARCIAL').toArray(), [], [])
@@ -306,26 +310,19 @@ export default function Reportes() {
   )
 
   const allVentas = useMemo(() => {
-    const merged = [...ventas]
-    cloudVentas.forEach(cv => {
-      // Evitar duplicados si ya está en local (por número de factura)
-      if (!merged.find(mv => mv.nro === cv.numero || mv.id === cv.id)) {
-        merged.push({
-          id: cv.id,
-          nro: cv.numero,
-          fecha: cv.created_at,
-          cliente: cv.cliente_nombre,
-          tipo_pago: cv.metodo_pago,
-          total: cv.total_usd,
-          items: cv.items,
-          vendedor: cv.vendedor,
-          estado: 'REALTIME',
-          isCloud: true
-        })
-      }
-    })
-    return merged.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-  }, [ventas, cloudVentas])
+    return cloudVentas.map(cv => ({
+      id: cv.id,
+      nro: cv.numero,
+      fecha: cv.created_at,
+      cliente: cv.cliente_nombre,
+      tipo_pago: cv.metodo_pago,
+      total: cv.total_usd,
+      items: cv.items,
+      vendedor: cv.vendedor,
+      estado: cv.estado || 'CLOUD',
+      isCloud: true
+    })).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+  }, [cloudVentas])
 
   // 👤 Lista única de vendedores para el dropdown
   const vendedoresUnicos = useMemo(() => {
@@ -372,17 +369,19 @@ export default function Reportes() {
     return s + (c.monto - pagos)
   }, 0)
 
-  const porTipo = ventas.filter(v => v.estado !== 'ANULADA').reduce((acc, v) => {
-    acc[v.tipo_pago] = (acc[v.tipo_pago] || 0) + v.total
-    return acc
-  }, {})
+  const porTipo = useMemo(() => {
+    return allVentasFiltradas.filter(v => v.estado !== 'ANULADA').reduce((acc, v) => {
+      acc[v.tipo_pago] = (acc[v.tipo_pago] || 0) + v.total
+      return acc
+    }, {})
+  }, [allVentasFiltradas])
 
   const agotados = articulos.filter(a => (a.stock || 0) === 0)
   const bajoStock = articulos.filter(a => (a.stock || 0) > 0 && (a.stock || 0) <= 3)
 
   const handlePrint = () => {
     if (tab === 'ventas') {
-      const data = ventas.map(v => [`#${v.nro}`, fmtDate(v.fecha), v.cliente, v.tipo_pago, fmtUSD(v.total)])
+      const data = allVentasFiltradas.map(v => [`#${v.nro}`, fmtDate(v.fecha), v.cliente, v.tipo_pago, fmtUSD(v.total)])
       printReporte(`Ventas (${desde} a ${hasta})`, ['NRO', 'FECHA', 'CLIENTE', 'PAGO', 'TOTAL'], data, { 'TOTAL VENTAS $': fmtUSD(totalVentas) })
     } else if (tab === 'inventario') {
       const data = articulos.map(a => [a.codigo, a.descripcion, a.marca, a.stock || 0, fmtUSD(a.precio), fmtUSD((a.stock || 0) * a.precio)])
@@ -444,9 +443,8 @@ export default function Reportes() {
   }
 
   const exportLibroVentas = () => {
-    const ventasFiltradas = ventas.filter(v => v.estado !== 'ANULADA')
     const periodo = `${desde} al ${hasta}`
-    printLibroVentas(ventasFiltradas, periodo, configEmpresa)
+    printLibroVentas(allVentasFiltradas.filter(v => v.estado !== 'ANULADA'), periodo, configEmpresa)
   }
 
   const exportLibroCompras = async () => {
@@ -567,7 +565,7 @@ export default function Reportes() {
 
       {/* Stats globales */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Total Ventas" value={fmtUSD(totalVentas)} sub={`${ventas.length} notas emitidas`} />
+        <Stat label="Total Ventas" value={fmtUSD(totalVentas)} sub={`${allVentas.length} notas emitidas`} />
         <Stat label="Por Cobrar" value={fmtUSD(porCobrarTotal)}
           sub={`${ctas_cobrar.length} pendientes`} color="text-[var(--orange-var)]" />
         <Stat label="Por Pagar" value={fmtUSD(porPagarTotal)}
@@ -1192,7 +1190,7 @@ export default function Reportes() {
               <div className="panel border-l-4 transition-none" style={{ borderColor: 'var(--teal)' }}>
                 <div className="text-[9px] text-[var(--text2)] tracking-widest uppercase mb-1 font-black">Ventas Netas</div>
                 <div className="text-2xl font-mono font-black text-[var(--teal)]">{fmtUSD(ventasNetas)}</div>
-                <div className="text-[10px] text-[var(--text2)] font-bold mt-1">{ventas.filter(v => v.estado !== 'ANULADA').length} notas • {totalDevoluciones > 0 ? `${devolucionesPeriodo.length} devoluciones` : 'Sin devoluciones'}</div>
+                <div className="text-[10px] text-[var(--text2)] font-bold mt-1">{allVentas.filter(v => v.estado !== 'ANULADA').length} notas • {totalDevoluciones > 0 ? `${devolucionesPeriodo.length} devoluciones` : 'Sin devoluciones'}</div>
               </div>
 
               {/* Card Utilidad Bruta */}
