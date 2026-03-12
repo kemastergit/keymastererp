@@ -7,14 +7,14 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
     const fecha = new Date(nota.fecha).toLocaleDateString()
     const hora = new Date(nota.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-    const subtotal = Number(nota.subtotal ?? (nota.total - (nota.iva || 0)) ?? 0)
+    const totalUsd = Number(nota.total || 0)
     const iva = Number(nota.iva || 0)
-    const totalUsd = Number(nota.total || (subtotal + iva))
+    const subtotal = Number(nota.subtotal || (totalUsd - iva) || 0)
     const tasa = Number(nota.tasa || config.tasa_bcv || 1)
     const totalBs = totalUsd * tasa
 
-    // Asegurar que items sea un array y no un string JSON
-    const itemsRaw = nota.items || []
+    // Buscar items en múltiples campos posibles (items, detalles, items_json)
+    const itemsRaw = nota.items || nota.detalles || []
     const items = Array.isArray(itemsRaw) ? itemsRaw : (typeof itemsRaw === 'string' ? JSON.parse(itemsRaw) : [])
 
     return (
