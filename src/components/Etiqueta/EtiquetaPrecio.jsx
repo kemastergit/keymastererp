@@ -3,7 +3,6 @@ import CodigoBarras from '../CodigoBarras'
 export default function EtiquetaPrecio({ articulo, config, tasa }) {
     if (!articulo) return null
 
-    const precioBs = articulo.precio * (tasa || 1)
 
     return (
         <div className="label-price-container">
@@ -16,8 +15,7 @@ export default function EtiquetaPrecio({ articulo, config, tasa }) {
                 <div className="label-desc">{articulo.descripcion}</div>
 
                 <div className="label-prices">
-                    <div className="price-usd">$ {articulo.precio.toFixed(2)}</div>
-                    <div className="price-bs">Bs {precioBs.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</div>
+                    <div className="price-usd">REF $ {articulo.precio.toFixed(2)}</div>
                 </div>
             </div>
 
