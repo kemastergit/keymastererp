@@ -23,7 +23,7 @@ export default function EtiquetaPrecio({ articulo, config, tasa }) {
                 <CodigoBarras value={articulo.codigo} height={30} width={1} fontSize={10} />
             </div>
 
-            <style jsx>{`
+            <style>{`
         .label-price-container {
           width: 151px; /* ~40mm */
           height: 75px; /* ~20mm */
