@@ -67,8 +67,8 @@ export default function Facturacion() {
 
   const ticketRef = useRef()
 
-  const [keypadBuffer, setKeypadBufferState] = useState('')
-  const [activeCurrency, setActiveCurrencyState] = useState('USD') // Local states for logic
+  const [keypadBuffer, setKeypadBuffer] = useState('')
+  const [activeCurrency, setActiveCurrency] = useState('USD') // Local states for logic
 
   const handleEditPay = (p) => {
     // Cargar los datos del pago al form y buffer
@@ -77,8 +77,8 @@ export default function Facturacion() {
       montoUSD: p.monto.toString(),
       montoBS: p.montoBS?.toString() || (p.monto * tasa).toString()
     })
-    setKeypadBufferState(p.monto.toString())
-    setActiveCurrencyState('USD')
+    setKeypadBuffer(p.monto.toString())
+    setActiveCurrency('USD')
 
     // Quitarlo de la lista para que al "añadir" no se duplique
     removePayment(p.id)
@@ -98,7 +98,7 @@ export default function Facturacion() {
       montoUSD: remaining > 0 ? remaining.toFixed(2) : '',
       montoBS: remaining > 0 ? (remaining * tasa).toFixed(2) : ''
     })
-    setKeypadBufferState(remaining > 0 ? remaining.toFixed(2) : '')
+    setKeypadBuffer(remaining > 0 ? remaining.toFixed(2) : '')
     setShowPaymentModal(true)
   }
 
@@ -711,7 +711,7 @@ export default function Facturacion() {
       montoBS: remaining > 0 ? (remaining * tasa).toFixed(2) : ''
     })
 
-    setKeypadBufferState('')
+    setKeypadBuffer('')
     toast(`✅ Pago añadido`, 'ok')
     if (!stayOpen) setShowPaymentModal(false)
   }
@@ -725,7 +725,7 @@ export default function Facturacion() {
     } else {
       newBuffer += val
     }
-    setKeypadBufferState(newBuffer)
+    setKeypadBuffer(newBuffer)
 
     // Update payForm based on buffer
     if (activeCurrency === 'USD') {
