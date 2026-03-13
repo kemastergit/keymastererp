@@ -5,12 +5,14 @@ import { usePermiso } from '../../hooks/usePermiso'
 import { menu } from './menu'
 import MobileSidebar from './MobileSidebar'
 import { usePWA } from '../../hooks/usePWA'
+import SyncModal from '../UI/SyncModal'
 
 export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders }) {
-  const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount } = useStore()
+  const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount, syncErrorCount } = useStore()
   const { check } = usePermiso()
   const { canInstall, install, isInstalled } = usePWA()
   const [showDrawer, setShowDrawer] = useState(false)
+  const [showSyncModal, setShowSyncModal] = useState(false)
 
   useEffect(() => {
     if (!hideTasa) loadTasa()
@@ -103,16 +105,23 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
 
         <div className="flex items-center gap-4">
           {/* BANDEJA DE SALIDA (PENDIENTES NUBE) */}
-          {pendingSyncCount > 0 && (
-            <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 px-2 md:px-3 py-1 md:py-1.5 rounded-xl animate-pulse">
-              <span className="material-icons-round text-amber-500 text-xs md:text-sm">cloud_upload</span>
-              <div className="flex flex-col">
-                <span className="text-[7px] md:text-[8px] font-black text-amber-600 uppercase tracking-widest leading-none">Pendientes</span>
-                <span className="text-[9px] md:text-[10px] font-bold text-amber-500 leading-none">
-                  {pendingSyncCount}
+          {(pendingSyncCount > 0 || syncErrorCount > 0) && (
+            <button 
+              onClick={() => setShowSyncModal(true)}
+              className={`flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border ${syncErrorCount > 0 ? 'bg-red-500/10 border-red-500/30 text-red-500 animate-pulse' : 'bg-amber-500/10 border-amber-500/30 text-amber-500'}`}
+            >
+              <span className="material-icons-round text-xs md:text-sm">
+                {syncErrorCount > 0 ? 'error_outline' : 'cloud_upload'}
+              </span>
+              <div className="flex flex-col text-left">
+                <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest leading-none ${syncErrorCount > 0 ? 'text-red-400' : 'text-amber-600'}`}>
+                  {syncErrorCount > 0 ? 'Error Sync' : 'Pendientes'}
+                </span>
+                <span className={`text-[9px] md:text-[10px] font-bold leading-none ${syncErrorCount > 0 ? 'text-red-500 font-mono scale-110 ml-0.5' : 'text-amber-500'}`}>
+                  {syncErrorCount > 0 ? `${syncErrorCount}` : pendingSyncCount}
                 </span>
               </div>
-            </div>
+            </button>
           )}
 
           {/* Acceso directo a Pedidos en Línea - solo desktop */}
@@ -236,6 +245,9 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
         menu={filteredMenu}
         check={check}
       />
+      
+      {/* MODAL DE SINCRONIZACIÓN */}
+      <SyncModal open={showSyncModal} onClose={() => setShowSyncModal(false)} />
     </header>
   )
 }

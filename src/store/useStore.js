@@ -315,6 +315,8 @@ const useStore = create(
       // SINCRONIZACIÓN Y COLA
       pendingSyncCount: 0,
       setPendingSyncCount: (v) => set({ pendingSyncCount: v }),
+      syncErrorCount: 0,
+      setSyncErrorCount: (v) => set({ syncErrorCount: v }),
 
       // GESTIÓN DE NOTIFICACIONES GLOBAL
       unreadOrders: 0,

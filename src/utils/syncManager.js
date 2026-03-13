@@ -2,6 +2,24 @@ import { db } from '../db/db'
 import { supabase } from '../lib/supabase'
 
 /**
+ * Actualiza los contadores globales del store (PENDING y ERROR)
+ */
+export async function updateSyncCounts() {
+  try {
+    const pendingCount = await db.sync_queue.where('status').equals('PENDING').count()
+    const errorCount = await db.sync_queue.where('status').equals('ERROR').count()
+    
+    const storeModule = await import('../store/useStore')
+    const { setPendingSyncCount, setSyncErrorCount } = storeModule.default.getState()
+    
+    setPendingSyncCount(pendingCount)
+    setSyncErrorCount(errorCount)
+  } catch (e) {
+    console.error("Error actualizando contadores de sync:", e)
+  }
+}
+
+/**
  * Agrega una operación a la cola de sincronización local
  */
 export async function addToSyncQueue(table, operation, data) {
@@ -12,6 +30,7 @@ export async function addToSyncQueue(table, operation, data) {
     status: 'PENDING',
     created_at: new Date()
   })
+  updateSyncCounts()
 }
 
 /**
@@ -39,6 +58,7 @@ export async function processSyncQueue() {
       if (item.intentos > 3) {
         console.warn(`🛑 Límite de (3) intentos superado para ${item.table}. Marcado como ERROR.`);
         await db.sync_queue.update(item.id, { status: 'ERROR', intentos: item.intentos })
+        updateSyncCounts()
         continue
       }
       await db.sync_queue.update(item.id, { intentos: item.intentos })
@@ -167,6 +187,7 @@ export async function processSyncQueue() {
     }
   }
 
+  updateSyncCounts()
   return successCount
 }
 
