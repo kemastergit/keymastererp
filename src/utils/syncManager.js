@@ -111,10 +111,19 @@ export async function processSyncQueue() {
         error = err
       } else if (item.table === 'cotizaciones' && item.operation === 'INSERT') {
         const payload = { ...item.data, fecha: item.data.fecha instanceof Date ? item.data.fecha.toISOString() : item.data.fecha }
+        if (payload.cliente !== undefined) {
+          payload.cliente_nombre = payload.cliente
+          delete payload.cliente
+        }
         const { error: err } = await supabase.from('cotizaciones').upsert([payload], { onConflict: 'id' })
         error = err
       } else if (item.table === 'cot_items' && item.operation === 'INSERT') {
-        const { error: err } = await supabase.from('cot_items').upsert([item.data], { onConflict: 'id' })
+        const payload = { ...item.data }
+        if (payload.qty !== undefined) {
+          payload.cantidad = payload.qty
+          delete payload.qty
+        }
+        const { error: err } = await supabase.from('cot_items').upsert([payload], { onConflict: 'id' })
         error = err
       } else if (item.table === 'ordenes_compra' && item.operation === 'INSERT') {
         const payload = { ...item.data, fecha: item.data.fecha instanceof Date ? item.data.fecha.toISOString() : item.data.fecha }
@@ -132,7 +141,12 @@ export async function processSyncQueue() {
         const { error: err } = await supabase.from('devoluciones').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'dev_items' && item.operation === 'INSERT') {
-        const { error: err } = await supabase.from('dev_items').upsert([item.data], { onConflict: 'id' })
+        const payload = { ...item.data }
+        if (payload.qty !== undefined) {
+          payload.cantidad = payload.qty
+          delete payload.qty
+        }
+        const { error: err } = await supabase.from('dev_items').upsert([payload], { onConflict: 'id' })
         error = err
       } else if (item.table === 'caja_chica' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('caja_chica').upsert([item.data], { onConflict: 'id' })

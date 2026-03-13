@@ -70,6 +70,58 @@ export default function Facturacion() {
   const [keypadBuffer, setKeypadBuffer] = useState('')
   const [activeCurrency, setActiveCurrency] = useState('USD') // Local states for logic
 
+  // Resizable columns state
+  const [widths, setWidths] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fact_col_widths')
+      return saved ? JSON.parse(saved) : { items: 280, pago: 280 }
+    } catch { return { items: 280, pago: 280 } }
+  })
+
+  const resizingRef = useRef({ isResizing: false, type: null, startX: 0, startWidth: 0 })
+
+  const startResizing = (type, e) => {
+    resizingRef.current = {
+      isResizing: true,
+      type,
+      startX: e.clientX,
+      startWidth: type === 'items' ? widths.items : widths.pago
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!resizingRef.current.isResizing) return
+      const { type, startX, startWidth } = resizingRef.current
+      const deltaX = e.clientX - startX
+      const newWidth = Math.max(180, Math.min(500, startWidth - deltaX))
+      
+      if (type === 'items') {
+        setWidths(prev => ({ ...prev, items: newWidth }))
+      } else {
+        setWidths(prev => ({ ...prev, pago: newWidth }))
+      }
+    }
+
+    const handleMouseUp = () => {
+      if (resizingRef.current.isResizing) {
+        localStorage.setItem('fact_col_widths', JSON.stringify(widths))
+        resizingRef.current.isResizing = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [widths])
+
   const handleEditPay = (p) => {
     // Cargar los datos del pago al form y buffer
     setPayForm({
@@ -800,7 +852,7 @@ export default function Facturacion() {
 
       <div className="ventas-container flex-1 w-full overflow-hidden relative min-h-0 flex flex-col">
         {/* DESKTOP LAYOUT AND MOBILE CONDITIONAL VISIBILITY */}
-        <div className="flex flex-col lg:flex-row h-full gap-0 lg:gap-2 overflow-hidden min-h-0 flex-1">
+        <div className="flex flex-col lg:flex-row h-full gap-0 overflow-hidden min-h-0 flex-1">
 
           {/* MOBILE SCROLL WRAPPER FOR STEPS */}
           <div
@@ -852,16 +904,34 @@ export default function Facturacion() {
             />
           </div>
 
-          {/* COLUMNA 2: ITEMS (WIDTH MODERADO) */}
-          <div className={`h-full hidden lg:flex lg:flex-none lg:w-[240px] xl:w-[280px]`}>
+          {/* DIVISOR RESIZABLE 1 */}
+          <div 
+            onMouseDown={(e) => startResizing('items', e)}
+            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-emerald-500 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
+          ></div>
+
+          {/* COLUMNA 2: ITEMS */}
+          <div 
+            className="hidden lg:flex h-full shrink-0"
+            style={{ width: widths.items + 'px' }}
+          >
             <ItemsAgregados
               cart={cart} updateQty={updateQty}
               openEditItem={openEditItem} removeFromCart={removeFromCart}
             />
           </div>
 
-          {/* COLUMNA 3: PAGO (WIDTH MODERADO) */}
-          <div className={`h-full hidden lg:flex lg:flex-none lg:w-[240px] xl:w-[280px]`}>
+          {/* DIVISOR RESIZABLE 2 */}
+          <div 
+            onMouseDown={(e) => startResizing('pago', e)}
+            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-emerald-500 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
+          ></div>
+
+          {/* COLUMNA 3: PAGO */}
+          <div 
+            className="hidden lg:flex h-full shrink-0"
+            style={{ width: widths.pago + 'px' }}
+          >
             <PanelPago
               cart={cart} cartSubtotal={cartSubtotal} cartIva={cartIva} cartIgtf={cartIgtf} cartTotal={cartTotal}
               ivaEnabled={ivaEnabled} setIvaEnabled={setIvaEnabled}
@@ -879,8 +949,6 @@ export default function Facturacion() {
             />
           </div>
 
-          {/* COLUMNA 4: ACCESOS RÁPIDOS CONFIGURABLES */}
-          <QuickAccessBar tasa={tasa} navigate={navigate} currentUser={currentUser} />
         </div>
       </div>
 
@@ -1208,126 +1276,6 @@ export default function Facturacion() {
 
       <RutaVendedorModal open={showRutaModal} onClose={() => setShowRutaModal(false)} />
 
-    </div>
-  )
-}
-
-const ALL_SHORTCUTS = (rol) => {
-  const base = [
-    { icon: 'receipt', label: 'Facturación', path: '/facturacion' },
-    { icon: 'inventory_2', label: 'Inventario', path: '/inventario' },
-    { icon: 'people', label: 'Clientes', path: '/clientes' },
-    { icon: 'request_quote', label: 'Cotizaciones', path: '/cotizaciones' },
-  ]
-  const adminSolo = [
-    { icon: 'local_shipping', label: 'Proveedores', path: '/proveedores' },
-    { icon: 'receipt_long', label: 'Reportes', path: '/reportes' },
-    { icon: 'point_of_sale', label: 'Caja', path: '/caja' },
-    { icon: 'assignment_return', label: 'Devoluciones', path: '/devoluciones' },
-    { icon: 'shopping_cart', label: 'Compras', path: '/compras' },
-    { icon: 'account_balance_wallet', label: 'Caja Chica', path: '/caja-chica' },
-    { icon: 'account_balance', label: 'Ctas x Cobrar', path: '/cuentas-cobrar' },
-    { icon: 'summarize', label: 'Cierre', path: '/cierre' },
-    { icon: 'dashboard', label: 'Dashboard', path: '/dashboard' },
-    { icon: 'security', label: 'Auditoría', path: '/auditoria' },
-  ]
-
-  if (['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(rol)) {
-    return [...base, ...adminSolo]
-  }
-  return base
-}
-
-const DEFAULT_PATHS = ['/inventario', '/clientes', '/reportes', '/caja', '/devoluciones']
-
-function QuickAccessBar({ tasa, navigate, currentUser }) {
-  const [editing, setEditing] = useState(false)
-  const [enabled, setEnabled] = useState(() => {
-    try {
-      const saved = localStorage.getItem('quick_access_buttons')
-      return saved ? JSON.parse(saved) : DEFAULT_PATHS
-    } catch { return DEFAULT_PATHS }
-  })
-
-  const toggle = (path) => {
-    setEnabled(prev => {
-      const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-      localStorage.setItem('quick_access_buttons', JSON.stringify(next))
-      return next
-    })
-  }
-
-  const roleShortcuts = ALL_SHORTCUTS(currentUser?.rol)
-  const visibleButtons = roleShortcuts.filter(s => enabled.includes(s.path))
-
-  return (
-    <div className={`h-full hidden lg:flex lg:flex-col lg:flex-none bg-[var(--surface)] border-l border-[var(--border-var)] items-center pt-3 relative transition-all duration-300 ${editing ? 'lg:w-[200px]' : 'lg:w-[60px]'}`}>
-
-      {/* MODO NORMAL */}
-      {!editing && (
-        <>
-          <div className="flex flex-col gap-2 p-2 items-center flex-1 overflow-y-auto custom-scroll w-full">
-            {visibleButtons.map(a => (
-              <button key={a.path} onClick={() => navigate(a.path)} title={a.label}
-                className="w-11 h-11 flex flex-col items-center justify-center bg-[var(--surface2)] border border-[var(--border-var)] hover:border-[var(--teal)] hover:bg-[var(--teal)]/10 text-[var(--text2)] hover:text-[var(--teal)] transition-all group cursor-pointer rounded-xl shrink-0"
-              >
-                <span className="material-icons-round text-[18px] group-hover:scale-110 transition-transform">{a.icon}</span>
-              </button>
-            ))}
-            {visibleButtons.length === 0 && (
-              <div className="text-[7px] font-black text-[var(--text2)] opacity-30 uppercase text-center mt-4 px-1">
-                Sin accesos
-              </div>
-            )}
-          </div>
-          <div className="shrink-0 pb-2 pt-2 text-center border-t border-[var(--border-var)] w-full">
-            <div className="text-[7px] font-black text-[var(--text2)] opacity-40 uppercase tracking-tighter">TASA</div>
-            <div className="text-[9px] font-mono font-black text-[var(--teal)]">{tasa.toFixed(0)}</div>
-          </div>
-          <button onClick={() => setEditing(true)} title="Configurar accesos"
-            className="shrink-0 w-11 h-11 mb-2 flex items-center justify-center text-[var(--text2)] hover:text-[var(--teal)] hover:bg-[var(--teal)]/10 rounded-xl transition-all cursor-pointer opacity-40 hover:opacity-100"
-          >
-            <span className="material-icons-round text-[16px]">settings</span>
-          </button>
-        </>
-      )}
-
-      {/* MODO EDICIÓN */}
-      {editing && (
-        <div className="flex flex-col h-full w-full">
-          <div className="p-3 border-b border-[var(--border-var)] bg-[var(--teal)]/5 shrink-0">
-            <div className="text-[9px] font-black text-[var(--teal)] uppercase tracking-widest flex items-center gap-1">
-              <span className="material-icons-round text-xs">tune</span>
-              Personalizar
-            </div>
-            <div className="text-[7px] text-[var(--text2)] mt-1 font-bold">Selecciona tus accesos rápidos</div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
-            {roleShortcuts.map(s => (
-              <label key={s.path}
-                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-[10px] font-bold uppercase tracking-tight
-                  ${enabled.includes(s.path)
-                    ? 'bg-[var(--teal)]/10 text-[var(--teal)] border border-[var(--teal)]/30'
-                    : 'text-[var(--text2)] hover:bg-[var(--surface2)] border border-transparent'
-                  }`}
-              >
-                <input type="checkbox" checked={enabled.includes(s.path)} onChange={() => toggle(s.path)}
-                  className="accent-[var(--teal)] w-3.5 h-3.5 shrink-0 cursor-pointer" />
-                <span className="material-icons-round text-sm shrink-0">{s.icon}</span>
-                <span className="truncate">{s.label}</span>
-              </label>
-            ))}
-          </div>
-
-          <button onClick={() => setEditing(false)}
-            className="shrink-0 m-2 py-2 bg-[var(--teal)] text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-[var(--tealDark)] transition-all flex items-center justify-center gap-1"
-          >
-            <span className="material-icons-round text-sm">check</span>
-            Listo
-          </button>
-        </div>
-      )}
     </div>
   )
 }

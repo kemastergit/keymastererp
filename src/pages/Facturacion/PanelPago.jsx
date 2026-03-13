@@ -147,33 +147,18 @@ export default function PanelPago({
                 {/* INTERFAZ CONDICIONAL */}
                 {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
                     <>
-                        {/* QUICK PAYMENT SELECTOR (SOLO CAJEROS/ADMIN) */}
-                        <div className="grid grid-cols-2 gap-3 mt-1">
-                            {[
-                                { id: 'EFECTIVO_USD', label: 'Efectivo', icon: 'payments', color: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
-                                { id: 'PAGO_MOVIL', label: 'P. Móvil', icon: 'smartphone', color: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50 border-orange-100' },
-                                { id: 'ZELLE', label: 'Zelle', icon: 'bolt', color: 'bg-purple-500', text: 'text-purple-700', bg: 'bg-purple-50 border-purple-100' },
-                                { id: 'PUNTO_VENTA', label: 'T. Débito', icon: 'credit_card', color: 'bg-blue-600', text: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
-                            ].map(m => (
-                                <button
-                                    key={m.id}
-                                    onClick={() => openModalWithMethod(m.id)}
-                                    className={`flex flex-col items-center justify-center p-4 rounded-[20px] ${m.bg} border hover:shadow-md transition-all group cursor-pointer active:scale-95`}
-                                >
-                                    <div className={`${m.color} text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform mb-2`}>
-                                        <span className="material-icons-round text-[20px]">{m.icon}</span>
-                                    </div>
-                                    <span className={`text-[10px] font-extrabold uppercase tracking-widest ${m.text}`}>{m.label}</span>
-                                </button>
-                            ))}
-                        </div>
-
                         {/* PAGOS REALIZADOS */}
-                        <div className="flex-1 min-h-[150px] flex flex-col mt-4">
+                        <div className="flex-1 min-h-[150px] flex flex-col mt-2">
                             <div className="flex items-center justify-between mb-3 px-1">
-                                <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Pagos Realizados</span>
-                                <button onClick={() => setShowPaymentModal(true)} className="text-emerald-600 text-[10px] font-bold uppercase hover:underline flex items-center">
-                                    <span className="material-icons-round text-[14px] mr-0.5">add</span> Agregar
+                                <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mt-1">
+                                    Pagos Realizados
+                                </span>
+                                <button 
+                                    onClick={() => setShowPaymentModal(true)} 
+                                    className="bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center transition-all shadow-sm active:scale-95 cursor-pointer"
+                                >
+                                    <span className="material-icons-round text-[12px] mr-1">add_circle</span> 
+                                    Añadir Pago
                                 </button>
                             </div>
 

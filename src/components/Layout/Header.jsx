@@ -7,7 +7,7 @@ import MobileSidebar from './MobileSidebar'
 import { usePWA } from '../../hooks/usePWA'
 import SyncModal from '../UI/SyncModal'
 
-export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders }) {
+export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders, onToggleSidebar }) {
   const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount, syncErrorCount } = useStore()
   const { check } = usePermiso()
   const { canInstall, install, isInstalled } = usePWA()
@@ -47,15 +47,21 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
 
       <div className="px-4 py-3 flex items-center justify-between gap-4 max-w-[1600px] mx-auto">
         <div className="flex items-center gap-4 min-w-0">
-          {/* Mobile Menu Toggle */}
+          {/* Global Menu Toggle (Mobile & Desktop) */}
           <button
-            onClick={() => setShowDrawer(true)}
-            className="md:hidden w-[26px] h-[26px] border border-white/20 flex items-center justify-center text-white"
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                setShowDrawer(true)
+              } else if (onToggleSidebar) {
+                onToggleSidebar()
+              }
+            }}
+            className="w-[26px] h-[26px] border border-[var(--tealDark)] rounded bg-[var(--tealDark)] flex items-center justify-center text-white hover:bg-white/10 transition-colors flex-shrink-0"
           >
             <span className="material-icons-round text-sm">menu</span>
           </button>
 
-          <div className="flex items-center gap-3 group cursor-pointer">
+          <div className="flex items-center gap-3 group cursor-pointer md:ml-1">
             <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0 bg-[var(--tealDark)] flex items-center justify-center border border-white/20 shadow-sm">
               <span className="font-['IBM_Plex_Mono'] font-bold text-lg text-white">KM</span>
             </div>

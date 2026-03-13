@@ -2,7 +2,8 @@ import { Outlet } from 'react-router-dom'
 import { useState } from 'react'
 import useStore from '../../store/useStore'
 import Header from './Header'
-import NavTop from './NavTop'
+import Sidebar from './Sidebar'
+import QuickAccessBar from './QuickAccessBar'
 import NavBottom from './NavBottom'
 import SmartTicker from '../UI/SmartTicker'
 import Toast from '../UI/Toast'
@@ -16,26 +17,35 @@ import SubtleSync from '../UI/SubtleSync'
 
 export default function Layout() {
   const [showWebOrders, setShowWebOrders] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const { configEmpresa, syncStatus } = useStore()
   const isInitialSync = syncStatus?.isInitialSync
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Fixed Header Section */}
-      <div className="flex-none w-full z-[300] shadow-2xl print:hidden">
+      <div className="flex-none w-full z-[300] shadow-[0_8px_30px_rgb(0,0,0,0.08)] bg-white relative print:hidden">
         {/* Decorative Top Band */}
-        <div className="h-1.5 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900" />
-        <Header onOpenWebOrders={() => setShowWebOrders(true)} />
-        <NavTop />
+        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-slate-900 via-[var(--teal)] to-slate-900" />
+        <Header 
+          onOpenWebOrders={() => setShowWebOrders(true)} 
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+        />
       </div>
 
-      <main className="flex-1 w-full mx-auto animate-in fade-in duration-700 overflow-hidden min-h-0 print:pt-0 print:p-0 print:max-w-none print:m-0 print:opacity-100! print:animate-none">
-        <MdiWindow>
-          <div className="relative h-full min-h-0 flex flex-col">
-            <Outlet />
-          </div>
-        </MdiWindow>
-      </main>
+      <div className="flex-1 flex overflow-hidden w-full relative z-[1]">
+        <Sidebar isOpen={isSidebarOpen} />
+        
+        <main className="flex-1 w-full max-w-[1920px] mx-auto animate-in fade-in duration-700 overflow-hidden min-h-0 bg-slate-50 print:pt-0 print:p-0 print:max-w-none print:m-0 print:opacity-100! print:animate-none">
+          <MdiWindow>
+            <div className="relative h-full min-h-0 flex flex-col">
+              <Outlet />
+            </div>
+          </MdiWindow>
+        </main>
+
+        <QuickAccessBar />
+      </div>
 
       {/* Ticker Band - High Visibility */}
       <div className="flex-none bg-slate-950 border-t border-white/5 h-8 flex items-center overflow-hidden z-10 hidden md:flex">
