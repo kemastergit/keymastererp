@@ -703,15 +703,19 @@ export default function Facturacion() {
     const bs = parseFloat(payForm.montoBS) || (usd * tasa)
     addPayment(payForm.metodo, usd, tasa, bs)
 
-    // Reset para el próximo
     const remaining = Math.max(0, cartTotal() - (paymentsTotal() + usd))
+    const nextUSD = remaining > 0 ? remaining.toFixed(2) : ''
+    const nextBS = remaining > 0 ? (remaining * tasa).toFixed(2) : ''
+
     setPayForm({
       ...payForm,
-      montoUSD: remaining > 0 ? remaining.toFixed(2) : '',
-      montoBS: remaining > 0 ? (remaining * tasa).toFixed(2) : ''
+      montoUSD: nextUSD,
+      montoBS: nextBS
     })
 
-    setKeypadBuffer('')
+    // Pre-llenar el buffer con el resto para agilizar
+    setKeypadBuffer(activeCurrency === 'USD' ? nextUSD : nextBS)
+
     toast(`✅ Pago añadido`, 'ok')
     if (!stayOpen) setShowPaymentModal(false)
   }
@@ -910,18 +914,24 @@ export default function Facturacion() {
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">TOTAL VENTA</p>
-                    <p className="text-base font-black text-[#131E2E]">{fmtUSD(totalVenta)}</p>
+                    <p className="text-base font-black text-[#131E2E]">
+                      {activeCurrency === 'USD' ? fmtUSD(totalVenta) : fmtBS(totalVenta * tasa)}
+                    </p>
                   </div>
                   <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">ABONADO</p>
-                    <p className="text-base font-black text-[var(--green-var)]">{fmtUSD(yaPagado)}</p>
+                    <p className="text-base font-black text-[var(--green-var)]">
+                      {activeCurrency === 'USD' ? fmtUSD(yaPagado) : fmtBS(yaPagado * tasa)}
+                    </p>
                     {payments.length > 0 && (
                       <span className="absolute -top-1 -right-1 bg-[var(--green-var)] text-white text-[8px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">{payments.length}</span>
                     )}
                   </div>
                   <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">FALTA POR PAGAR</p>
-                    <p className="text-base font-black text-[#F36E25]">{fmtUSD(saldo)}</p>
+                    <p className="text-base font-black text-[#F36E25]">
+                      {activeCurrency === 'USD' ? fmtUSD(saldo) : fmtBS(saldo * tasa)}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -931,40 +941,67 @@ export default function Facturacion() {
                 {/* COLUMNA IZQUIERDA: MÉTODOS Y LISTA */}
                 <div className="flex-1 p-4 space-y-4 border-r border-slate-200/60">
                   {/* SWITCHER MONEDA */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button
-                      onClick={() => { setActiveCurrency('USD'); setKeypadBuffer('') }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'USD' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
-                      USD
-                    </button>
-                    <button
-                      onClick={() => { setActiveCurrency('BS'); setKeypadBuffer('') }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'BS' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
-                      BS
-                    </button>
-                  </div>
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <button
+                        onClick={() => {
+                          if (activeCurrency === 'BS' && keypadBuffer) {
+                            const converted = (parseFloat(keypadBuffer) / tasa).toFixed(2)
+                            setKeypadBuffer(converted === '0.00' ? '' : converted)
+                          }
+                          setActiveCurrency('USD')
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'USD' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
+                        USD
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (activeCurrency === 'USD' && keypadBuffer) {
+                            const converted = (parseFloat(keypadBuffer) * tasa).toFixed(2)
+                            setKeypadBuffer(converted === '0.00' ? '' : converted)
+                          }
+                          setActiveCurrency('BS')
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'BS' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
+                        BS
+                      </button>
+                    </div>
 
                   <div className="space-y-4">
                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">MÉTODO DE PAGO</p>
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { id: 'EFECTIVO_USD', label: 'Efectivo', icon: 'payments' },
-                        { id: 'PUNTO_VENTA', label: 'Tarjeta', icon: 'credit_card' },
-                        { id: 'ZELLE', label: 'Zelle', icon: 'bolt' },
-                        { id: 'PAGO_MOVIL', label: 'Pago Móvil', icon: 'smartphone' },
-                        { id: 'CUPON', label: 'Cupón', icon: 'confirmation_number' },
-                        { id: 'OTRO', label: 'Otro', icon: 'more_horiz' },
-                      ].map(m => (
-                        <button
-                          key={m.id}
-                          onClick={() => setPayForm({ ...payForm, metodo: m.id })}
-                          className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all aspect-square
-                            ${payForm.metodo === m.id ? 'border-[#F36E25] bg-white shadow-md scale-105' : 'border-transparent bg-white/50 opacity-60'}`}
-                        >
-                          <span className={`material-icons-round text-lg ${payForm.metodo === m.id ? 'text-[#F36E25]' : 'text-slate-400'}`}>{m.icon}</span>
-                          <span className={`text-[9px] font-black mt-1 ${payForm.metodo === m.id ? 'text-[#131E2E]' : 'text-slate-400'}`}>{m.label}</span>
-                        </button>
-                      ))}
+                        { id: 'EFECTIVO_USD', label: 'Efectivo $', icon: 'payments', currency: 'USD' },
+                        { id: 'EFECTIVO_BS', label: 'Efectivo Bs', icon: 'money', currency: 'BS' },
+                        { id: 'PUNTO_VENTA', label: 'Tarjeta', icon: 'credit_card', currency: 'BS' },
+                        { id: 'ZELLE', label: 'Zelle', icon: 'bolt', currency: 'USD' },
+                        { id: 'PAGO_MOVIL', label: 'Pago Móvil', icon: 'smartphone', currency: 'BS' },
+                        { id: 'TRANSFERENCIA_BS', label: 'Transf. Bs', icon: 'account_balance', currency: 'BS' },
+                        { id: 'CUPON', label: 'Cupón', icon: 'confirmation_number', currency: 'ANY' },
+                        { id: 'OTRO', label: 'Otro', icon: 'more_horiz', currency: 'ANY' },
+                      ]
+                        .filter(m => m.currency === 'ANY' || m.currency === activeCurrency)
+                        .map(m => (
+                          <button
+                            key={m.id}
+                            onClick={() => {
+                              setPayForm({ ...payForm, metodo: m.id });
+                              if (m.currency !== 'ANY' && m.currency !== activeCurrency) {
+                                // Convertir el monto al cambiar de método/moneda
+                                if (keypadBuffer) {
+                                  const n = parseFloat(keypadBuffer) || 0
+                                  const converted = m.currency === 'BS' ? (n * tasa).toFixed(2) : (n / tasa).toFixed(2)
+                                  setKeypadBuffer(converted === '0.00' ? '' : converted)
+                                }
+                                setActiveCurrency(m.currency);
+                              }
+                            }}
+                            className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all aspect-square
+                              ${payForm.metodo === m.id ? 'border-[#F36E25] bg-white shadow-md scale-105' : 'border-transparent bg-white/50 opacity-60'}`}
+                          >
+                            <span className={`material-icons-round text-lg ${payForm.metodo === m.id ? 'text-[#F36E25]' : 'text-slate-400'}`}>{m.icon}</span>
+                            <span className={`text-[9px] font-black mt-1 ${payForm.metodo === m.id ? 'text-[#131E2E]' : 'text-slate-400'}`}>{m.label}</span>
+                          </button>
+                        ))}
                     </div>
                   </div>
 

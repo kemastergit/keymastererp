@@ -121,8 +121,8 @@ export default function CuentasCobrar() {
 
       // Encolar Actualización en la Nube
       await addToSyncQueue('ctas_cobrar', 'INSERT', {
-        id: cobro.id,
-        id_local: cobro.id,
+        id_local: String(cobro.id),
+        factura_id: cobro.supabase_id || cobro.venta_id ? String(cobro.venta_id) : null,
         cliente: cobro.cliente,
         monto: cobro.monto,
         monto_total: cobro.monto,

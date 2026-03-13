@@ -60,7 +60,8 @@ export async function processSyncQueue() {
           .eq('codigo', item.data.codigo)
         error = err
       } else if ((item.table === 'cuentas_por_cobrar' || item.table === 'ctas_cobrar') && item.operation === 'INSERT') {
-        const { error: err } = await supabase.from('cuentas_por_cobrar').upsert([item.data], { onConflict: 'id' })
+        const { id: _removeLocalId, ...cxcPayload } = item.data  // Nunca enviar el id local de Dexie
+        const { error: err } = await supabase.from('cuentas_por_cobrar').upsert([cxcPayload], { onConflict: 'factura_id' })
         error = err
       } else if (item.table === 'abonos' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('abonos').upsert([item.data], { onConflict: 'id' })

@@ -320,7 +320,8 @@ export default function Reportes() {
       id: cv.id,
       nro: cv.numero,
       fecha: cv.created_at,
-      cliente_nombre: cv.cliente_nombre, // Cambiado de 'cliente' a 'cliente_nombre' para consistencia
+      cliente: cv.cliente || cv.cliente_nombre,
+      cliente_nombre: cv.cliente_nombre, // Mantener para consistencia si se usa en otros lados
       tipo_pago: cv.metodo_pago,
       total: cv.total_usd,
       tasa: cv.tasa_bcv || 1,             // CAMBIO: Asegurar tasa de la nube

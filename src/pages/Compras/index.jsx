@@ -24,7 +24,7 @@ export default function Compras() {
     const [items, setItems] = useState([])
     const [busq, setBusq] = useState('')
     const [showProductModal, setShowProductModal] = useState(false)
-    const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', precio: 0, costo: 0, stock_min: 0 })
+    const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
 
     const proveedores = useLiveQuery(() => db.proveedores.orderBy('nombre').toArray(), [], [])
     const articulos = useLiveQuery(() =>
@@ -86,10 +86,13 @@ export default function Compras() {
             let ctaPagarId = null;
             let abonoId = null;
 
-            await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria], async () => {
+            // Calculamos el total fuera para asegurar que sea un número válido
+            const finalTotal = parseFloat(totalUSD.toFixed(2)) || 0;
+
+            await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria, db.abonos], async () => {
                 compraId = await db.compras.add({
                     ...header,
-                    total_usd: totalUSD,
+                    total_usd: finalTotal,
                     usuario_id: currentUser.id,
                     created_at: new Date()
                 })
@@ -126,10 +129,10 @@ export default function Compras() {
                     proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                     proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                     nro_factura: header.nro_factura,
-                    monto: totalUSD,
+                    monto: finalTotal,
                     fecha: header.fecha,
                     estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
-                    vencimiento: header.fecha // Simplificado
+                    vencimiento: header.fecha 
                 })
 
                 if (header.condicion === 'CONTADO') {
@@ -137,7 +140,7 @@ export default function Compras() {
                         cuenta_id: ctaPagarId,
                         tipo_cuenta: 'PAGAR',
                         fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0],
-                        monto: totalUSD,
+                        monto: finalTotal,
                         metodo: header.metodo_pago,
                         usuario_id: currentUser.id
                     })
@@ -145,7 +148,7 @@ export default function Compras() {
 
                 await logAction(currentUser, 'COMPRA_PROVEEDOR', {
                     factura: header.nro_factura,
-                    total: totalUSD,
+                    total: finalTotal,
                     condicion: header.condicion
                 })
             })
@@ -159,35 +162,58 @@ export default function Compras() {
             setHeader({ ...header, nro_factura: '', condicion: 'CREDITO', metodo_pago: 'EFECTIVO_USD' })
 
             // ☁️ SYNC A SUPABASE — El Cacique ve todo desde su choza
-            const compraData = { ...header, total_usd: totalUSD, usuario_id: currentUser.id, created_at: new Date().toISOString() }
-            await addToSyncQueue('compras', 'INSERT', { ...compraData, id: compraId })
+            const syncCompraId = `compra-${header.nro_factura}-${header.proveedor_id}-${Date.now()}`
+            const syncCtaPagarId = `ctag-pagar-${header.nro_factura}-${header.proveedor_id}-${Date.now()}`
+            
+            const compraData = { 
+                ...header, 
+                id: syncCompraId, // Usar ID único para la nube
+                total_usd: finalTotal, 
+                usuario_id: currentUser.id, 
+                created_at: new Date().toISOString() 
+            }
+            
+            await addToSyncQueue('compras', 'INSERT', compraData)
+            
             for (const item of items) {
+                const syncItemId = `item-${syncCompraId}-${item.id}`
                 await addToSyncQueue('compra_items', 'INSERT', {
-                    compra_id: compraId, articulo_id: item.id,
-                    qty: item.qty, costo_unit: item.costo_unit, costo_anterior: item.costo_anterior
+                    id: syncItemId,
+                    compra_id: syncCompraId, 
+                    articulo_id: item.id,
+                    qty: item.qty, 
+                    costo_unit: item.costo_unit, 
+                    costo_anterior: item.costo_anterior
                 })
             }
+            
             const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
-            if (ctaPagarId) {
-                await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
-                    id: ctaPagarId,
-                    proveedor_id: parseInt(header.proveedor_id),
-                    proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
-                    proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
-                    nro_factura: header.nro_factura,
-                    monto: totalUSD,
-                    fecha: header.fecha,
-                    estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
-                    vencimiento: header.fecha
+            
+            await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
+                id: syncCtaPagarId,
+                proveedor_id: parseInt(header.proveedor_id),
+                proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                nro_factura: header.nro_factura,
+                monto: finalTotal,
+                fecha: header.fecha,
+                estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
+                vencimiento: header.fecha
+            })
+            
+            if (header.condicion === 'CONTADO') {
+                const syncAbonoId = `abono-compra-${syncCtaPagarId}-${Date.now()}`
+                await addToSyncQueue('abonos', 'INSERT', {
+                    id: syncAbonoId, 
+                    cuenta_id: syncCtaPagarId, 
+                    tipo_cuenta: 'PAGAR',
+                    fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], 
+                    monto: finalTotal, 
+                    metodo: header.metodo_pago, 
+                    usuario_id: currentUser.id
                 })
-                if (header.condicion === 'CONTADO') {
-                    await addToSyncQueue('abonos', 'INSERT', {
-                        id: abonoId, cuenta_id: ctaPagarId, tipo_cuenta: 'PAGAR',
-                        fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], monto: totalUSD, metodo: header.metodo_pago, usuario_id: currentUser.id
-                    })
-                }
-                processSyncQueue()
             }
+            processSyncQueue()
         } catch (err) {
             console.error(err)
             toast('❌ Error al procesar: ' + err.message, 'error')
@@ -200,7 +226,7 @@ export default function Compras() {
         const art = await db.articulos.get(id)
         addItem(art)
         setShowProductModal(false)
-        setNewProduct({ codigo: '', descripcion: '', precio: 0, costo: 0, stock_min: 0 })
+        setNewProduct({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
         toast('Producto creado y agregado a la factura')
     }
 
@@ -339,7 +365,9 @@ export default function Compras() {
                                             onClick={() => addItem(a)}
                                         >
                                             <div>
-                                                <div className="text-[10px] font-black text-[var(--text2)] uppercase">{a.codigo}</div>
+                                                <div className="text-[10px] font-black text-[var(--text2)] uppercase">
+                                                    {a.codigo} {a.marca && <span className="opacity-60 ml-2">• {a.marca}</span>}
+                                                </div>
                                                 <div className="text-sm font-bold text-[var(--text-main)] uppercase">{a.descripcion}</div>
                                             </div>
                                             <div className="text-right">
@@ -478,6 +506,15 @@ export default function Compras() {
                                 placeholder="NOMBRE DEL PRODUCTO"
                             />
                         </div>
+                    </div>
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Marca / Fabricante (Opcional)</label>
+                        <input
+                            className="inp !py-3 rounded-none focus:border-[var(--teal)] uppercase"
+                            value={newProduct.marca}
+                            onChange={e => setNewProduct({ ...newProduct, marca: e.target.value.toUpperCase() })}
+                            placeholder="EJ. DENSO, TOYOTA, BOSCH"
+                        />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="field">

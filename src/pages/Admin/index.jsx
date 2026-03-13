@@ -26,6 +26,8 @@ export default function Admin() {
       caja_chica: await db.caja_chica.toArray(),
       cierre_dia: await db.cierre_dia.toArray(),
       usuarios: await db.usuarios.toArray(),
+      compras: await db.compras.toArray(),
+      compra_items: await db.compra_items.toArray(),
       exported_at: new Date().toISOString(),
     }
 
@@ -73,7 +75,8 @@ export default function Admin() {
         await db.transaction('rw',
           [db.articulos, db.clientes, db.proveedores, db.ventas, db.venta_items,
           db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
-          db.devoluciones, db.caja_chica, db.cierre_dia, db.usuarios],
+          db.devoluciones, db.caja_chica, db.cierre_dia, db.usuarios,
+          db.compras, db.compra_items],
           async () => {
             await db.articulos.clear(); if (data.articulos) await db.articulos.bulkAdd(data.articulos)
             await db.clientes.clear(); if (data.clientes) await db.clientes.bulkAdd(data.clientes)
@@ -88,6 +91,8 @@ export default function Admin() {
             await db.caja_chica.clear(); if (data.caja_chica) await db.caja_chica.bulkAdd(data.caja_chica)
             await db.cierre_dia.clear(); if (data.cierre_dia) await db.cierre_dia.bulkAdd(data.cierre_dia)
             await db.usuarios.clear(); if (data.usuarios) await db.usuarios.bulkAdd(data.usuarios)
+            await db.compras.clear(); if (data.compras) await db.compras.bulkAdd(data.compras)
+            await db.compra_items.clear(); if (data.compra_items) await db.compra_items.bulkAdd(data.compra_items)
           }
         )
 
@@ -127,13 +132,14 @@ export default function Admin() {
     await db.transaction('rw',
       [db.articulos, db.clientes, db.proveedores, db.ventas, db.venta_items,
       db.cotizaciones, db.cot_items, db.ctas_cobrar, db.ctas_pagar,
-      db.devoluciones, db.caja_chica, db.cierre_dia],
+      db.devoluciones, db.caja_chica, db.cierre_dia, db.compras, db.compra_items],
       async () => {
         await Promise.all([
           db.articulos.clear(), db.clientes.clear(), db.proveedores.clear(),
           db.ventas.clear(), db.venta_items.clear(), db.cotizaciones.clear(),
           db.cot_items.clear(), db.ctas_cobrar.clear(), db.ctas_pagar.clear(),
-          db.devoluciones.clear(), db.caja_chica.clear(), db.cierre_dia.clear()
+          db.devoluciones.clear(), db.caja_chica.clear(), db.cierre_dia.clear(),
+          db.compras.clear(), db.compra_items.clear()
         ])
       }
     )

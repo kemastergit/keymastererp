@@ -405,7 +405,6 @@ export function printEtiquetas(productos, tasa, tamano = 'mediana') {
           </div>
           <div class="price-box">
             <div class="precio">REF $${usd}</div>
-            <div class="bs">Bs ${bs}</div>
           </div>
         </div>
       </div>
@@ -467,9 +466,6 @@ export function printEtiquetas(productos, tasa, tamano = 'mediana') {
     .precio { 
       font-size: ${s.fontPrecio}; font-weight: 900; color: #000; 
       letter-spacing: -0.5px; line-height: 1; 
-    }
-    .bs { 
-      font-size: 9px; color: #000; font-weight: bold; margin-top: 2px; 
     }
     
     @media print {
