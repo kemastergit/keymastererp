@@ -90,8 +90,12 @@ export default function Compras() {
             const finalTotal = parseFloat(totalUSD.toFixed(2)) || 0;
 
             await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria, db.abonos], async () => {
+                // Buscar nombre del proveedor antes de guardar (para desnormalización defensiva)
+                const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
                 compraId = await db.compras.add({
                     ...header,
+                    proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                    proveedor_uuid: provObj?.proveedor_uuid || '',
                     total_usd: finalTotal,
                     usuario_id: currentUser.id,
                     created_at: new Date()
@@ -101,10 +105,13 @@ export default function Compras() {
                     await db.compra_items.add({
                         compra_id: compraId,
                         articulo_id: item.id,
+                        codigo: item.codigo,
+                        descripcion: item.descripcion,
                         qty: item.qty,
                         costo_unit: item.costo_unit,
                         costo_anterior: item.costo_anterior
                     })
+
 
                     // Recalcular AVCO (Costo Promedio Ponderado)
                     const stockActual = item.stock_actual
@@ -120,12 +127,11 @@ export default function Compras() {
                     })
                 }
 
-                // Buscar nombre del proveedor para las cuentas por pagar
-                const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
 
                 // Crear Cuenta por Pagar
                 ctaPagarId = await db.ctas_pagar.add({
                     proveedor_id: parseInt(header.proveedor_id),
+                    proveedor_uuid: provObj?.proveedor_uuid || '',
                     proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                     proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                     nro_factura: header.nro_factura,
@@ -158,18 +164,23 @@ export default function Compras() {
             // 🏷️ Imprimir etiquetas automático
             printEtiquetas(items, header.tasa || tasa, 'mediana')
 
-            setItems([])
-            setHeader({ ...header, nro_factura: '', condicion: 'CREDITO', metodo_pago: 'EFECTIVO_USD' })
-
             // ☁️ SYNC A SUPABASE — El Cacique ve todo desde su choza
-            const syncCompraId = `compra-${header.nro_factura}-${header.proveedor_id}-${Date.now()}`
-            const syncCtaPagarId = `ctag-pagar-${header.nro_factura}-${header.proveedor_id}-${Date.now()}`
+            const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
+            const syncHeader = { ...header } // Capturar datos antes de resetear el form
+            const syncCompraId = `compra-${syncHeader.nro_factura}-${syncHeader.proveedor_id}-${Date.now()}`
+            const syncCtaPagarId = `ctag-pagar-${syncHeader.nro_factura}-${syncHeader.proveedor_id}-${Date.now()}`
+
+            // 🔑 Guardar supabase_id en Dexie para usarlo al borrar
+            await db.compras.update(compraId, { supabase_id: syncCompraId })
             
             const compraData = { 
-                ...header, 
+                ...syncHeader, 
                 id: syncCompraId, // Usar ID único para la nube
                 total_usd: finalTotal, 
                 usuario_id: currentUser.id, 
+                proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
+                proveedor_uuid: provObj?.proveedor_uuid || '',
+                estado: syncHeader.condicion === 'CONTADO' ? 'PAGADA' : 'PROCESADA',
                 created_at: new Date().toISOString() 
             }
             
@@ -181,38 +192,43 @@ export default function Compras() {
                     id: syncItemId,
                     compra_id: syncCompraId, 
                     articulo_id: item.id,
+                    codigo: item.codigo,
+                    descripcion: item.descripcion,
                     qty: item.qty, 
                     costo_unit: item.costo_unit, 
                     costo_anterior: item.costo_anterior
                 })
             }
             
-            const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
-            
             await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
                 id: syncCtaPagarId,
-                proveedor_id: parseInt(header.proveedor_id),
+                proveedor_id: parseInt(syncHeader.proveedor_id),
                 proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
                 proveedor_nombre: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
-                nro_factura: header.nro_factura,
+                proveedor_uuid: provObj?.proveedor_uuid || '',
+                nro_factura: syncHeader.nro_factura,
                 monto: finalTotal,
-                fecha: header.fecha,
-                estado: header.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
-                vencimiento: header.fecha
+                fecha: syncHeader.fecha,
+                estado: syncHeader.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
+                vencimiento: syncHeader.fecha
             })
             
-            if (header.condicion === 'CONTADO') {
+            if (syncHeader.condicion === 'CONTADO') {
                 const syncAbonoId = `abono-compra-${syncCtaPagarId}-${Date.now()}`
                 await addToSyncQueue('abonos', 'INSERT', {
                     id: syncAbonoId, 
                     cuenta_id: syncCtaPagarId, 
                     tipo_cuenta: 'PAGAR',
-                    fecha: header.fecha + 'T' + new Date().toTimeString().split(' ')[0], 
+                    fecha: syncHeader.fecha + 'T' + new Date().toTimeString().split(' ')[0], 
                     monto: finalTotal, 
-                    metodo: header.metodo_pago, 
+                    metodo: syncHeader.metodo_pago, 
                     usuario_id: currentUser.id
                 })
             }
+
+            // Resetear formulario después de capturar datos para sync
+            setItems([])
+            setHeader({ ...header, nro_factura: '', condicion: 'CREDITO', metodo_pago: 'EFECTIVO_USD' })
             processSyncQueue()
         } catch (err) {
             console.error(err)

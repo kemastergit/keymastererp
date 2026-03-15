@@ -377,113 +377,137 @@ export function printNotaTermica(venta, items, tasa, options = {}) {
   setTimeout(() => w.print(), 300)
 }
 
-export function printEtiquetas(productos, tasa, tamano = 'mediana') {
-  // tamano: 'pequena' (5x3cm), 'mediana' (7x4cm), 'grande' (10x5cm)
-  const sizes = {
-    pequena: { w: '50mm', h: '30mm', font: '8px', fontPrecio: '12px', fontCod: '11px' },
-    mediana: { w: '70mm', h: '40mm', font: '10px', fontPrecio: '16px', fontCod: '15px' },
-    grande: { w: '100mm', h: '50mm', font: '12px', fontPrecio: '22px', fontCod: '18px' }
-  }
-  const s = sizes[tamano] || sizes.mediana
 
-  const etiquetas = productos.map(p => {
-    const bs = ((p.precio || 0) * (tasa || 1)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const usd = (p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-    return `<div class="etq">
-      <div class="etq-inner">
-        <div class="codigo-box">
-          <div class="codigo">${p.codigo || ''}</div>
-        </div>
-        <div class="info-box">
-          <div class="desc">${(p.descripcion || '')}</div>
-          ${p.marca ? `<div class="marca">${p.marca}</div>` : ''}
-        </div>
-        <div class="bottom-box">
-          <div class="ref-box">
-            ${p.referencia ? `<div class="ref">REF: ${p.referencia}</div>` : ''}
-          </div>
-          <div class="price-box">
-            <div class="precio">REF $${usd}</div>
-          </div>
-        </div>
+export function printEtiquetas(productos, tasa) {
+  const etiquetas = productos.map((p, idx) => {
+    const usd = (p.costo_unit || p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    // Ensure unique ID for each barcode to render
+    return `
+    <div class="etq">
+      <div class="header">AUTOREPUESTOS GUAICAIPURO C.A.</div>
+      <div class="desc">${(p.descripcion || '').substring(0, 45)}</div>
+      <div class="barcode-container">
+        <svg id="barcode-${idx}"></svg>
+      </div>
+      <div class="price-zone">
+        <div class="price">$ ${usd}</div>
       </div>
     </div>`
   }).join('')
 
+  const jsBarcodeCalls = productos.map((p, idx) => {
+    return `
+      try {
+        JsBarcode("#barcode-${idx}", "${p.codigo || '0000'}", {
+          format: "CODE128",
+          width: 1.2,
+          height: 35,
+          displayValue: true,
+          fontSize: 10,
+          margin: 0,
+          background: "transparent",
+          lineColor: "#000"
+        });
+      } catch(e) { console.error(e) }
+    `
+  }).join('')
+
   const html = `<!DOCTYPE html>
-<html><head>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
   <style>
-    @page { margin: 2mm; }
-    body { font-family: 'Arial', sans-serif; margin: 0; padding: 2mm; background: #fff; }
-    
-    .etq {
-      width: ${s.w}; height: ${s.h};
-      border: 1px dashed #ccc; border-radius: 4px;
-      padding: 3mm; margin: 1mm;
-      display: inline-block; vertical-align: top;
-      overflow: hidden; box-sizing: border-box;
-      page-break-inside: avoid;
-      background: #fff;
+    @page { 
+      margin: 0; 
+      size: 41.5mm 31.0mm landscape; 
     }
-    
-    .etq-inner {
-      display: flex; flex-direction: column; justify-content: space-between; height: 100%;
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 0; 
+      padding: 0; 
+      background: #fff; 
+      color: #000;
     }
-    
-    .codigo-box { 
-      border-bottom: 2px solid #000; 
-      padding-bottom: 2px; margin-bottom: 3px; 
+    .etq { 
+      width: 41.5mm; 
+      height: 31mm; 
+      box-sizing: border-box; 
+      overflow: hidden; 
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+    .header { 
+      background: #000; 
+      color: #fff; 
+      font-size: 5pt; 
+      font-weight: bold; 
       text-align: center; 
-    }
-    .codigo { 
-      font-family: 'Courier New', monospace; 
-      font-size: ${s.fontCod}; color: #000; 
-      font-weight: 900; letter-spacing: 0.5px; 
-    }
-    
-    .info-box { 
-      flex-grow: 1; display: flex; flex-direction: column; justify-content: flex-start; 
+      padding: 1.5mm 0; 
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .desc { 
-      font-size: ${s.font}; font-weight: 800; line-height: 1.1; color: #000; text-transform: uppercase;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      font-size: 6.5pt; 
+      font-weight: 800; 
+      line-height: 1.1; 
+      text-transform: uppercase; 
+      padding: 1mm 1.5mm 0 1.5mm;
+      height: 6mm;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
-    .marca { 
-      font-size: 8px; color: #444; text-transform: uppercase; font-weight: 700; margin-top: 2px; 
+    .barcode-container { 
+      text-align: center;
+      width: 100%;
+      height: 12mm;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
-    
-    .bottom-box { 
-      display: flex; justify-content: space-between; align-items: flex-end; 
+    svg {
+      max-width: 38mm;
+      height: 100%;
     }
-    .ref-box { flex: 1; }
-    .ref { 
-      font-size: 8px; color: #333; font-family: monospace; font-weight: bold; 
-      background: #eee; padding: 1px 4px; border-radius: 2px; display: inline-block;
+    .price-zone { 
+      border-top: 1px solid #000; 
+      text-align: center; 
+      padding: 0.5mm 0;
+      height: 6mm;
     }
-    
-    .price-box { text-align: right; }
-    .precio { 
-      font-size: ${s.fontPrecio}; font-weight: 900; color: #000; 
-      letter-spacing: -0.5px; line-height: 1; 
-    }
-    
-    @media print {
-      .etq { border-color: transparent !important; }
+    .price { 
+      font-size: 14pt; 
+      font-weight: 900; 
+      letter-spacing: -0.5px; 
     }
   </style>
-</head><body>${etiquetas}</body></html>`
+</head>
+<body>
+  ${etiquetas}
+  <script>
+    window.onload = function() {
+      if(typeof JsBarcode !== 'undefined') {
+        ${jsBarcodeCalls}
+        setTimeout(() => window.print(), 500);
+      } else {
+        alert("Error al cargar generador de códigos de barras. Revise conexión a internet.");
+        window.print();
+      }
+    };
+  </script>
+</body>
+</html>`
 
-  const w = window.open('', '_blank', 'width=800,height=600')
-  if (!w) {
-    console.error('Ventana emergente bloqueada por el navegador')
-    return alert('Por favor, permita las ventanas emergentes (pop-ups) para poder imprimir las etiquetas.')
-  }
-
+  const w = window.open('', '_blank', 'width=400,height=300')
+  if (!w) return alert('Por favor, permita las ventanas emergentes (pop-ups) para poder imprimir las etiquetas.')
   w.document.write(html)
   w.document.close()
   w.focus()
-  setTimeout(() => w.print(), 300)
 }
 
 export function printEtiquetaDespacho(venta, items) {

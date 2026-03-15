@@ -92,7 +92,14 @@ export async function processSyncQueue() {
       } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('cuentas_por_pagar').upsert([item.data], { onConflict: 'id' })
         error = err
+      } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'ANULAR') {
+        const { nro_factura, proveedor_id, ...updateData } = item.data
+        const { error: err } = await supabase.from('cuentas_por_pagar')
+          .update(updateData)
+          .match({ nro_factura, proveedor_id })
+        error = err
       } else if ((item.table === 'cuentas_por_pagar' || item.table === 'ctas_pagar') && item.operation === 'DELETE') {
+        // Legacy: mantener por compatibilidad con items viejos en cola
         const { error: err } = await supabase.from('cuentas_por_pagar')
           .delete()
           .match({ nro_factura: item.data.nro_factura, proveedor_id: item.data.proveedor_id })
@@ -100,13 +107,19 @@ export async function processSyncQueue() {
       } else if (item.table === 'compras' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('compras').upsert([item.data], { onConflict: 'id' })
         error = err
+      } else if (item.table === 'compras' && item.operation === 'ANULAR') {
+        const { id, ...updateData } = item.data
+        const { error: err } = await supabase.from('compras').update(updateData).eq('id', id)
+        error = err
       } else if (item.table === 'compras' && item.operation === 'DELETE') {
+        // Legacy: mantener por compatibilidad con items viejos en cola
         const { error: err } = await supabase.from('compras').delete().eq('id', item.data.id)
         error = err
       } else if (item.table === 'compra_items' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('compra_items').upsert([item.data], { onConflict: 'id' })
         error = err
       } else if (item.table === 'compra_items' && item.operation === 'DELETE') {
+        // Legacy: mantener por compatibilidad con items viejos en cola
         const { error: err } = await supabase.from('compra_items').delete().eq('compra_id', item.data.compra_id)
         error = err
       } else if (item.table === 'cotizaciones' && item.operation === 'INSERT') {
@@ -651,16 +664,31 @@ export async function syncComprasFromSupabase() {
 
     for (const c of compras) {
       const existe = await db.compras
-        .where('nro_factura').equals(c.nro_factura)
-        .and(r => String(r.proveedor_id) === String(c.proveedor_id))
+        .where('nro_factura')
+        .equals(c.nro_factura)
+        .and(r => 
+          c.proveedor_uuid 
+          ? r.proveedor_uuid === c.proveedor_uuid
+          : true
+        )
         .first()
+
+      const nombreProv = c.proveedor_nombre || c.proveedor || (await db.proveedores.get(parseInt(c.proveedor_id) || 0))?.nombre || 'Proveedor ' + c.proveedor_id
 
       if (existe) {
         compraIdMap[c.id] = existe.id
+        // Actualizamos fuerza el nombre proveniente de la nube si difiere
+        if (!existe.supabase_id || existe.proveedor_nombre !== nombreProv) {
+          await db.compras.update(existe.id, { 
+            supabase_id: c.id,
+            proveedor_nombre: nombreProv
+          })
+        }
       } else {
         const { id: supabaseId, ...rest } = c
         const nuevoId = await db.compras.add({
           ...rest,
+          proveedor_nombre: nombreProv,
           supabase_id: supabaseId,
           fecha: c.fecha || c.created_at,
           total_usd: Number(c.total_usd) || 0,
@@ -834,20 +862,34 @@ export async function syncCtasPagarFromSupabase() {
 
     let insertados = 0
     for (const c of ctas) {
-      // Verificar existencia local por nro_factura + proveedor_id
+      // Verificar existencia local por nro_factura
       const existe = await db.ctas_pagar
         .where('nro_factura').equals(c.nro_factura || '')
-        .and(r => String(r.proveedor_id) === String(c.proveedor_id))
         .first()
+
+      const provNameLocal = c.proveedor_nombre || c.proveedor || (await db.proveedores.get(parseInt(c.proveedor_id) || 0))?.nombre || 'Proveedor ' + c.proveedor_id
 
       if (!existe) {
         const { id: supabaseId, ...rest } = c
         await db.ctas_pagar.add({
           ...rest,
+          proveedor: provNameLocal,
+          proveedor_nombre: provNameLocal,
           supabase_id: supabaseId,
           monto: Number(c.monto) || 0,
+          monto_pagado: Number(c.monto_pagado) || 0,
         })
         insertados++
+      } else {
+        // Actualizamos estado y proveedor si cambió
+        if (existe.estado !== c.estado || existe.proveedor !== provNameLocal) {
+          await db.ctas_pagar.update(existe.id, { 
+            supabase_id: c.id, 
+            estado: c.estado,
+            proveedor: provNameLocal,
+            proveedor_nombre: provNameLocal
+          })
+        }
       }
     }
 
@@ -879,6 +921,85 @@ export async function initInventorySync() {
     await syncCtasCobrarFromSupabase()
     await syncAbonosFromSupabase()
     await syncCtasPagarFromSupabase()
-    // Aquí agregaremos cuotas crédito
+    
+    // 🩹 Auto-rescate de registros que se quedaron atrapados localmente por errores previos
+    await autoRescueOrphans()
   }, 3000)
+}
+
+/**
+ * Busca registros en Dexie que no tienen supabase_id (atrapados localmente)
+ * y los vuelve a meter en la cola de sincronización de forma automática.
+ */
+export async function autoRescueOrphans() {
+  try {
+    // 1. Rescatar Compras "atrapadas"
+    const orphanCompras = await db.compras.filter(c => !c.supabase_id && c.nro_factura).toArray()
+    
+    if (orphanCompras.length > 0) {
+      console.log(`🩹 [AutoRescue] Rescatando ${orphanCompras.length} compras sin sync...`)
+      for (const c of orphanCompras) {
+        const syncCompraId = `compra-${c.nro_factura}-${c.proveedor_id}-${Date.now()}`
+        
+        // Actualizar local con el ID que usaremos en la nube
+        await db.compras.update(c.id, { supabase_id: syncCompraId })
+        
+        // Meter en cola
+        await addToSyncQueue('compras', 'INSERT', { 
+          ...c, 
+          id: syncCompraId, 
+          total_usd: Number(c.total_usd) || 0,
+          created_at: c.fecha || new Date().toISOString()
+        })
+        
+        // Rescatar items de esa compra
+        const items = await db.compra_items.where('compra_id').equals(c.id).toArray()
+        for (const it of items) {
+          const syncItemId = `item-${syncCompraId}-${it.id}`
+          await addToSyncQueue('compra_items', 'INSERT', {
+            ...it,
+            id: syncItemId,
+            compra_id: syncCompraId,
+            qty: Number(it.qty) || 0,
+            costo_unit: Number(it.costo_unit) || 0
+          })
+        }
+      }
+    }
+
+    // 2. Rescatar Cuentas por Pagar "atrapadas"
+    const orphanCtas = await db.ctas_pagar.filter(c => !c.supabase_id && c.nro_factura).toArray()
+    if (orphanCtas.length > 0) {
+      console.log(`🩹 [AutoRescue] Rescatando ${orphanCtas.length} CxP sin sync...`)
+      for (const c of orphanCtas) {
+        const syncCtaId = `ctag-pagar-${c.nro_factura}-${c.proveedor_id}-${Date.now()}`
+        
+        // Buscar nombre del proveedor si no lo tiene
+        let provName = c.proveedor_nombre || c.proveedor
+        if (!provName && c.proveedor_id) {
+          const p = await db.proveedores.get(parseInt(c.proveedor_id))
+          provName = p?.nombre || 'PROVEEDOR #' + c.proveedor_id
+        }
+
+        await db.ctas_pagar.update(c.id, { supabase_id: syncCtaId, proveedor_nombre: provName, proveedor: provName })
+        
+        await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
+          ...c,
+          id: syncCtaId,
+          proveedor: provName,
+          proveedor_nombre: provName,
+          monto: Number(c.monto) || 0,
+          monto_total: Number(c.monto) || 0,
+          monto_pagado: Number(c.monto_pagado) || 0,
+          ultima_actualizacion: new Date().toISOString()
+        })
+      }
+    }
+
+    if (orphanCompras.length > 0 || orphanCtas.length > 0) {
+      processSyncQueue()
+    }
+  } catch (err) {
+    console.error('❌ Error en autoRescueOrphans:', err)
+  }
 }

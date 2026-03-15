@@ -49,6 +49,10 @@ db.version(17).stores({
   ctas_pagar: '++id, proveedor, monto, fecha, estado, vencimiento, proveedor_id, nro_factura, motivo_anulacion, autorizado_por'
 })
 
+db.version(18).stores({
+  proveedores: '++id, rif, nombre, proveedor_uuid, estado, motivo_inactivacion, fecha_inactivacion, inactivado_por'
+})
+
 // Seed config por defecto
 db.on('ready', async () => {
   // Inicializar Admin si no hay usuarios
@@ -148,4 +152,8 @@ export async function nextNro(clave) {
   const current = r?.valor ?? 1
   await db.config.put({ clave, valor: current + 1 })
   return String(current).padStart(6, '0')
+}
+// Exponer DB globalmente para tareas de mantenimiento vía consola
+if (typeof window !== 'undefined') {
+  window.db = db
 }

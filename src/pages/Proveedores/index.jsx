@@ -38,16 +38,32 @@ export default function Proveedores() {
 
     try {
       const payload = { ...form }
+      let uuidAUsar = form.proveedor_uuid || '';
+
       if (editing) {
-        await db.proveedores.update(editing, payload)
-        toast('Proveedor actualizado localmente')
+        if (!form.proveedor_uuid) {
+          uuidAUsar = crypto.randomUUID()
+          await db.proveedores.update(editing, {
+            ...payload,
+            proveedor_uuid: uuidAUsar
+          })
+          toast('Proveedor actualizado localmente (UUID generado)')
+        } else {
+          await db.proveedores.update(editing, payload)
+          toast('Proveedor actualizado localmente')
+        }
       } else {
-        await db.proveedores.add(payload)
+        uuidAUsar = crypto.randomUUID()
+        await db.proveedores.add({
+          ...payload,
+          proveedor_uuid: uuidAUsar
+        })
         toast('Proveedor agregado localmente')
       }
 
       // ☁️ SYNC A SUPABASE (VIA COLA)
       await addToSyncQueue('proveedores', 'INSERT', {
+        proveedor_uuid: uuidAUsar,
         rif: payload.rif.trim(),
         nombre: payload.nombre.trim(),
         contacto: payload.contacto,

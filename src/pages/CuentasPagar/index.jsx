@@ -31,8 +31,8 @@ export default function CuentasPagar() {
     if (!cuentasRaw) return []
     const result = []
     for (const c of cuentasRaw) {
-      let provName = c.proveedor
-      if (c.proveedor_id && !provName) {
+      let provName = c.proveedor_nombre || c.proveedor
+      if (!provName && c.proveedor_id) {
         const p = proveedores?.find(x => x.id === parseInt(c.proveedor_id))
         provName = p?.nombre || 'Proveedor #' + c.proveedor_id
       }
@@ -236,15 +236,6 @@ export default function CuentasPagar() {
                     <td className="py-3 px-4">
                       <div className="font-black text-[var(--text-main)] text-xs uppercase tracking-tight flex items-center gap-2">
                         {c.proveedorLabel}
-                        {c.nro_factura && (
-                          <button
-                            onClick={() => handleViewCompra(c)}
-                            className="w-5 h-5 flex items-center justify-center bg-[var(--teal4)] text-[var(--teal)] rounded hover:bg-[var(--teal)] hover:text-white transition-all shadow-sm"
-                            title="Ver Factura Original"
-                          >
-                            <span className="material-icons-round text-[10px]">receipt</span>
-                          </button>
-                        )}
                       </div>
                       {pagos.length > 0 && (
                         <div className="text-[8px] font-black text-[var(--red-var)] uppercase tracking-widest mt-0.5">{pagos.length} PAGOS REALIZADOS</div>
@@ -265,13 +256,26 @@ export default function CuentasPagar() {
                         {venc && c.estado !== 'PAGADA' ? 'VENCIDA' : c.estado}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      {c.estado !== 'PAGADA' && (
-                        <button className="btn bg-[var(--red-var)] text-white !py-1.5 !px-4 font-black text-[10px] transition-none shadow-[var(--win-shadow)] cursor-pointer uppercase inline-flex items-center gap-2" onClick={() => { setPago(c); setMontoPago(pendiente.toFixed(2)) }}>
-                          <span className="material-icons-round text-sm">payments</span>
-                          <span>PAGAR</span>
-                        </button>
-                      )}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-end gap-2">
+                        {c.nro_factura && (
+                          <button
+                            onClick={() => handleViewCompra(c)}
+                            className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--teal)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)] cursor-pointer"
+                            title="Ver Factura Original"
+                          >
+                            <span className="material-icons-round text-sm">visibility</span>
+                          </button>
+                        )}
+                        {c.estado !== 'PAGADA' ? (
+                          <button className="btn bg-[var(--red-var)] text-white !py-1.5 !px-4 h-8 font-black text-[10px] transition-none shadow-[var(--win-shadow)] cursor-pointer uppercase inline-flex items-center gap-2" onClick={() => { setPago(c); setMontoPago(pendiente.toFixed(2)) }}>
+                            <span className="material-icons-round text-sm">payments</span>
+                            <span>PAGAR</span>
+                          </button>
+                        ) : (
+                          c.nro_factura ? null : <span className="opacity-0 w-8 h-8"></span> 
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
