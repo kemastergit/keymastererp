@@ -30,6 +30,13 @@ export default function Inventario() {
   const [delId, setDelId] = useState(null)
   const [ajuste, setAjuste] = useState(null) // { art, qty, motivo }
   const [syncing, setSyncing] = useState(false)
+  const [showFilterModal, setShowFilterModal] = useState(false)
+  const [advFilters, setAdvFilters] = useState({
+    stockMin: '', stockMax: '', onlyInStock: false,
+    brands: [], priceMin: '', priceMax: '',
+    letter: '',
+    columns: { codigo: true, descripcion: true, marca: true, departamento: true, stock: true, precio: true }
+  })
 
   const articulos = useLiveQuery(
     async () => {
@@ -89,8 +96,6 @@ export default function Inventario() {
       if (!ok) return
     }
 
-    // 1. Guardado Local (Dexie)
-    let recordId = editing;
     if (editing) {
       const oldArt = await db.articulos.get(editing)
       await db.articulos.update(editing, processedForm)
@@ -101,7 +106,7 @@ export default function Inventario() {
         old_value: oldArt, new_value: { ...processedForm, id: editing }
       })
     } else {
-      recordId = await db.articulos.add(processedForm)
+      const recordId = await db.articulos.add(processedForm)
       logAction(currentUser, 'PRODUCTO_CREADO', {
         table_name: 'articulos', record_id: recordId,
         new_value: { ...processedForm, id: recordId }
@@ -280,6 +285,10 @@ export default function Inventario() {
               <span className="material-icons-round text-sm">{filter === 'agotados' ? 'filter_list_off' : 'error'}</span>
               <span>{filter === 'agotados' ? 'MOSTRAR TODO' : 'SIN STOCK'}</span>
             </button>
+            <button className="btn btn-sm bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)] flex items-center gap-2 cursor-pointer" onClick={() => setShowFilterModal(true)}>
+              <span className="material-icons-round text-sm">filter_alt</span>
+              <span>FILTROS / REPORTES</span>
+            </button>
             <button className="btn btn-sm bg-[var(--teal)] text-white cursor-pointer uppercase text-[10px] tracking-widest" onClick={openNew}>
               <span className="material-icons-round text-sm">add_box</span>
               <span>ALTA DE PRODUCTO</span>
@@ -404,7 +413,7 @@ export default function Inventario() {
                 </tr>
               ))}
               {articulos.length === 0 && (
-                <tr><td colSpan={10} className="text-center text-[var(--text2)] py-24 tracking-widest text-[11px] font-black uppercase opacity-40 italic border-t-2 border-dashed border-[var(--border-var)]">No se localizaron SKU's en los registros de almacén</td></tr>
+                <tr><td colSpan={10} className="text-center text-[var(--text2)] py-24 tracking-widest text-[11px] font-black uppercase opacity-40 italic border-t-2 border-dashed border-[var(--border-var)]">No se localizaron SKUs en los registros de almacén</td></tr>
               )}
             </tbody>
           </table>
@@ -560,6 +569,177 @@ export default function Inventario() {
 
       <Confirm open={!!delId} onClose={() => setDelId(null)} onConfirm={del}
         msg="¿Está seguro de eliminar este producto del inventario? Esta acción no se puede deshacer." danger />
+
+      {/* MODAL DE FILTROS AVANZADOS Y REPORTES */}
+      <Modal open={showFilterModal} onClose={() => setShowFilterModal(false)} title="REPORTE DE ALMACÉN" wide={false}>
+        <div className="space-y-4 max-w-sm mx-auto">
+          
+          <div className="bg-[var(--surfaceDark)] p-4 border border-[var(--border-var)] shadow-inner space-y-4">
+            
+            {/* SECCIÓN STOCK - VERTICAL Y MÁS PEQUEÑO */}
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--teal)] mb-2 flex items-center gap-2">
+                <span className="material-icons-round text-xs">inventory_2</span> EXISTENCIAS
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-[8px] font-black uppercase opacity-60 block mb-1">MIN</label>
+                  <input type="number" className="inp !py-1.5 text-center font-mono text-xs" value={advFilters.stockMin} onChange={e => setAdvFilters(p => ({ ...p, stockMin: e.target.value }))} placeholder="0" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[8px] font-black uppercase opacity-60 block mb-1">MAX</label>
+                  <input type="number" className="inp !py-1.5 text-center font-mono text-xs" value={advFilters.stockMax} onChange={e => setAdvFilters(p => ({ ...p, stockMax: e.target.value }))} placeholder="999" />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer group">
+                <input type="checkbox" className="w-3 h-3 accent-[var(--teal)]" checked={advFilters.onlyInStock} onChange={e => setAdvFilters(p => ({ ...p, onlyInStock: e.target.checked }))} />
+                <span className="text-[9px] font-black uppercase tracking-tighter opacity-70 group-hover:opacity-100">SOLO CON STOCK</span>
+              </label>
+            </div>
+
+            <div className="h-px bg-[var(--border-var)] opacity-30"></div>
+
+            {/* SECCIÓN PRECIOS - VERTICAL */}
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--teal)] mb-2 flex items-center gap-2">
+                <span className="material-icons-round text-xs">monetization_on</span> RANGO PRECIOS ($)
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input type="number" className="inp !py-1.5 text-center font-mono text-xs" value={advFilters.priceMin} onChange={e => setAdvFilters(p => ({ ...p, priceMin: e.target.value }))} placeholder="MIN $" />
+                </div>
+                <div className="flex-1">
+                  <input type="number" className="inp !py-1.5 text-center font-mono text-xs" value={advFilters.priceMax} onChange={e => setAdvFilters(p => ({ ...p, priceMax: e.target.value }))} placeholder="MAX $" />
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-[var(--border-var)] opacity-30"></div>
+
+            {/* SECCIÓN ALFABETO - DESPLEGABLE */}
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--teal)] mb-2 flex items-center gap-2">
+                <span className="material-icons-round text-xs">sort_by_alpha</span> FILTRAR POR INICIAL
+              </p>
+              <select 
+                className="inp !py-1.5 font-black text-xs uppercase cursor-pointer"
+                value={advFilters.letter} 
+                onChange={e => setAdvFilters(p => ({ ...p, letter: e.target.value }))}
+              >
+                <option value="">TODAS LAS LETRAS (A-Z)</option>
+                {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'].map(l => (
+                  <option key={l} value={l}>INICIAL: {l}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="h-px bg-[var(--border-var)] opacity-30"></div>
+
+            {/* COLUMNAS - MÁS COMPACTO */}
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text2)] mb-2 opacity-60">COLUMNAS EN REPORTE</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {Object.keys(advFilters.columns).map(col => (
+                  <label key={col} className="flex items-center gap-1.5 cursor-pointer group">
+                    <input type="checkbox" className="w-2.5 h-2.5 accent-[var(--teal)]" 
+                      checked={advFilters.columns[col]} 
+                      onChange={e => setAdvFilters(p => ({ ...p, columns: { ...p.columns, [col]: e.target.checked } }))} 
+                    />
+                    <span className="text-[8px] font-black uppercase tracking-tighter opacity-70 group-hover:opacity-100">{col}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-var)]">
+            <button className="btn bg-[var(--teal)] text-white justify-center py-3 font-black uppercase text-[10px] transition-none shadow-[var(--win-shadow)] cursor-pointer tracking-widest w-full" onClick={async () => {
+              // Lógica de generación de reporte
+              const all = await db.articulos.orderBy('descripcion').toArray()
+              const filtered = all.filter(a => {
+                const s = a.stock || 0
+                const p = a.precio || 0
+                const d = a.descripcion?.toUpperCase() || ''
+                
+                if (advFilters.onlyInStock && s <= 0) return false
+                if (advFilters.stockMin !== '' && s < parseInt(advFilters.stockMin)) return false
+                if (advFilters.stockMax !== '' && s > parseInt(advFilters.stockMax)) return false
+                if (advFilters.priceMin !== '' && p < parseFloat(advFilters.priceMin)) return false
+                if (advFilters.priceMax !== '' && p > parseFloat(advFilters.priceMax)) return false
+                if (advFilters.letter !== '' && !d.startsWith(advFilters.letter)) return false
+                return true
+              })
+
+              if (filtered.length === 0) {
+                toast('No hay productos que coincidan', 'warn')
+                return
+              }
+
+              const win = window.open('', '_blank')
+              const rows = filtered.map(a => `
+                <tr style="border-bottom: 1px solid #eee; font-size: 10px;">
+                  ${advFilters.columns.codigo ? `<td style="padding: 4px;">${a.codigo}</td>` : ''}
+                  ${advFilters.columns.descripcion ? `<td style="padding: 4px; font-weight: bold;">${a.descripcion}</td>` : ''}
+                  ${advFilters.columns.marca ? `<td style="padding: 4px;">${a.marca || '-'}</td>` : ''}
+                  ${advFilters.columns.departamento ? `<td style="padding: 4px;">${a.departamento || '-'}</td>` : ''}
+                  ${advFilters.columns.stock ? `<td style="padding: 4px; text-align: center;">${a.stock}</td>` : ''}
+                  ${advFilters.columns.precio ? `<td style="padding: 4px; text-align: right;">$${fmtUSD(a.precio)}</td>` : ''}
+                </tr>
+              `).join('')
+
+              win.document.write(`
+                <html>
+                  <head>
+                    <title>INVENTARIO - ${new Date().toLocaleDateString()}</title>
+                    <style>
+                      body { font-family: Inter, sans-serif; padding: 20px; color: #1e293b; }
+                      header { border-bottom: 3px solid #14b8a6; padding-bottom: 10px; margin-bottom: 20px; }
+                      table { width: 100%; border-collapse: collapse; }
+                      th { background: #f8fafc; text-align: left; font-size: 9px; text-transform: uppercase; padding: 8px; border-bottom: 2px solid #e2e8f0; }
+                      .footer { margin-top: 30px; font-size: 8px; text-align: center; opacity: 0.5; text-transform: uppercase; }
+                    </style>
+                  </head>
+                  <body>
+                    <header>
+                      <h1 style="margin: 0; font-size: 18px;">KEYMASTER ERP - INVENTARIO</h1>
+                      <div style="font-size: 9px; opacity: 0.7;">REPORTE GENERADO EL ${new Date().toLocaleString()}</div>
+                      <div style="font-size: 9px; margin-top: 5px;">FILTROS: ${filtered.length} SKUS ENCONTRADOS</div>
+                    </header>
+                    <table>
+                      <thead>
+                        <tr>
+                          ${advFilters.columns.codigo ? '<th>CÓDIGO</th>' : ''}
+                          ${advFilters.columns.descripcion ? '<th>DESCRIPCIÓN</th>' : ''}
+                          ${advFilters.columns.marca ? '<th>MARCA</th>' : ''}
+                          ${advFilters.columns.departamento ? '<th>CATEGORÍA</th>' : ''}
+                          ${advFilters.columns.stock ? '<th style="text-align: center;">STOCK</th>' : ''}
+                          ${advFilters.columns.precio ? '<th style="text-align: right;">PRECIO</th>' : ''}
+                        </tr>
+                      </thead>
+                      <tbody>${rows}</tbody>
+                    </table>
+                    <div class="footer">Este documento es una consulta de inventario para fines de auditoría interna.</div>
+                  </body>
+                </html>
+              `)
+              win.document.close()
+              win.print()
+              setShowFilterModal(false)
+            }}>
+              <span className="material-icons-round text-base">print</span>
+              <span>GENERAR REPORTE</span>
+            </button>
+            <button className="btn bg-[var(--surfaceDark)] text-[var(--text-main)] justify-center py-2 font-black uppercase text-[9px] transition-none cursor-pointer" onClick={() => {
+              setAdvFilters({
+                stockMin: '', stockMax: '', onlyInStock: false,
+                brands: [], priceMin: '', priceMax: '', letter: '',
+                columns: { codigo: true, descripcion: true, marca: true, departamento: true, stock: true, precio: true }
+              })
+            }}>RESETEAR FILTROS</button>
+          </div>
+        </div>
+      </Modal>
     </div >
   )
 }

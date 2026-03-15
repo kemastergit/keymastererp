@@ -131,6 +131,104 @@ export default function ComprasHistorial() {
         }
     }
 
+    const handlePrint = async (compra) => {
+        let items = []
+        try {
+            items = await db.compra_items.where('compra_id').equals(compra.id).toArray()
+            for (let i = 0; i < items.length; i++) {
+                const art = await db.articulos.get(items[i].articulo_id)
+                items[i].descripcion = items[i].descripcion || art?.descripcion || 'S/D'
+                items[i].codigo = items[i].codigo || art?.codigo || 'S/C'
+            }
+        } catch (e) { console.error(e) }
+
+        const win = window.open('', '_blank')
+        const rows = items.map(it => `
+            <tr style="border-bottom: 1px solid #eee; font-size: 11px;">
+                <td style="padding: 6px; font-family: monospace;">${it.codigo}</td>
+                <td style="padding: 6px; font-weight: bold; text-transform: uppercase;">${it.descripcion}</td>
+                <td style="padding: 6px; text-align: center;">${it.qty}</td>
+                <td style="padding: 6px; text-align: right;">$${fmtUSD(it.costo_unit)}</td>
+                <td style="padding: 6px; text-align: right;">$${fmtUSD(it.qty * it.costo_unit)}</td>
+            </tr>
+        `).join('')
+
+        win.document.write(`
+            <html>
+                <head>
+                    <title>RECEPCION_${compra.nro_factura}</title>
+                    <style>
+                        body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1e293b; }
+                        header { border-bottom: 4px solid #0f172a; padding-bottom: 15px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
+                        h1 { margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: -1px; }
+                        .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; margin-bottom: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+                        .label { font-size: 9px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+                        .val { font-size: 12px; font-weight: 700; text-transform: uppercase; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+                        th { background: #0f172a; color: white; text-align: left; font-size: 10px; text-transform: uppercase; padding: 10px; }
+                        .footer-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 100px; margin-top: 80px; text-align: center; }
+                        .signature { border-top: 1px solid #000; padding-top: 10px; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+                    </style>
+                </head>
+                <body>
+                    <header>
+                        <div>
+                            <h1>Comprobante de Recepción</h1>
+                            <div style="font-size: 10px; font-weight: bold; margin-top: 5px; color: #64748b;">KEYMASTER ERP - CONTROL DE ALMACÉN</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 10px; font-weight: 900;">FECHA EMISIÓN</div>
+                            <div style="font-size: 12px; font-weight: 700;">${new Date().toLocaleDateString()}</div>
+                        </div>
+                    </header>
+
+                    <div class="meta-box">
+                        <div>
+                            <div class="label">Proveedor</div>
+                            <div class="val">${compra.proveedor}</div>
+                        </div>
+                        <div>
+                            <div class="label">Nº Factura de Origen</div>
+                            <div class="val">${compra.nro_factura}</div>
+                        </div>
+                        <div>
+                            <div class="label">Fecha Factura</div>
+                            <div class="val">${fmtDate(compra.fecha)}</div>
+                        </div>
+                        <div>
+                            <div class="label">Total Recibido</div>
+                            <div class="val" style="color: #0d9488;">$ ${fmtUSD(compra.total_usd)}</div>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Código</th>
+                                <th style="width: 45%;">Descripción del Producto</th>
+                                <th style="width: 10%; text-align: center;">Cant.</th>
+                                <th style="width: 15%; text-align: right;">Costo Unit.</th>
+                                <th style="width: 15%; text-align: right;">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+
+                    <div style="text-align: right; font-size: 14px; font-weight: 900;">
+                        TOTAL DE CARGA: $ ${fmtUSD(compra.total_usd)}
+                    </div>
+
+                    <div class="footer-grid">
+                        <div class="signature">RECIBIDO POR (ALMACÉN)</div>
+                        <div class="signature">AUTORIZADO POR (ADMIN)</div>
+                    </div>
+                </body>
+            </html>
+        `)
+        win.document.close()
+        win.print()
+    }
+
     return (
         <div className="space-y-6 max-w-6xl mx-auto pb-10 mt-6 px-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -195,16 +293,25 @@ export default function ComprasHistorial() {
                                                 <span className="material-icons-round text-sm">visibility</span>
                                             </button>
                                             {c.estado !== 'ANULADA' && (
-                                                <button
-                                                    onClick={() => {
-                                                        const { askAdmin } = useStore.getState()
-                                                        askAdmin(() => setAnulando(c))
-                                                    }}
-                                                    className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--red-var)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
-                                                    title="Anular Compra"
-                                                >
-                                                    <span className="material-icons-round text-sm">block</span>
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            const { askAdmin } = useStore.getState()
+                                                            askAdmin(() => setAnulando(c))
+                                                        }}
+                                                        className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--red-var)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
+                                                        title="Anular Compra"
+                                                    >
+                                                        <span className="material-icons-round text-sm">block</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handlePrint(c)}
+                                                        className="w-8 h-8 flex items-center justify-center bg-[var(--surfaceDark)] hover:bg-[var(--text-main)] hover:text-white transition-all shadow-[var(--win-shadow)] border border-[var(--border-var)]"
+                                                        title="Imprimir Comprobante"
+                                                    >
+                                                        <span className="material-icons-round text-sm">print</span>
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -292,6 +399,13 @@ export default function ComprasHistorial() {
                         </div>
 
                         <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => handlePrint(selectedCompra)}
+                                className="btn bg-[var(--teal)] text-white !px-8 !py-3 font-black text-xs uppercase flex items-center gap-2"
+                            >
+                                <span className="material-icons-round text-sm">print</span>
+                                <span>IMPRIMIR COMPROBANTE</span>
+                            </button>
                             <button
                                 onClick={() => setSelectedCompra(null)}
                                 className="btn bg-[var(--surfaceDark)] !px-8 !py-3 font-black text-xs uppercase"
