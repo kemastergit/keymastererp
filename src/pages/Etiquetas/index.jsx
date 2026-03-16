@@ -6,17 +6,13 @@ import EtiquetaDespacho from '../../components/Etiqueta/EtiquetaDespacho'
 import { useReactToPrint } from 'react-to-print'
 
 export default function EtiquetasPage() {
-    const { configEmpresa, tasa, toast } = useStore()
+    const { configEmpresa, tasa } = useStore()
     const [articulos, setArticulos] = useState([])
     const [search, setSearch] = useState('')
     const [selected, setSelected] = useState([]) // { item, qty, type }
     const [labelType, setLabelType] = useState('PRECIO')
 
     const componentRef = useRef()
-
-    useEffect(() => {
-        loadArticulos()
-    }, [search])
 
     const loadArticulos = async () => {
         let query = db.articulos
@@ -30,6 +26,10 @@ export default function EtiquetasPage() {
         const data = await query.toArray() // Removed limit to show full inventory
         setArticulos(data)
     }
+
+    useEffect(() => {
+        loadArticulos()
+    }, [search])
 
     const handleSelect = (art) => {
         const exists = selected.find(s => s.item.id === art.id)
@@ -60,26 +60,6 @@ export default function EtiquetasPage() {
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] md:h-full p-3 md:p-8 animate-fade-in overflow-hidden lg:overflow-hidden">
-            <header className="mb-4 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-slate-900/50 p-6 rounded-[2rem] border border-slate-800 shadow-2xl">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3 tracking-tighter uppercase leading-none">
-                        <span className="text-red-600">🏷️</span> ETIQUETADO DE <span className="text-red-500">MERCANCÍA</span>
-                    </h1>
-                    <p className="text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-widest mt-2 opacity-80">GENERACIÓN DE ETIQUETAS TÉRMICAS Y DE DESPACHO</p>
-                </div>
-
-                <div className="flex gap-2 shrink-0">
-                    <button
-                        onClick={handlePrint}
-                        disabled={selected.length === 0}
-                        className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 disabled:bg-gray-800 text-white text-[11px] md:text-sm font-black uppercase tracking-widest py-3 px-6 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"
-                    >
-                        <span className="material-icons-round text-base">print</span>
-                        IMPRIMIR ({labelsToPrint.length})
-                    </button>
-                </div>
-            </header>
-
             <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-2 gap-4 md:gap-8 pb-4 overflow-hidden">
                 {/* Selector de Productos */}
                 <div className="bg-[#0a0a0a] border border-gray-800 p-4 md:p-6 rounded-[2rem] shadow-2xl flex flex-col h-[400px] lg:h-full min-h-0 transition-all hover:shadow-red-900/5">
@@ -139,7 +119,17 @@ export default function EtiquetasPage() {
 
                 {/* Lista de Selección & Preview */}
                 <div className="bg-[#0a0a0a] border border-gray-800 p-4 md:p-6 rounded-[2rem] shadow-2xl flex flex-col h-[500px] lg:h-full min-h-0 transition-all hover:shadow-red-900/5">
-                    <h2 className="text-xs md:text-sm font-black text-white uppercase tracking-widest mb-4 shrink-0">2. Cantidades y Vista Previa</h2>
+                    <div className="flex items-center justify-between mb-4 shrink-0">
+                        <h2 className="text-xs md:text-sm font-black text-white uppercase tracking-widest">2. Cantidades y Vista Previa</h2>
+                        <button
+                            onClick={handlePrint}
+                            disabled={selected.length === 0}
+                            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-800 text-white text-[10px] md:text-[11px] font-black uppercase tracking-widest py-2 px-4 rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+                        >
+                            <span className="material-icons-round text-sm md:text-base">print</span>
+                            IMPRIMIR ({labelsToPrint.length})
+                        </button>
+                    </div>
 
                     <div className="flex-1 min-h-0 space-y-2 overflow-y-auto mb-4 pr-1 custom-scrollbar">
                         {selected.length === 0 ? (
@@ -149,29 +139,30 @@ export default function EtiquetasPage() {
                             </div>
                         ) : (
                             selected.map(s => (
-                                <div key={s.item.id} className="bg-black p-3 border border-gray-900 rounded-xl flex items-center justify-between animate-in slide-in-from-right-4 duration-300">
-                                    <div className="flex flex-col max-w-[50%] min-w-0">
-                                        <span className="text-[10px] font-black text-white uppercase truncate">{s.item.descripcion}</span>
-                                        <div className="flex gap-2">
-                                            <span className="text-[8px] font-bold text-gray-600 uppercase truncate">{s.item.codigo}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); handleSelect(s.item) }} className="text-[8px] font-bold text-red-500 uppercase underline">Quitar</button>
+                                <div key={s.item.id} className="bg-black p-3 md:p-4 border border-gray-900 rounded-xl flex items-center justify-between gap-3 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="flex flex-col flex-1 min-w-0 pr-2">
+                                        <span className="text-[11px] font-black text-white uppercase truncate" title={s.item.descripcion}>{s.item.descripcion}</span>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[9px] font-bold text-gray-500 uppercase truncate">{s.item.codigo}</span>
+                                            <span className="text-gray-800">|</span>
+                                            <button onClick={(e) => { e.stopPropagation(); handleSelect(s.item) }} className="text-[9px] font-black text-red-500 hover:text-red-400 uppercase transition-colors">QUITAR</button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center shrink-0">
                                         <div className="flex items-center bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); updateQty(s.item.id, s.qty - 1) }}
-                                                className="w-8 h-8 flex items-center justify-center hover:bg-red-600 text-white transition-all font-black text-lg"
+                                                className="w-10 h-10 flex items-center justify-center hover:bg-red-600 text-white transition-all font-black text-lg"
                                             >-</button>
                                             <input
                                                 type="number"
                                                 value={s.qty}
                                                 onChange={(e) => updateQty(s.item.id, parseInt(e.target.value) || 1)}
-                                                className="w-8 bg-transparent text-center text-white text-[11px] font-black outline-none"
+                                                className="w-12 bg-transparent text-center text-white text-[13px] font-black outline-none"
                                             />
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); updateQty(s.item.id, s.qty + 1) }}
-                                                className="w-8 h-8 flex items-center justify-center hover:bg-red-600 text-white transition-all font-black text-lg"
+                                                className="w-10 h-10 flex items-center justify-center hover:bg-red-600 text-white transition-all font-black text-lg"
                                             >+</button>
                                         </div>
                                     </div>

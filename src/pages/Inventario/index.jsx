@@ -217,46 +217,6 @@ export default function Inventario() {
     }
   }
 
-  const handleSincronizarNube = async () => {
-    if (!confirm(`🚨 ¿Sincronizar ${articulos.length} productos con la NUBE?\n\nEsto actualizará el inventario global para todos los vendedores.`)) return
-
-    setSyncing(true)
-    toast('🚀 Iniciando sincronización masiva...', 'info')
-
-    try {
-      const allLocal = await db.articulos.toArray()
-      const cleanData = allLocal.map(a => ({
-        codigo: String(a.codigo || '').trim(),
-        referencia: String(a.referencia || '').trim(),
-        descripcion: String(a.descripcion || 'SIN DESCRIPCION').trim(),
-        marca: String(a.marca || 'S/M').trim(),
-        departamento: String(a.departamento || 'GENERAL').trim(),
-        sub_depto: String(a.sub_depto || '').trim(),
-        stock: parseFloat(a.stock) || 0,
-        precio: parseFloat(a.precio) || 0,
-        costo: parseFloat(a.costo) || 0,
-        proveedor: String(a.proveedor || '').trim(),
-        unidad: String(a.unidad || 'UNI').trim(),
-        activo: a.activo !== false,
-        mostrar_en_web: a.mostrar_en_web !== false
-      }))
-
-      const batchSize = 100
-      for (let i = 0; i < cleanData.length; i += batchSize) {
-        const batch = cleanData.slice(i, i + batchSize)
-        const { error } = await supabase.from('articulos').upsert(batch, { onConflict: 'codigo' })
-        if (error) throw error
-      }
-
-      toast('✅ ¡INVENTARIO SINCRONIZADO EN LA NUBE!', 'ok')
-    } catch (err) {
-      console.error('Error en sync:', err)
-      toast('❌ Error en sincronización: ' + err.message, 'error')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const val = (v) => v && v.trim() !== '' ? v : <span className="text-slate-200">—</span>
 
@@ -269,16 +229,7 @@ export default function Inventario() {
             <p className="text-[9px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS</p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              disabled={syncing}
-              className={`btn btn-sm transition-all flex items-center gap-2 cursor-pointer
-                ${syncing ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white border-transparent hover:bg-blue-700'}`}
-              onClick={handleSincronizarNube}>
-              <span className={`material-icons-round text-sm ${syncing ? 'animate-spin' : ''}`}>
-                {syncing ? 'sync' : 'cloud_upload'}
-              </span>
-              <span>{syncing ? 'SINCRONIZANDO...' : 'SINCRONIZAR NUBE'}</span>
-            </button>
+
             <button className={`btn btn-sm flex items-center gap-2 cursor-pointer
                 ${filter === 'agotados' ? 'bg-[var(--red-var)] text-white border-transparent' : 'bg-[var(--surfaceDark)] text-[var(--text-main)] border-[var(--border-var)] hover:bg-[var(--surface2)]'}`}
               onClick={() => toggleFilter('agotados')}>

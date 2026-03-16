@@ -14,11 +14,15 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
   const [showDrawer, setShowDrawer] = useState(false)
   const [showSyncModal, setShowSyncModal] = useState(false)
 
+  const tasaOficial = useStore(s => s.tasaOficial)
+  const tasaOficialTime = useStore(s => s.tasaOficialTime)
+  const tasaTime = useStore(s => s.tasaTime)
+
   useEffect(() => {
     if (!hideTasa) loadTasa()
     loadSession()
-    fetchPedidosWeb() // Cargar pedidos iniciales
-    const int = setInterval(fetchPedidosWeb, 15000) // Refrescar cada 15s
+    fetchPedidosWeb()
+    const int = setInterval(fetchPedidosWeb, 15000)
     return () => clearInterval(int)
   }, [hideTasa])
 
@@ -30,8 +34,7 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
   }
 
   const filteredMenu = menu.map(item => {
-    if (item.perm && !check(item.perm)) return null // <-- SE AÑADIÓ ESTO PRIMERO
-
+    if (item.perm && !check(item.perm)) return null
     if (item.sub) {
       const sub = item.sub.filter(s => !s.perm || check(s.perm))
       if (sub.length === 0) return null
@@ -41,219 +44,241 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
   }).filter(Boolean)
 
   return (
-    <header className="bg-[var(--teal)] text-white shadow-md transition-all duration-300 relative overflow-hidden">
-      {/* Red Accent Top - removed for cleaner look or using tealDark */}
-      <div className="h-[2px] bg-[var(--tealDark)] w-full" />
+    <>
+      <style>{`
+        :root { --hdr-bg: #0f172a; }
+        .hdr-root {
+          background: var(--primary, #0f172a);
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .hw {
+          background: rgba(255,255,255,0.025);
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 14px;
+          transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+        .hw:hover {
+          background: rgba(255,255,255,0.05);
+          border-color: rgba(255,255,255,0.13);
+          transform: translateY(-1px);
+        }
+        .hw-accent {
+          background: rgba(56,189,248,0.04);
+          border-color: rgba(56,189,248,0.18);
+        }
+        .hw-accent:hover {
+          background: rgba(56,189,248,0.08);
+          border-color: rgba(56,189,248,0.28);
+        }
+        .hdr-pill {
+          background: rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.04);
+          border-radius: 999px;
+          padding: 5px 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .hdr-divider {
+          width: 1px;
+          height: 32px;
+          background: rgba(255,255,255,0.06);
+        }
+      `}</style>
 
-      <div className="px-4 py-3 flex items-center justify-between gap-4 max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-4 min-w-0">
-          {/* Global Menu Toggle (Mobile & Desktop) */}
-          <button
-            onClick={() => {
-              if (window.innerWidth < 768) {
-                setShowDrawer(true)
-              } else if (onToggleSidebar) {
-                onToggleSidebar()
-              }
-            }}
-            className="w-[26px] h-[26px] border border-[var(--tealDark)] rounded bg-[var(--tealDark)] flex items-center justify-center text-white hover:bg-white/10 transition-colors flex-shrink-0"
-          >
-            <span className="material-icons-round text-sm">menu</span>
-          </button>
+      <header className="hdr-root sticky top-0 z-50 text-white">
+        {/* Top red accent line */}
+        <div style={{ height: 2, background: 'linear-gradient(to right, transparent, #dc2626, transparent)' }} />
 
-          <div className="flex items-center gap-3 group cursor-pointer md:ml-1">
-            <div className="w-8 h-8 md:w-10 md:h-10 flex-shrink-0 bg-[var(--tealDark)] flex items-center justify-center border border-white/20 shadow-sm">
-              <span className="font-['IBM_Plex_Mono'] font-bold text-lg text-white">KM</span>
+        <div style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 1600, margin: '0 auto' }}>
+
+          {/* ── LEFT ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            {/* Hamburger */}
+            <button
+              onClick={() => {
+                if (window.innerWidth < 768) setShowDrawer(true)
+                else if (onToggleSidebar) onToggleSidebar()
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+              onMouseLeave={e => e.currentTarget.style.color = '#64748b'}
+              aria-label="Menu"
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M4 8h16M4 16h16" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+              </svg>
+            </button>
+
+            {/* Brand */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 36, height: 36, background: '#fff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', flexShrink: 0 }}>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontWeight: 900, fontSize: 14, color: '#0f172a', letterSpacing: '-0.05em' }}>KM</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+                <span style={{ color: '#fff', fontWeight: 900, fontSize: 13, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Keymaster</span>
+                <span style={{ color: '#475569', fontSize: 9, fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: 3 }}>Management OS</span>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h1 className="font-['IBM_Plex_Mono'] font-bold text-lg md:text-xl tracking-wide leading-tight flex items-center">
-                <span className="text-white">KEY</span>
-                <span className="text-[var(--teal3)]">MASTER</span>
-              </h1>
-              <p className="text-[9px] text-[var(--teal4)] font-bold uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1 h-1 rounded-none bg-[var(--teal3)] animate-pulse"></span>
-                <span className="hidden sm:inline">TECNOLOGÍA DE GESTIÓN</span>
-                <span className="sm:hidden">GESTIÓN</span>
-              </p>
+
+            {/* Status Pills — only xl */}
+            <div className="hidden xl:flex" style={{ alignItems: 'center', gap: 8 }}>
+              <div className="hdr-pill">
+                <span style={{ position: 'relative', display: 'flex', width: 6, height: 6 }}>
+                  {activeSession && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#10b981', opacity: 0.5, animation: 'ping 1s infinite' }} />}
+                  <span style={{ position: 'relative', width: 6, height: 6, borderRadius: '50%', background: activeSession ? '#10b981' : '#ef4444', display: 'flex' }} />
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {activeSession ? 'Caja Activa' : 'Caja Cerrada'}
+                </span>
+              </div>
+              <div className="hdr-pill">
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', display: 'flex' }} />
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cloud Sync</span>
+              </div>
             </div>
           </div>
 
-          <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 border border-white/10 bg-black/10">
-            {activeSession ? (
-              <>
-                <div className="relative">
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping absolute inset-0 opacity-75"></div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 relative"></div>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Caja</span>
-                  <span className="text-[9px] font-bold text-green-400 uppercase tracking-tighter leading-none">Abierta</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-600"></div>
-                <span className="text-[9px] font-black text-red-500 uppercase tracking-widest">Cerrada</span>
-              </div>
+          {/* ── CENTER ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, justifyContent: 'center', padding: '0 32px' }}>
+
+            {/* Sync errors */}
+            {(pendingSyncCount > 0 || syncErrorCount > 0) && (
+              <button
+                onClick={() => setShowSyncModal(true)}
+                className="hw"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', color: syncErrorCount > 0 ? '#f87171' : '#fbbf24', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', animation: syncErrorCount > 0 ? 'pulse 2s infinite' : 'none', border: syncErrorCount > 0 ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(251,191,36,0.3)' }}
+              >
+                <span className="material-icons-round" style={{ fontSize: 16 }}>{syncErrorCount > 0 ? 'error_outline' : 'cloud_upload'}</span>
+                {syncErrorCount > 0 ? `${syncErrorCount} Error` : `${pendingSyncCount} Pend.`}
+              </button>
             )}
 
-            <div className="w-[1px] h-6 bg-white/10 mx-1" />
+            {/* Pedidos */}
+            {currentUser?.rol !== 'VENDEDOR' && (
+              <a href="/pedidos-web" className="hw" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', textDecoration: 'none', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.04)', transform: 'translateY(100%)', transition: 'transform 0.3s ease', borderRadius: 14 }} className="hw-reveal" />
+                <svg width="15" height="15" fill="none" stroke="#94a3b8" viewBox="0 0 24 24" style={{ position: 'relative', zIndex: 1 }}>
+                  <path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                </svg>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.12em', position: 'relative', zIndex: 1, whiteSpace: 'nowrap' }}>Pedidos</span>
+                {pedidosWeb.length > 0 && (
+                  <span style={{ position: 'absolute', top: -6, right: -6, background: '#dc2626', color: '#fff', fontSize: 9, fontWeight: 900, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #0f172a', boxShadow: '0 0 8px rgba(220,38,38,0.6)', animation: 'pulse 2s infinite', zIndex: 2 }}>
+                    {pedidosWeb.length}
+                  </span>
+                )}
+              </a>
+            )}
 
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-xs text-cyan-400 animate-pulse">radar</span>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Radar</span>
-                <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter leading-none">Cloud</span>
-              </div>
-            </div>
+            {/* BCV Widget */}
+            {!hideTasa && (
+              <>
+                <div className="hw hidden lg:flex" style={{ alignItems: 'center', gap: 16, padding: '10px 20px', minWidth: 180 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 9, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em' }}>BCV Oficial</span>
+                      {tasaOficialTime && (
+                        <span style={{ fontSize: 8, color: '#334155', fontFamily: 'monospace' }}>
+                          {new Date(tasaOficialTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Bs.</span>
+                      <span style={{ fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em', fontFamily: 'IBM Plex Mono, monospace' }}>
+                        {tasaOficial ? parseFloat(tasaOficial).toFixed(2) : '0.00'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="material-icons-round" style={{ fontSize: 16, color: '#475569' }}>account_balance</span>
+                  </div>
+                </div>
+
+                {/* Tasa Sistema */}
+                <div
+                  className="hw hw-accent"
+                  style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 20px', minWidth: 175, cursor: currentUser?.rol === 'VENDEDOR' ? 'default' : 'pointer' }}
+                  onClick={() => {
+                    if (currentUser?.rol === 'VENDEDOR') return
+                    const edit = () => {
+                      const val = prompt('Nueva Tasa del Sistema (para cálculos):', tasa)
+                      if (val && !isNaN(parseFloat(val))) setTasa(parseFloat(val))
+                    }
+                    if (currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO') edit()
+                    else askAdmin(edit)
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 9, color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Tasa Sistema</span>
+                      {tasaTime && (
+                        <span style={{ fontSize: 8, color: 'rgba(56,189,248,0.5)', fontFamily: 'monospace' }}>
+                          {new Date(tasaTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                      <span style={{ fontSize: 12, color: 'rgba(56,189,248,0.7)', fontWeight: 500 }}>Bs.</span>
+                      <span style={{ fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: '-0.03em', fontFamily: 'IBM Plex Mono, monospace' }}>
+                        {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span className="material-icons-round" style={{ fontSize: 16, color: '#38bdf8' }}>currency_exchange</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* PWA Install */}
+            {canInstall && !isInstalled && (
+              <button onClick={install} className="hw" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', color: '#67e8f9', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', border: '1px solid rgba(103,232,249,0.2)', background: 'rgba(103,232,249,0.05)' }}>
+                <span className="material-icons-round" style={{ fontSize: 16, animation: 'bounce 1s infinite' }}>install_desktop</span>
+                Instalar
+              </button>
+            )}
           </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          {/* BANDEJA DE SALIDA (PENDIENTES NUBE) */}
-          {(pendingSyncCount > 0 || syncErrorCount > 0) && (
-            <button 
-              onClick={() => setShowSyncModal(true)}
-              className={`flex items-center gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border ${syncErrorCount > 0 ? 'bg-red-500/10 border-red-500/30 text-red-500 animate-pulse' : 'bg-amber-500/10 border-amber-500/30 text-amber-500'}`}
-            >
-              <span className="material-icons-round text-xs md:text-sm">
-                {syncErrorCount > 0 ? 'error_outline' : 'cloud_upload'}
-              </span>
-              <div className="flex flex-col text-left">
-                <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest leading-none ${syncErrorCount > 0 ? 'text-red-400' : 'text-amber-600'}`}>
-                  {syncErrorCount > 0 ? 'Error Sync' : 'Pendientes'}
-                </span>
-                <span className={`text-[9px] md:text-[10px] font-bold leading-none ${syncErrorCount > 0 ? 'text-red-500 font-mono scale-110 ml-0.5' : 'text-amber-500'}`}>
-                  {syncErrorCount > 0 ? `${syncErrorCount}` : pendingSyncCount}
-                </span>
-              </div>
-            </button>
-          )}
-
-          {/* Acceso directo a Pedidos en Línea - solo desktop */}
-          {currentUser?.rol !== 'VENDEDOR' && (
-            <a
-              href="/pedidos-web"
-              className="relative hidden md:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 text-white hover:bg-white/10 transition-all rounded-lg"
-            >
-              <span className="material-icons-round text-lg">shopping_cart_checkout</span>
-              <span className="text-[9px] font-black uppercase tracking-widest">Pedidos</span>
-              {pedidosWeb.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[var(--tealDark)] shadow-lg animate-pulse">
-                  {pedidosWeb.length}
-                </span>
-              )}
-            </a>
-          )}
-
-          {/* Tasas (Sistema y BCV) */}
-          {!hideTasa && (
-            <div className="flex items-center gap-2">
-              {/* Tasa BCV Oficial (Reference only) */}
-              <div className="hidden lg:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-2xl">
-                <div className="text-right">
-                  <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                    BCV Oficial
-                    {useStore.getState().tasaOficialTime && (
-                      <span className="text-[6px] text-slate-500 lowercase font-normal">
-                        ({new Date(useStore.getState().tasaOficialTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                      </span>
-                    )}
-                  </div>
-                  <div className="font-mono text-sm font-black text-slate-300 leading-none">
-                    {useStore.getState().tasaOficial ? parseFloat(useStore.getState().tasaOficial).toFixed(2) : '0.00'}
-                  </div>
-                </div>
-                <div className="w-6 h-6 bg-slate-800 flex items-center justify-center text-slate-400 border border-white/10">
-                  <span className="material-icons-round text-xs">account_balance</span>
-                </div>
-              </div>
-
-              {/* Tasa Sistema (Manual/Paralelo para cálculos) */}
-              <div
-                className={`flex items-center gap-3 bg-white/5 border border-white/20 p-2 rounded-2xl group transition-all ${currentUser?.rol === 'VENDEDOR' ? 'cursor-default opacity-90' : 'cursor-pointer hover:bg-white/10 hover:border-white/40'}`}
-                onClick={() => {
-                  if (currentUser?.rol === 'VENDEDOR') {
-                    toast('Solo Administradores o Cajeros pueden actualizar la tasa', 'warn')
-                    return
-                  }
-
-                  const edit = () => {
-                    const val = prompt('Nueva Tasa del Sistema (para cálculos):', tasa)
-                    if (val && !isNaN(parseFloat(val))) setTasa(parseFloat(val))
-                  }
-
-                  if (currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO') edit()
-                  else askAdmin(edit)
-                }}
-              >
-                <div className="text-right">
-                  <div className="text-[8px] font-black text-cyan-400 uppercase tracking-widest flex items-center justify-end gap-1">
-                    Tasa Sistema
-                    {useStore.getState().tasaTime && (
-                      <span className="text-[7px] text-cyan-600/70 lowercase font-normal">
-                        ({new Date(useStore.getState().tasaTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-                      </span>
-                    )}
-                  </div>
-                  <div className="font-mono text-lg font-black text-white leading-none">
-                    {tasa ? parseFloat(tasa).toFixed(2) : '0.00'}
-                  </div>
-                </div>
-                <div className="w-8 h-8 bg-[var(--tealDark)] flex items-center justify-center text-white border border-white/20">
-                  <span className="material-icons-round text-sm">currency_exchange</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* BOTÓN INSTALAR PWA */}
-          {canInstall && !isInstalled && (
-            <button
-              onClick={install}
-              className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-cyan-700 border border-cyan-400 px-3 md:px-4 py-1.5 md:py-2 text-white hover:scale-105 transition-all rounded-xl shadow-lg shadow-cyan-900/40"
-            >
-              <span className="material-icons-round text-lg animate-bounce">install_desktop</span>
-              <div className="flex flex-col items-start leading-none">
-                <span className="text-[7px] font-black uppercase tracking-widest text-cyan-200">Disponible</span>
-                <span className="text-[10px] font-black uppercase tracking-tight">Instalar</span>
-              </div>
-            </button>
-          )}
-
-          {/* Usuario Info */}
+          {/* ── RIGHT: User ── */}
           {!hideUser && (
-            <div className="flex items-center gap-3 pl-4 border-l border-white/10">
-              <div className="text-right hidden sm:block">
-                <div className="text-white font-black text-[11px] uppercase tracking-tighter leading-none">{currentUser?.nombre}</div>
-                <div className={`text-[8px] font-black uppercase tracking-widest mt-1 px-2 py-0.5 bg-black/20 inline-block
-                  ${currentUser?.rol === 'ADMIN' ? 'text-[var(--orange-var)]' : 'text-[var(--teal3)]'}`}>
-                  {currentUser?.rol}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div className="hidden sm:flex" style={{ flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1 }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                  {currentUser?.nombre || 'Administrador'}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: currentUser?.rol === 'ADMIN' ? '#fb923c' : '#38bdf8', display: 'inline-block' }} />
+                  <span style={{ fontSize: 9, fontWeight: 700, color: currentUser?.rol === 'ADMIN' ? 'rgba(251,146,60,0.85)' : 'rgba(56,189,248,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {currentUser?.rol === 'ADMIN' ? 'Master Access' : currentUser?.rol}
+                  </span>
                 </div>
               </div>
 
-              <button onClick={handleLogout}
-                className="w-10 h-10 bg-[var(--teal)] border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-[var(--tealDark)] hover:border-white/30 transition-all group">
-                <span className="material-icons-round text-xl group-hover:rotate-12 transition-transform">power_settings_new</span>
+              <div className="hdr-divider" />
+
+              <button
+                onClick={handleLogout}
+                title="Cerrar Sesión"
+                style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', transition: 'all 0.25s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
+              >
+                <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                </svg>
               </button>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Red Accent Bottom */}
-      <div className="h-[1px] bg-black/20 w-full" />
+        {/* Bottom line */}
+        <div style={{ height: 1, background: 'rgba(0,0,0,0.3)' }} />
 
-      {/* MOBILE COMPONENT */}
-      <MobileSidebar
-        open={showDrawer}
-        onClose={() => setShowDrawer(false)}
-        menu={filteredMenu}
-        check={check}
-      />
-      
-      {/* MODAL DE SINCRONIZACIÓN */}
-      <SyncModal open={showSyncModal} onClose={() => setShowSyncModal(false)} />
-    </header>
+        <MobileSidebar open={showDrawer} onClose={() => setShowDrawer(false)} menu={filteredMenu} check={check} />
+        <SyncModal open={showSyncModal} onClose={() => setShowSyncModal(false)} />
+      </header>
+    </>
   )
 }
