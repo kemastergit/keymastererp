@@ -62,9 +62,9 @@ export default function CuentasPagar() {
         const art = await db.articulos.get(item.articulo_id)
         fullItems.push({
           ...item,
-          // Priorizar descripción/código guardados en la factura (defensivo para facturas de otras terminales)
           descripcion: item.descripcion || art?.descripcion || 'Producto no encontrado',
-          codigo: item.codigo || art?.codigo || 'S/C'
+          codigo: item.codigo || art?.codigo || 'S/C',
+          marca: item.marca || art?.marca || ''
         })
       }
       setCompraItems(fullItems)
@@ -521,7 +521,10 @@ export default function CuentasPagar() {
                     <tr key={idx} className="text-xs hover:bg-[var(--surfaceDark)]">
                       <td className="py-3 px-4">
                         <div className="font-bold text-[var(--text-main)] uppercase">{item.descripcion}</div>
-                        <div className="text-[9px] font-mono text-[var(--text2)] uppercase">{item.codigo}</div>
+                        <div className="flex gap-2 text-[9px] font-mono text-[var(--text2)] uppercase mt-0.5">
+                            <span>{item.codigo}</span>
+                            {item.marca && <span>• {item.marca}</span>}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-center font-mono font-bold">{item.qty}</td>
                       <td className="py-3 px-4 text-right font-mono font-bold">{fmtUSD(item.costo_unit)}</td>

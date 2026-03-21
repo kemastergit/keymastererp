@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, nextNro } from '../../db/db'
 import useStore from '../../store/useStore'
@@ -16,6 +16,7 @@ import Catalogo from './Catalogo'
 import ItemsAgregados from './ItemsAgregados'
 import PanelPago from './PanelPago'
 import RutaVendedorModal from './RutaVendedorModal'
+import ClienteSelector from '../../components/UI/ClienteSelector'
 import { useNavigate } from 'react-router-dom'
 
 export default function Facturacion() {
@@ -27,6 +28,7 @@ export default function Facturacion() {
     paymentsTotal, activeSession, toast,
     configEmpresa, loadConfigEmpresa, currentUser,
     btStatus, setBtStatus, setHideNav, setShowHelp,
+    cartDescuento, descuentoReason, descuentoAdmin
   } = useStore()
   const navigate = useNavigate()
   const lastScrollY = useRef(0)
@@ -69,6 +71,33 @@ export default function Facturacion() {
 
   const [keypadBuffer, setKeypadBuffer] = useState('')
   const [activeCurrency, setActiveCurrency] = useState('USD') // Local states for logic
+
+  // viewMode para el catálogo: grid, list, pos (default)
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('catalogo_view_mode') || 'pos')
+
+  // Deuda y límite del cliente seleccionado
+  const [deuda, setDeuda] = useState(0)
+  const [limiteCredito, setLimiteCredito] = useState(0)
+
+  useEffect(() => {
+    if (!clienteFact || clienteFact.length < 2) { setDeuda(0); setLimiteCredito(0); return }
+    const calcDeuda = async () => {
+      try {
+        const deudas = await db.ctas_cobrar
+          .filter(c => c.cliente === clienteFact && c.estado !== 'COBRADA' && c.estado !== 'ANULADA')
+          .toArray()
+        const total = deudas.reduce((acc, curr) => {
+          const m = curr.monto_total || curr.monto || 0
+          const c = curr.monto_cobrado || curr.monto_pagado || 0
+          return acc + (m - c)
+        }, 0)
+        setDeuda(total)
+        const cliente = await db.clientes.filter(c => c.nombre === clienteFact).first()
+        setLimiteCredito(cliente?.limite_credito || 0)
+      } catch (_e) { /* offline */ }
+    }
+    calcDeuda()
+  }, [clienteFact])
 
   // Resizable columns state
   const [widths, setWidths] = useState(() => {
@@ -376,48 +405,44 @@ export default function Facturacion() {
     }
   }
 
-  const articulos = useLiveQuery(
-    async () => {
-      const b = busq.trim().toLowerCase()
-      if (b.length === 0) {
-        return await db.articulos.orderBy('descripcion').toArray()
-      }
+  // 1. Mantener todos los artículos cargados en memoria (Sincronizado con DB)
+  const allArts = useLiveQuery(() => db.articulos.toArray(), [], [])
 
-      const allArts = await db.articulos.toArray()
+  // 2. Motor de búsqueda ultra-rápido en memoria
+  const articulos = useMemo(() => {
+    const b = busq.trim().toLowerCase()
+    if (b.length === 0) {
+      return [...allArts].sort((a, b) => a.descripcion.localeCompare(b.descripcion)).slice(0, 100)
+    }
 
-      // Regla: Para 1-3 letras, priorizar estrictamente el inicio (Prefix matching)
-      // Si escribes 'am', solo queremos lo que EMPIEZA con 'am'
-      if (b.length <= 3) {
-        const exactMatches = allArts.filter(a =>
-          a.codigo?.toLowerCase().startsWith(b) ||
-          a.descripcion?.toLowerCase().startsWith(b) ||
-          a.marca?.toLowerCase().startsWith(b) ||
-          a.referencia?.toLowerCase().startsWith(b)
-        ).sort((x, y) => x.descripcion.localeCompare(y.descripcion))
+    // Regla: Para 1-3 letras, priorizar estrictamente el inicio (Prefix matching)
+    if (b.length <= 3) {
+      const exactMatches = allArts.filter(a =>
+        a.codigo?.toLowerCase().startsWith(b) ||
+        a.descripcion?.toLowerCase().startsWith(b) ||
+        a.marca?.toLowerCase().startsWith(b) ||
+        a.referencia?.toLowerCase().startsWith(b)
+      ).sort((x, y) => x.descripcion.localeCompare(y.descripcion))
 
-        // Si encontramos suficientes coincidencias exactas al inicio, devolvemos esas
-        if (exactMatches.length > 0) return exactMatches.slice(0, 100)
-      }
+      if (exactMatches.length > 0) return exactMatches.slice(0, 100)
+    }
 
-      // Si es más larga la búsqueda o no hubo inicio exacto, usamos Fuse con ponderación
-      const fuse = new Fuse(allArts, {
-        keys: [
-          { name: 'codigo', weight: 3 },      // Código manda
-          { name: 'referencia', weight: 2 },  // Referencia técnica original
-          { name: 'descripcion', weight: 2 }, // Luego descripción
-          { name: 'marca', weight: 1 }       // Marca al final
-        ],
-        threshold: 0.2,      // Más estricto (0.3 era muy permisivo)
-        location: 0,         // Buscar preferiblemente al inicio
-        distance: 100,
-        useExtendedSearch: true
-      })
+    // Si es más larga la búsqueda o no hubo inicio exacto, usamos Fuse
+    const fuse = new Fuse(allArts, {
+      keys: [
+        { name: 'codigo', weight: 3 },
+        { name: 'referencia', weight: 2 },
+        { name: 'descripcion', weight: 2 },
+        { name: 'marca', weight: 1 }
+      ],
+      threshold: 0.2,
+      location: 0,
+      distance: 100,
+      useExtendedSearch: true
+    })
 
-      const results = fuse.search(b).map(r => r.item)
-      return results.slice(0, 100)
-    },
-    [busq], []
-  ) || []
+    return fuse.search(b).map(r => r.item).slice(0, 100)
+  }, [busq, allArts])
 
   const procesarNota = async (inicial = 0, metodoInicial = 'EFECTIVO_USD', numCuotas = 1, frecuencia = 'MENSUAL') => {
     if (loading) return
@@ -496,6 +521,9 @@ export default function Facturacion() {
           nro, fecha: new Date(), cliente: clienteFact,
           tipo_pago: tipoPago, subtotal: cartSubtotal(), iva: cartIva(),
           igtf: cartIgtf(),
+          descuento_monto: cartDescuento,
+          descuento_motivo: descuentoReason,
+          descuento_autorizado: descuentoAdmin,
           total, payments, estado: 'ACTIVA', vencimiento: vencFact || null,
           usuario_id: currentUser?.id, turno_id: activeSession.id
         }
@@ -834,6 +862,62 @@ export default function Facturacion() {
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-[var(--surfaceDark)]">
+
+      {/* FRANJA DE IDENTIDAD DEL CLIENTE — Solo Desktop */}
+      <div className="hidden lg:flex bg-[#0f172a] text-white px-6 py-2.5 items-center justify-between border-b border-slate-800 shrink-0 z-30 shadow-xl">
+        <div className="flex items-center gap-8 flex-1">
+          {/* Selector lateral izquierdo */}
+          <div className="flex flex-col w-72">
+            <div className="flex items-center gap-2 mb-1 opacity-50">
+              <span className="material-icons-round text-[14px]">person_search</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest">Buscar Cliente</span>
+            </div>
+            <ClienteSelector value={clienteFact} onChange={setClienteFact} dark={true} />
+          </div>
+
+          {/* Nombre central si existe */}
+          {clienteFact && clienteFact !== 'CLIENTE EVENTUAL' && (
+            <div className="flex flex-col border-l border-slate-800 pl-8 animate-in fade-in slide-in-from-left duration-500">
+              <span className="text-xl font-black text-slate-100 uppercase tracking-tight">{clienteFact}</span>
+              <div className="flex items-center gap-3 mt-1">
+                <span className="bg-blue-500/20 text-blue-400 text-[9px] px-2 py-0.5 rounded-full font-bold border border-blue-500/30 uppercase">Cliente</span>
+                {deuda > 0.01
+                  ? <span className="text-[10px] text-red-400 font-medium">Deuda activa: {fmtUSD(deuda)}</span>
+                  : <span className="text-[10px] text-slate-500 font-medium">Sin deuda registrada</span>
+                }
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Indicadores Financieros a la derecha */}
+        <div className="flex items-center gap-6">
+          {deuda > 0.01 && (
+            <div className="flex flex-col items-end border-r border-slate-800 pr-6">
+              <span className="text-[9px] font-black text-red-500/70 uppercase tracking-tighter mb-0.5">Saldo Deudor</span>
+              <span className="text-lg font-mono font-black text-red-500 leading-none">{fmtUSD(deuda)}</span>
+            </div>
+          )}
+
+          {limiteCredito > 0 && (
+            <div className="flex flex-col items-end border-r border-slate-800 pr-6">
+              <span className="text-[9px] font-black text-emerald-500/70 uppercase tracking-tighter mb-0.5">Crédito Máx</span>
+              <span className="text-lg font-mono font-black text-emerald-400 leading-none">{fmtUSD(limiteCredito)}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pl-2">
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-slate-400 block leading-none">{currentUser?.nombre || currentUser?.name || 'Vendedor'}</span>
+              <span className="text-[8px] font-medium text-slate-600 uppercase tracking-widest mt-1">Terminal Activa</span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
+              <span className="material-icons-round text-lg">admin_panel_settings</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* TABS MOBILE ONLY */}
       <div className="lg:hidden flex bg-[var(--surface)] p-1 mb-1 shadow-sm border-b border-[var(--border-var)] flex-none z-20">
         <button className={`flex-1 py-3 text-[10px] font-bold uppercase transition-none ${step === 1 ? 'bg-[var(--teal)] text-white shadow-[var(--win-shadow)]' : 'text-[var(--text2)]'}`} onClick={() => setStep(1)}>1. Buscar</button>
@@ -865,6 +949,13 @@ export default function Facturacion() {
                 showDrop={showDrop} setShowDrop={setShowDrop}
                 articulos={articulos} addToCart={addToCart} addGeneric={addGeneric}
                 cart={cart} removeFromCart={removeFromCart} updateQty={updateQty}
+                viewMode={viewMode} setViewMode={setViewMode}
+                itemsAgregadosComponent={
+                  <ItemsAgregados
+                    cart={cart} updateQty={updateQty}
+                    openEditItem={openEditItem} removeFromCart={removeFromCart}
+                  />
+                }
               />
             )}
             {step === 2 && (
@@ -894,37 +985,48 @@ export default function Facturacion() {
           </div>
 
           {/* DESKTOP VIEW (HIDDEN ON MOBILE) */}
-          {/* COLUMNA 1: CATALOGO */}
-          <div className="hidden lg:flex lg:flex-1 h-full min-w-0">
+          {/* COLUMNA 1: CATALOGO — se expande en modo POS */}
+          <div className={`hidden lg:flex h-full min-w-0 ${viewMode === 'pos' ? 'flex-[3]' : 'flex-[1.5]'}`}>
             <Catalogo
               busq={busq} setBusq={setBusq}
               showDrop={showDrop} setShowDrop={setShowDrop}
               articulos={articulos} addToCart={addToCart} addGeneric={addGeneric}
               cart={cart} removeFromCart={removeFromCart} updateQty={updateQty}
+              viewMode={viewMode} setViewMode={setViewMode}
+              itemsAgregadosComponent={
+                <ItemsAgregados
+                  cart={cart} updateQty={updateQty}
+                  openEditItem={openEditItem} removeFromCart={removeFromCart}
+                />
+              }
             />
           </div>
 
-          {/* DIVISOR RESIZABLE 1 */}
-          <div 
-            onMouseDown={(e) => startResizing('items', e)}
-            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-emerald-500 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
-          ></div>
+          {/* DIVISOR RESIZABLE 1 — oculto en modo POS */}
+          {viewMode !== 'pos' && (
+            <div 
+              onMouseDown={(e) => startResizing('items', e)}
+              className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-orange-400 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
+            ></div>
+          )}
 
-          {/* COLUMNA 2: ITEMS */}
-          <div 
-            className="hidden lg:flex h-full shrink-0"
-            style={{ width: widths.items + 'px' }}
-          >
-            <ItemsAgregados
-              cart={cart} updateQty={updateQty}
-              openEditItem={openEditItem} removeFromCart={removeFromCart}
-            />
-          </div>
+          {/* COLUMNA 2: ITEMS — oculta en modo POS (está integrado dentro del Catalogo) */}
+          {viewMode !== 'pos' && (
+            <div 
+              className="hidden lg:flex h-full shrink-0"
+              style={{ width: widths.items + 'px' }}
+            >
+              <ItemsAgregados
+                cart={cart} updateQty={updateQty}
+                openEditItem={openEditItem} removeFromCart={removeFromCart}
+              />
+            </div>
+          )}
 
           {/* DIVISOR RESIZABLE 2 */}
           <div 
             onMouseDown={(e) => startResizing('pago', e)}
-            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-emerald-500 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
+            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-orange-400 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
           ></div>
 
           {/* COLUMNA 3: PAGO */}

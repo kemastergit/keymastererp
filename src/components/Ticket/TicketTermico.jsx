@@ -81,6 +81,19 @@ const TicketTermico = forwardRef(({ nota, config, isCopia = false }, ref) => {
                     <span>{ (subtotal * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } Bs</span>
                 </div>
 
+                {nota.descuento_monto > 0 && (
+                    <div className="ticket-row" style={{ color: 'red' }}>
+                        <span>DESCUENTO ({nota.descuento_motivo || ''}):</span>
+                        <span>-{ (nota.descuento_monto * tasa).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } Bs</span>
+                    </div>
+                )}
+                {nota.descuento_autorizado && (
+                    <div className="ticket-row" style={{ fontSize: '10px', marginTop: '-3px', marginBottom: '4px', fontStyle: 'italic' }}>
+                        <span>Autorizó: {nota.descuento_autorizado}</span>
+                        <span></span>
+                    </div>
+                )}
+
                 {config.aplicar_iva && (
                     <div className="ticket-row">
                         <span>IVA ({config.porcentaje_iva}%):</span>

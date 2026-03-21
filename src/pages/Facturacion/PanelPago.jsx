@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { fmtUSD, fmtBS } from '../../utils/format'
-import ClienteSelector from '../../components/UI/ClienteSelector'
 import { db } from '../../db/db'
+import useStore from '../../store/useStore'
+import Modal from '../../components/UI/Modal'
 
 export default function PanelPago({
     cart, cartSubtotal, cartIva, cartIgtf, cartTotal, ivaEnabled, setIvaEnabled,
@@ -10,8 +11,10 @@ export default function PanelPago({
     procesarNota, clienteFact, setClienteFact, currentUser, enviarCajaCentral,
     setShowNotasModal, notasPendientes, fetchNotasVendedores, loading
 }) {
-    const [deuda, setDeuda] = useState(0)
-    const [limiteCredito, setLimiteCredito] = useState(0)
+    const { cartDescuento, setDescuento, descuentoReason, askAdmin } = useStore()
+    const [showDescuentoModal, setShowDescuentoModal] = useState(false)
+    const [tempDescuento, setTempDescuento] = useState('')
+    const [tempMotivo, setTempMotivo] = useState('')
 
     // --- NUEVOS ESTADOS PARA CREDITO_CUOTAS (PASO 4B) ---
     const [inicialCuotas, setInicialCuotas] = useState(0)
@@ -19,88 +22,26 @@ export default function PanelPago({
     const [numCuotas, setNumCuotas] = useState(2)
     const [frecuenciaCuotas, setFrecuenciaCuotas] = useState('QUINCENAL')
 
-    useEffect(() => {
-        if (!clienteFact || clienteFact.length < 2) {
-            setDeuda(0); setLimiteCredito(0); return
-        }
-        const calcDeuda = async () => {
-            try {
-                const deudas = await db.ctas_cobrar
-                    .filter(c =>
-                        c.cliente === clienteFact &&
-                        c.estado !== 'COBRADA' &&
-                        c.estado !== 'ANULADA'
-                    ).toArray()
-                const total = deudas.reduce((acc, curr) => {
-                    const m = curr.monto_total || curr.monto || 0
-                    const c = curr.monto_cobrado || curr.monto_pagado || 0
-                    return acc + (m - c)
-                }, 0)
-                setDeuda(total)
-
-                // Buscar límite de crédito del cliente
-                const cliente = await db.clientes.filter(c => c.nombre === clienteFact).first()
-                setLimiteCredito(cliente?.limite_credito || 0)
-            } catch (e) { console.error("Error deuda:", e) }
-        }
-        calcDeuda()
-    }, [clienteFact])
-
-    const excedeLimite = limiteCredito > 0 && tipoPago === 'CREDITO' && (deuda + cartTotal()) > limiteCredito
-
     return (
         <div className="bg-[#f8fafc] border border-slate-200 flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[300px] lg:max-w-[340px]">
 
-            {/* SECCIÓN CLIENTE */}
-            <div className="p-5 border-b border-slate-200 bg-white shrink-0">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-[38px] h-[38px] rounded-full bg-slate-200 flex justify-center items-center shrink-0">
-                        <span className="material-icons-round text-slate-400 text-lg">person</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Cliente</span>
-                        <ClienteSelector value={clienteFact} onChange={setClienteFact} />
-                    </div>
-                    <button className="text-slate-400 hover:text-slate-800 transition-colors">
-                        <span className="material-icons-round text-[20px]">edit</span>
-                    </button>
-                </div>
-
-                {(currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO' || currentUser?.rol === 'SUPERVISOR') && (
+            {/* CARGAR NOTA VENDEDOR — Movido y Simplificado */}
+            {(currentUser?.rol === 'ADMIN' || currentUser?.rol === 'CAJERO' || currentUser?.rol === 'SUPERVISOR') && (
+                <div className="p-4 border-b border-slate-200 bg-white shadow-sm shrink-0">
                     <button
                         onClick={() => { fetchNotasVendedores(); setShowNotasModal(true) }}
-                        className="w-full mt-2 flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-200 border-dashed rounded-xl py-2.5 text-[11px] font-bold uppercase tracking-widest hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition-all shadow-sm group"
+                        className="w-full flex items-center justify-center gap-3 bg-white text-slate-600 border border-slate-200 border-dashed rounded-2xl py-3.5 text-[11px] font-bold uppercase tracking-widest hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-all group"
                     >
-                        <span className="material-icons-round text-[16px] text-orange-500 group-hover:animate-bounce">cloud_download</span>
-                        <span>Cargar Nota Vendedor</span>
+                        <span className="material-icons-round text-[20px] text-orange-500 group-hover:animate-bounce">cloud_download</span>
+                        <span>Notas Pendientes</span>
                         {notasPendientes?.length > 0 && (
-                            <span className="bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1 font-black">
+                            <span className="bg-orange-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-1 font-black">
                                 {notasPendientes.length}
                             </span>
                         )}
                     </button>
-                )}
-
-                {deuda > 0.01 && (
-                    <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2">
-                        <span className="material-icons-round text-red-500 text-sm mt-0.5">warning</span>
-                        <div className="flex-1">
-                            <span className="text-[10px] font-bold text-red-800 uppercase tracking-wider block mb-0.5">Deuda Pendiente</span>
-                            <span className="text-sm font-black text-red-600 font-mono tracking-tighter">{fmtUSD(deuda)}</span>
-                        </div>
-                    </div>
-                )}
-
-                {excedeLimite && (
-                    <div className="mt-2 p-3 bg-red-500 text-white rounded-xl shadow-md flex items-start gap-2">
-                        <span className="material-icons-round text-white text-sm mt-0.5">block</span>
-                        <div className="flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider block mb-0.5">Límite Excedido</span>
-                            <span className="text-xs font-black font-mono tracking-tighter">Máx: {fmtUSD(limiteCredito)}</span>
-                        </div>
-                    </div>
-                )}
-            </div>
+                </div>
+            )}
 
             <div className="p-5 flex flex-col gap-5 flex-1 bg-[#f8fafc]">
 
@@ -124,21 +65,37 @@ export default function PanelPago({
                         </div>
                     </div>
                     {cartIgtf() > 0 && (
-                        <div className="flex justify-between items-center text-orange-400 mb-4 relative z-10 border-t border-slate-700/50 pt-2">
+                        <div className="flex justify-between items-center text-orange-400 mb-2 relative z-10 border-t border-slate-700/50 pt-2">
                             <span className="text-[10px] font-bold uppercase tracking-widest">Cargo IGTF (3%)</span>
                             <span className="text-sm font-mono font-bold">{fmtUSD(cartIgtf())}</span>
                         </div>
                     )}
 
+                    {cartDescuento > 0 && (
+                        <div className="flex justify-between items-center text-emerald-400 mb-2 relative z-10 border-t border-slate-700/50 pt-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Descuento ({descuentoReason})</span>
+                            <span className="text-sm font-mono font-bold">-{fmtUSD(cartDescuento)}</span>
+                        </div>
+                    )}
+
                     <div className="pt-5 border-t border-slate-700/50 relative z-10">
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">Total a Pagar</span>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Total a Pagar</span>
+                            <button
+                                onClick={() => setShowDescuentoModal(true)}
+                                className="text-[10px] font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-1.5 cursor-pointer transition-all px-3 py-1.5 rounded-lg shadow-md hover:scale-105 active:scale-95"
+                            >
+                                <span className="material-icons-round text-[13px]">local_offer</span>
+                                Aplicar Descuento
+                            </button>
+                        </div>
                         <div className="flex justify-between items-end">
                             <div className="text-[40px] leading-none font-black text-white tracking-tighter">
                                 <span className="text-2xl mr-1 text-slate-300">$</span>
                                 {cartTotal()?.toFixed(2)}
                             </div>
                             <div className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest pb-1">
-                                BS {fmtBS(cartTotal(), tasa).replace('Bs.', '').trim()}
+                                {fmtBS(cartTotal(), tasa)}
                             </div>
                         </div>
                     </div>
@@ -366,6 +323,43 @@ export default function PanelPago({
                     </div>
                 )}
             </div>
+
+            <Modal open={showDescuentoModal} onClose={() => setShowDescuentoModal(false)} title="Aplicar Descuento">
+                <div className="space-y-4">
+                    {cartDescuento > 0 && (
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200 flex justify-between items-center">
+                            <div className="text-orange-800 text-xs font-bold uppercase">Descuento Actual: {fmtUSD(cartDescuento)}</div>
+                            <button className="btn btn-y !py-1 !font-bold text-[10px]" onClick={() => { setDescuento(0, '', ''); setShowDescuentoModal(false); }}>Remover</button>
+                        </div>
+                    )}
+                    <div className="field">
+                        <label>Monto a Descontar ($)</label>
+                        <input type="number" step="0.01" min="0" className="inp w-full font-mono font-bold text-lg" value={tempDescuento} onChange={e => setTempDescuento(e.target.value)} placeholder="0.00" />
+                    </div>
+                    <div className="field">
+                        <label>Motivo del Descuento</label>
+                        <input type="text" className="inp w-full" value={tempMotivo} onChange={e => setTempMotivo(e.target.value)} placeholder="Ej: Cliente Mayorista, Mercancía con detalle" />
+                    </div>
+                    <button className="btn bg-slate-800 text-white w-full uppercase font-black tracking-widest text-xs py-3 mt-2"
+                        onClick={() => {
+                            const val = parseFloat(tempDescuento)
+                            if (!val || val <= 0) {
+                                alert('Monto inválido'); return;
+                            }
+                            if (val > cartSubtotal()) {
+                                alert('El descuento no puede ser mayor al subtotal'); return;
+                            }
+                            setShowDescuentoModal(false)
+                            
+                            // Pedir autorización usando el sistema global del store
+                            askAdmin(() => {
+                                setDescuento(val, tempMotivo || 'Descuento Especial', 'ADMIN')
+                            })
+                        }}>
+                        Solicitar Autorización
+                    </button>
+                </div>
+            </Modal>
         </div>
     )
 }

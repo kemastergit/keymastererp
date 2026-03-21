@@ -25,7 +25,14 @@ export default function ItemsAgregados({
                         <div key={item.id} className="bg-[var(--surface)] border border-[var(--border-var)] p-3 short:p-1.5 flex flex-col group transition-none shadow-[var(--win-shadow)]">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex-1 min-w-0 pr-2 cursor-pointer" onClick={() => openEditItem(item)}>
-                                    <div className="text-[10px] short:text-[8px] font-mono font-bold text-[var(--teal)] mb-0.5">{item.codigo}</div>
+                                    <div className="flex items-center justify-between mb-0.5">
+                                        <div className="text-[10px] short:text-[8px] font-mono font-bold text-[var(--teal)]">{item.codigo}</div>
+                                        {item.marca && (
+                                            <div className="text-[9px] bg-slate-100 text-slate-500 font-black px-1.5 py-0.5 rounded uppercase tracking-wider border border-slate-200">
+                                                {item.marca}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="text-xs short:text-[10px] short:leading-none font-bold text-[var(--text-main)] leading-tight group-hover:text-[var(--teal)] transition-colors">
                                         {item.descripcion}
                                     </div>

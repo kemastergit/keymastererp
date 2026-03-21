@@ -379,38 +379,50 @@ export function printNotaTermica(venta, items, tasa, options = {}) {
 
 
 export function printEtiquetas(productos, tasa) {
-  const etiquetas = productos.map((p, idx) => {
+  const etiquetasHtml = []
+  
+  productos.forEach((p, idx) => {
+    const cant = p.qty ? parseInt(p.qty) : 1
     const usd = (p.costo_unit || p.precio || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    // Ensure unique ID for each barcode to render
-    return `
-    <div class="etq">
-      <div class="header">AUTOREPUESTOS GUAICAIPURO C.A.</div>
-      <div class="desc">${(p.descripcion || '').substring(0, 45)}</div>
-      <div class="barcode-container">
-        <svg id="barcode-${idx}"></svg>
-      </div>
-      <div class="price-zone">
-        <div class="price">$ ${usd}</div>
-      </div>
-    </div>`
-  }).join('')
+    
+    for (let i = 0; i < cant; i++) {
+        etiquetasHtml.push(`
+        <div class="etq">
+          <div class="header">AUTOREPUESTOS GUAICAIPURO C.A.</div>
+          <div class="desc">${(p.descripcion || '').substring(0, 45)}</div>
+          <div class="barcode-container">
+            <svg id="barcode-${idx}-${i}"></svg>
+          </div>
+          <div class="price-zone">
+            <div class="price">$ ${usd}</div>
+          </div>
+        </div>`)
+    }
+  })
 
-  const jsBarcodeCalls = productos.map((p, idx) => {
-    return `
-      try {
-        JsBarcode("#barcode-${idx}", "${p.codigo || '0000'}", {
-          format: "CODE128",
-          width: 1.2,
-          height: 35,
-          displayValue: true,
-          fontSize: 10,
-          margin: 0,
-          background: "transparent",
-          lineColor: "#000"
-        });
-      } catch(e) { console.error(e) }
-    `
-  }).join('')
+  const etiquetas = etiquetasHtml.join('')
+
+  const jsBarcodeCallsHtml = []
+  productos.forEach((p, idx) => {
+    const cant = p.qty ? parseInt(p.qty) : 1
+    for (let i = 0; i < cant; i++) {
+        jsBarcodeCallsHtml.push(`
+          try {
+            JsBarcode("#barcode-${idx}-${i}", "${p.codigo || '0000'}", {
+              format: "CODE128",
+              width: 1.2,
+              height: 35,
+              displayValue: true,
+              fontSize: 10,
+              margin: 0,
+              background: "transparent",
+              lineColor: "#000"
+            });
+          } catch(e) { console.error(e) }
+        `)
+    }
+  })
+  const jsBarcodeCalls = jsBarcodeCallsHtml.join('')
 
   const html = `<!DOCTYPE html>
 <html>

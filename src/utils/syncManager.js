@@ -47,6 +47,20 @@ export async function processSyncQueue() {
   const pending = await db.sync_queue.where('status').equals('PENDING').toArray()
   if (pending.length === 0) return 0
 
+  // ✅ FIX: Garantizar que artículos INSERT siempre se procesen ANTES que UPDATE_STOCK
+  // del mismo artículo. Esto evita el fallo cuando un producto nuevo aún no existe en la nube
+  // y llega primero la orden de actualizar su stock.
+  const PRIORITY_ORDER = { INSERT: 0, UPDATE_STOCK: 1 }
+  pending.sort((a, b) => {
+    if (a.table === 'articulos' && b.table === 'articulos') {
+      const pa = PRIORITY_ORDER[a.operation] ?? 99
+      const pb = PRIORITY_ORDER[b.operation] ?? 99
+      if (pa !== pb) return pa - pb
+    }
+    // Para el resto, respetar el orden de creación original (id ascendente)
+    return (a.id || 0) - (b.id || 0)
+  })
+
   let successCount = 0
 
   for (const item of pending) {
@@ -67,17 +81,29 @@ export async function processSyncQueue() {
       console.log(`☁️ Intentando sincronizar ${item.table} (${item.operation}) - Intento ${item.intentos}...`)
 
       if (item.table === 'rpc_venta' && item.operation === 'RPC') {
-        const { data: rpcResult, error: rpcError } = await supabase.rpc('procesar_venta_completa', item.data)
+        // Remover propiedades embebidas que puedan romper la firma antigua de Supabase
+        const payload = { ...item.data }
+        delete payload.p_descuento_monto
+        delete payload.p_descuento_motivo
+
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('procesar_venta_completa', payload)
         if (rpcError || !rpcResult?.ok) {
-          error = rpcError || { message: rpcResult?.error }
+          error = rpcError || { message: rpcResult?.error || 'Error genérico RPC' }
         }
       } else if (item.table === 'facturas' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('facturas').upsert([item.data], { onConflict: 'numero' })
         error = err
       } else if (item.table === 'articulos' && item.operation === 'UPDATE_STOCK') {
+        const updatePayload = { stock: item.data.stock }
+        if (item.data.costo !== undefined) updatePayload.costo = item.data.costo
         const { error: err } = await supabase.from('articulos')
-          .update({ stock: item.data.stock })
+          .update(updatePayload)
           .eq('codigo', item.data.codigo)
+        error = err
+      } else if (item.table === 'articulos' && item.operation === 'INSERT') {
+        // Producto nuevo creado "sobre la marcha" en compras — sincronizar por codigo
+        const { error: err } = await supabase.from('articulos')
+          .upsert([item.data], { onConflict: 'codigo' })
         error = err
       } else if ((item.table === 'cuentas_por_cobrar' || item.table === 'ctas_cobrar') && item.operation === 'INSERT') {
         const { id: _removeLocalId, ...cxcPayload } = item.data  // Nunca enviar el id local de Dexie
@@ -427,6 +453,44 @@ export function subscribeArticulosRealtime() {
           await db.articulos.add(normalized)
         } else {
           await db.articulos.update(local.id, normalized)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a cambios en clientes (INSERT / UPDATE)
+export function subscribeClientesRealtime() {
+  const channel = supabase
+    .channel('realtime-clientes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'clientes' },
+      async (payload) => {
+        if (payload.eventType === 'DELETE') return
+        const cliente = payload.new
+        if (!cliente?.rif) return
+
+        const existe = await db.clientes.where('rif').equals(cliente.rif).first()
+        const dataToSave = {
+          rif: cliente.rif,
+          nombre: cliente.nombre,
+          telefono: cliente.telefono || '',
+          direccion: cliente.direccion || '',
+          email: cliente.email || '',
+          limite_credito: Number(cliente.limite_credito) || 0,
+        }
+
+        if (!existe) {
+          await db.clientes.add(dataToSave)
+          console.log(`✨ Nuevo cliente detectado vía Realtime: ${cliente.nombre}`)
+        } else {
+          await db.clientes.update(existe.id, dataToSave)
+          console.log(`📝 Cliente actualizado vía Realtime: ${cliente.nombre}`)
         }
       }
     )
@@ -914,6 +978,7 @@ export async function initInventorySync() {
 
   toast('🚀 SINCRONIZACIÓN INICIAL COMPLETADA', 'success')
   subscribeArticulosRealtime()
+  subscribeClientesRealtime()
 
   // Sincronizaciones en Segundo Plano (No bloqueantes)
   setTimeout(async () => {

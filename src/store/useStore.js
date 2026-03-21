@@ -165,11 +165,16 @@ const useStore = create(
           cart: s.cart.map(item => item.id === id ? { ...item, ...data } : item)
         }))
       },
-      clearCart: () => set({ cart: [], clienteFact: '', tipoPago: 'CONTADO', vencFact: '', payments: [], ivaEnabled: false }),
+      clearCart: () => set({ cart: [], clienteFact: '', tipoPago: 'CONTADO', vencFact: '', payments: [], ivaEnabled: false, cartDescuento: 0, descuentoReason: '', descuentoAdmin: '' }),
       setTipoPago: (t) => set({ tipoPago: t }),
       setClienteFact: (v) => set({ clienteFact: v }),
       setVencFact: (v) => set({ vencFact: v }),
       setIvaEnabled: (v) => set({ ivaEnabled: v }),
+
+      cartDescuento: 0,
+      descuentoReason: '',
+      descuentoAdmin: '',
+      setDescuento: (monto, reason, admin) => set({ cartDescuento: monto, descuentoReason: reason, descuentoAdmin: admin }),
 
       // Dashboard & Sync UI
       syncStatus: null, // { message, submessage, progress, total, isInitialSync }
@@ -189,7 +194,11 @@ const useStore = create(
       removePayment: (id) => set(s => ({ payments: s.payments.filter(p => p.id !== id) })),
 
       cartSubtotal: () => get().cart.reduce((s, i) => s + (i.precio * i.qty), 0),
-      cartIva: () => get().ivaEnabled ? get().cartSubtotal() * (get().configEmpresa?.porcentaje_iva / 100 || 0.16) : 0,
+      cartIva: () => {
+        if (!get().ivaEnabled) return 0
+        const taxableBase = Math.max(0, get().cartSubtotal() - get().cartDescuento)
+        return taxableBase * (get().configEmpresa?.porcentaje_iva / 100 || 0.16)
+      },
       cartIgtf: () => {
         const config = get().configEmpresa
         if (!config?.aplicar_igtf) return 0
@@ -197,7 +206,7 @@ const useStore = create(
         const sumDivisa = divisaPayments.reduce((s, p) => s + p.monto, 0)
         return sumDivisa * (config.porcentaje_igtf / 100 || 0.03)
       },
-      cartTotal: () => get().cartSubtotal() + get().cartIva() + get().cartIgtf(),
+      cartTotal: () => Math.max(0, get().cartSubtotal() - get().cartDescuento + get().cartIva() + get().cartIgtf()),
       paymentsTotal: () => get().payments.reduce((s, p) => s + p.monto, 0),
 
       // Carrito cotización

@@ -25,6 +25,8 @@ export default function Compras() {
     const [busq, setBusq] = useState('')
     const [showProductModal, setShowProductModal] = useState(false)
     const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
+    const [showPrintModal, setShowPrintModal] = useState(false)
+    const [printItems, setPrintItems] = useState([])
 
     const proveedores = useLiveQuery(() => db.proveedores.orderBy('nombre').toArray(), [], [])
     const articulos = useLiveQuery(() =>
@@ -89,7 +91,7 @@ export default function Compras() {
             // Calculamos el total fuera para asegurar que sea un número válido
             const finalTotal = parseFloat(totalUSD.toFixed(2)) || 0;
 
-            await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria, db.abonos], async () => {
+            await db.transaction('rw', [db.compras, db.compra_items, db.articulos, db.ctas_pagar, db.auditoria, db.abonos, db.sync_queue], async () => {
                 // Buscar nombre del proveedor antes de guardar (para desnormalización defensiva)
                 const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
                 compraId = await db.compras.add({
@@ -168,8 +170,9 @@ export default function Compras() {
 
             toast('✅ Compra procesada e inventario actualizado')
 
-            // 🏷️ Imprimir etiquetas automático
-            printEtiquetas(items, header.tasa || tasa, 'mediana')
+            // Mostrar el modal de impresión en lugar de invocar inmediatamente
+            setPrintItems(items.map(i => ({ ...i, qty_print: Number(i.qty) || 1 })))
+            setShowPrintModal(true)
 
             // ☁️ SYNC A SUPABASE — El Cacique ve todo desde su choza
             const provObj = proveedores.find(p => p.id === parseInt(header.proveedor_id))
@@ -245,8 +248,23 @@ export default function Compras() {
 
     const handleCreateProduct = async () => {
         if (!newProduct.codigo || !newProduct.descripcion) return toast('Faltan datos', 'warn')
-        const id = await db.articulos.add({ ...newProduct, stock: 0 })
+        const artToSave = { ...newProduct, stock: 0 }
+        const id = await db.articulos.add(artToSave)
         const art = await db.articulos.get(id)
+
+        // ☁️ Sync a Supabase — otros terminales recibirán este producto nuevo
+        // Se identifica por 'codigo' (único global), no por el id local de Dexie
+        await addToSyncQueue('articulos', 'INSERT', {
+            codigo: newProduct.codigo,
+            descripcion: newProduct.descripcion,
+            marca: newProduct.marca || '',
+            precio: parseFloat(newProduct.precio) || 0,
+            costo: parseFloat(newProduct.costo) || 0,
+            stock: 0,
+            activo: true,
+            mostrar_en_web: true  // ✅ Visible en catálogo online desde el primer momento
+        })
+
         addItem(art)
         setShowProductModal(false)
         setNewProduct({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
@@ -406,7 +424,7 @@ export default function Compras() {
                                                 className="btn bg-[var(--teal)] text-white mt-4 btn-sm"
                                                 onClick={() => setShowProductModal(true)}
                                             >
-                                                CREAR "{busq.toUpperCase()}"
+                                                CREAR &quot;{busq.toUpperCase()}&quot;
                                             </button>
                                         </div>
                                     )}
@@ -562,6 +580,67 @@ export default function Compras() {
                     <div className="flex gap-4 pt-4">
                         <button className="btn bg-[var(--surfaceDark)] flex-1" onClick={() => setShowProductModal(false)}>CANCELAR</button>
                         <button className="btn bg-[var(--teal)] text-white flex-1 font-black" onClick={handleCreateProduct}>CREAR Y AGREGAR</button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Print Selection Modal */}
+            <Modal
+                open={showPrintModal}
+                onClose={() => setShowPrintModal(false)}
+                title="IMPRIMIR ETIQUETAS"
+            >
+                <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase text-[var(--text2)] mb-4">
+                        Ajusta la cantidad de etiquetas que deseas imprimir por cada producto.
+                    </p>
+                    
+                    <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-3">
+                        {printItems.map(item => (
+                            <div key={item.id} className="flex justify-between items-center bg-[var(--surfaceDark)] p-3 border border-[var(--border-var)]">
+                                <div className="max-w-[70%]">
+                                    <h4 className="text-xs font-black text-[var(--text-main)] uppercase truncate">
+                                        {item.descripcion}
+                                    </h4>
+                                    <div className="text-[9px] font-mono text-[var(--text2)] uppercase">{item.codigo}</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-black uppercase text-[var(--text2)]">CANT:</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="inp !py-1 !px-2 w-16 text-center font-mono !rounded-none"
+                                        value={item.qty_print}
+                                        onChange={e => {
+                                            const val = parseInt(e.target.value) || 0
+                                            setPrintItems(printItems.map(i => i.id === item.id ? { ...i, qty_print: val } : i))
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex gap-4 pt-4 mt-2 border-t border-[var(--border-var)]">
+                        <button className="btn bg-[var(--surfaceDark)] flex-1 uppercase text-xs" onClick={() => setShowPrintModal(false)}>
+                            Omitir
+                        </button>
+                        <button
+                            className="btn bg-[var(--teal)] text-white flex-1 font-black uppercase text-xs"
+                            onClick={() => {
+                                const finalItemsForPrinting = printItems
+                                    .filter(i => i.qty_print > 0)
+                                    .map(i => ({ ...i, qty: i.qty_print })) // El util lo lee de 'qty'
+                                
+                                if (finalItemsForPrinting.length > 0) {
+                                    printEtiquetas(finalItemsForPrinting, header.tasa || tasa, 'mediana')
+                                }
+                                setShowPrintModal(false)
+                            }}
+                        >
+                            <span className="material-icons-round text-sm mr-2">print</span>
+                            Imprimir Etiquetas
+                        </button>
                     </div>
                 </div>
             </Modal>
