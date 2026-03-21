@@ -62,8 +62,9 @@ export default function CuentasPagar() {
         const art = await db.articulos.get(item.articulo_id)
         fullItems.push({
           ...item,
-          descripcion: art?.descripcion || 'Producto no encontrado',
-          codigo: art?.codigo || 'S/C'
+          // Priorizar descripción/código guardados en la factura (defensivo para facturas de otras terminales)
+          descripcion: item.descripcion || art?.descripcion || 'Producto no encontrado',
+          codigo: item.codigo || art?.codigo || 'S/C'
         })
       }
       setCompraItems(fullItems)

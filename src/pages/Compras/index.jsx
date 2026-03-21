@@ -125,6 +125,13 @@ export default function Compras() {
                         stock: stockActual + cantNueva,
                         costo: parseFloat(nuevoCosto.toFixed(4))
                     })
+
+                    // 🔄 SYNC STOCK — Avisar a la nube del nuevo stock usando codigo (único global)
+                    await addToSyncQueue('articulos', 'UPDATE_STOCK', {
+                        codigo: item.codigo,
+                        stock: stockActual + cantNueva,
+                        costo: parseFloat(nuevoCosto.toFixed(4))
+                    })
                 }
 
 
