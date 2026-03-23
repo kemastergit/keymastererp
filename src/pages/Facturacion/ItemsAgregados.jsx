@@ -4,60 +4,72 @@ export default function ItemsAgregados({
     cart, updateQty, openEditItem, removeFromCart
 }) {
     return (
-        <div className="col-items bg-[var(--surface)] border border-[var(--border-var)] flex flex-col overflow-hidden h-full min-h-0 w-full lg:flex-1 lg:min-w-[220px]">
-            <div className="p-4 short:p-2 border-b border-[var(--border-var)] bg-[var(--surface2)] flex justify-between items-center shrink-0">
+        <div className="col-items bg-[var(--surface)] border border-[var(--border-var)] flex flex-col overflow-hidden h-full min-h-0 w-full lg:flex-1 lg:min-w-[200px]">
+            {/* HEADER */}
+            <div className="px-3 py-2.5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
-                    <span className="material-icons-round text-[var(--teal)] short:text-base">shopping_basket</span>
-                    <div className="font-['IBM_Plex_Mono'] font-bold text-[var(--text-main)] text-[11px] short:text-[9px] uppercase tracking-wider">
+                    <span className="material-icons-round text-[var(--teal)] text-base">shopping_basket</span>
+                    <span className="font-['IBM_Plex_Mono'] font-bold text-[var(--text-main)] text-[10px] uppercase tracking-wider">
                         Detalle <span className="text-[var(--text2)]">({cart.length})</span>
-                    </div>
+                    </span>
                 </div>
             </div>
 
-            <div className="items-lista flex-1 p-3 space-y-2 relative bg-[var(--surfaceDark)] overflow-y-auto custom-scroll min-h-0">
+            {/* LISTA COMPACTA */}
+            <div className="flex-1 overflow-y-auto custom-scroll min-h-0 bg-[var(--surfaceDark)]">
                 {cart.length === 0 ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center opacity-40">
-                        <span className="material-icons-round text-5xl mb-3 text-[var(--text2)]">remove_shopping_cart</span>
-                        <div className="text-center text-[var(--text2)] text-[11px] font-bold tracking-widest uppercase">Sin productos<br />agregados</div>
+                    <div className="flex flex-col items-center justify-center h-full opacity-30">
+                        <span className="material-icons-round text-4xl mb-2 text-[var(--text2)]">remove_shopping_cart</span>
+                        <div className="text-center text-[var(--text2)] text-[9px] font-bold tracking-widest uppercase">Sin productos</div>
                     </div>
                 ) : (
-                    cart.map(item => (
-                        <div key={item.id} className="bg-[var(--surface)] border border-[var(--border-var)] p-3 short:p-1.5 flex flex-col group transition-none shadow-[var(--win-shadow)]">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex-1 min-w-0 pr-2 cursor-pointer" onClick={() => openEditItem(item)}>
-                                    <div className="flex items-center justify-between mb-0.5">
-                                        <div className="text-[10px] short:text-[8px] font-mono font-bold text-[var(--teal)]">{item.codigo}</div>
-                                        {item.marca && (
-                                            <div className="text-[9px] bg-slate-100 text-slate-500 font-black px-1.5 py-0.5 rounded uppercase tracking-wider border border-slate-200">
-                                                {item.marca}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="text-xs short:text-[10px] short:leading-none font-bold text-[var(--text-main)] leading-tight group-hover:text-[var(--teal)] transition-colors">
+                    <div className="divide-y divide-[var(--border-var)]">
+                        {cart.map(item => (
+                            <div key={item.id}
+                                className="flex items-center gap-2 px-2 py-2 hover:bg-[var(--surface)] transition-colors group"
+                            >
+                                {/* CONTROLES QTY */}
+                                <div className="flex items-center bg-[var(--surface2)] border border-[var(--border-var)] h-6 shrink-0">
+                                    <button
+                                        className="px-1.5 text-[11px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center"
+                                        onClick={() => updateQty(item.id, item.qty - 1)}
+                                    >−</button>
+                                    <span className="w-6 text-center text-[10px] font-black border-l border-r border-[var(--border-var)] bg-[var(--surface)] h-full flex items-center justify-center">
+                                        {item.qty}
+                                    </span>
+                                    <button
+                                        className="px-1.5 text-[11px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center"
+                                        onClick={() => updateQty(item.id, item.qty + 1)}
+                                    >+</button>
+                                </div>
+
+                                {/* DESCRIPCIÓN */}
+                                <div
+                                    className="flex-1 min-w-0 cursor-pointer"
+                                    onClick={() => openEditItem(item)}
+                                >
+                                    <div className="text-[9px] font-mono font-bold text-[var(--teal)] truncate leading-none">{item.codigo}</div>
+                                    <div className="text-[10px] font-bold text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--teal)] transition-colors">
                                         {item.descripcion}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); removeFromCart(item.id); }}
-                                    className="text-[var(--text2)] hover:text-white hover:bg-[var(--red-var)] transition-colors w-5 h-5 flex justify-center items-center shrink-0 border border-transparent hover:border-[var(--red-var)]"
-                                >
-                                    <span className="material-icons-round text-sm">close</span>
-                                </button>
-                            </div>
 
-                            <div className="flex items-center justify-between mt-auto pt-2 short:pt-1 short:mt-1 border-t border-[var(--border-var)]">
-                                <div className="flex items-center bg-[var(--surface2)] border border-[var(--border-var)] h-7 short:h-5">
-                                    <button className="px-2 text-[12px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center justify-center min-w-[24px]" onClick={() => updateQty(item.id, item.qty - 1)}>-</button>
-                                    <span className="w-8 text-center text-xs font-bold border-l border-r border-[var(--border-var)] bg-[var(--surface)] h-full flex items-center justify-center">{item.qty}</span>
-                                    <button className="px-2 text-[12px] font-black text-[var(--text2)] hover:text-white hover:bg-[var(--teal)] transition-colors h-full flex items-center justify-center min-w-[24px]" onClick={() => updateQty(item.id, item.qty + 1)}>+</button>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-[9px] text-[var(--text2)] font-medium">{fmtUSD(item.precio)} c/u</div>
-                                    <div className="font-mono text-xs font-black text-[var(--text-main)]">{fmtUSD(item.precio * item.qty)}</div>
+                                {/* PRECIO + BORRAR */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <div className="text-right">
+                                        <div className="text-[8px] text-[var(--text2)] font-medium leading-none">{fmtUSD(item.precio)}/u</div>
+                                        <div className="font-mono text-[11px] font-black text-[var(--text-main)] leading-tight">{fmtUSD(item.precio * item.qty)}</div>
+                                    </div>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); removeFromCart(item.id) }}
+                                        className="text-[var(--text2)] hover:text-white hover:bg-[var(--red-var)] transition-colors w-5 h-5 flex justify-center items-center border border-transparent hover:border-[var(--red-var)] shrink-0"
+                                    >
+                                        <span className="material-icons-round text-[13px]">close</span>
+                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        ))}
+                    </div>
                 )}
             </div>
         </div>

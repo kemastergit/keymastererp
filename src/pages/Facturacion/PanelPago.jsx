@@ -1,26 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { fmtUSD, fmtBS } from '../../utils/format'
-import { db } from '../../db/db'
 import useStore from '../../store/useStore'
 import Modal from '../../components/UI/Modal'
 
 export default function PanelPago({
-    cart, cartSubtotal, cartIva, cartIgtf, cartTotal, ivaEnabled, setIvaEnabled,
     tipoPago, setTipoPago, payments, paymentsTotal, openModalWithMethod, setShowPaymentModal,
     removePayment, handleEditPay, tasa, vencFact, setVencFact, procesarCotizacion, clearCart,
-    procesarNota, clienteFact, setClienteFact, currentUser, enviarCajaCentral,
-    setShowNotasModal, notasPendientes, fetchNotasVendedores, loading
+    procesarNota, currentUser, enviarCajaCentral,
+    setShowNotasModal, notasPendientes, fetchNotasVendedores, loading,
+    inicialCuotas, setInicialCuotas, metodoInicial, setMetodoInicial, 
+    numCuotas, setNumCuotas, frecuenciaCuotas, setFrecuenciaCuotas,
+    cartTotal, cartSubtotal 
 }) {
     const { cartDescuento, setDescuento, descuentoReason, askAdmin } = useStore()
     const [showDescuentoModal, setShowDescuentoModal] = useState(false)
     const [tempDescuento, setTempDescuento] = useState('')
     const [tempMotivo, setTempMotivo] = useState('')
-
-    // --- NUEVOS ESTADOS PARA CREDITO_CUOTAS (PASO 4B) ---
-    const [inicialCuotas, setInicialCuotas] = useState(0)
-    const [metodoInicial, setMetodoInicial] = useState('EFECTIVO_USD')
-    const [numCuotas, setNumCuotas] = useState(2)
-    const [frecuenciaCuotas, setFrecuenciaCuotas] = useState('QUINCENAL')
 
     return (
         <div className="bg-[#f8fafc] border border-slate-200 flex flex-col lg:h-full lg:overflow-y-auto custom-scroll relative min-h-0 w-full lg:min-w-[300px] lg:max-w-[340px]">
@@ -45,61 +40,7 @@ export default function PanelPago({
 
             <div className="p-5 flex flex-col gap-5 flex-1 bg-[#f8fafc]">
 
-                {/* TOTALES (TARJETA OSCURA) */}
-                <div className="bg-[#0f172a] rounded-3xl p-6 text-white shrink-0 shadow-lg relative overflow-hidden">
-                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500 blur-[60px] opacity-20 rounded-full"></div>
-
-                    <div className="flex justify-between items-center mb-6 relative z-10">
-                        <div className="flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[#94a3b8] block mb-1">Subtotal</span>
-                            <span className="text-[15px] font-mono font-bold text-slate-200">{fmtUSD(cartSubtotal())}</span>
-                        </div>
-                        <div className="flex-1 text-right">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-[#94a3b8] block mb-1 flex items-center justify-end gap-1.5">
-                                IVA (16%)
-                                <button onClick={() => setIvaEnabled(!ivaEnabled)} className={`w-8 h-4 relative transition-all rounded-full ${ivaEnabled ? 'bg-blue-500' : 'bg-slate-700'}`}>
-                                    <div className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-all shadow-sm ${ivaEnabled ? 'left-[18px]' : 'left-[2px]'}`}></div>
-                                </button>
-                            </span>
-                            <span className="text-[15px] font-mono font-bold text-slate-200">{fmtUSD(cartIva())}</span>
-                        </div>
-                    </div>
-                    {cartIgtf() > 0 && (
-                        <div className="flex justify-between items-center text-orange-400 mb-2 relative z-10 border-t border-slate-700/50 pt-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Cargo IGTF (3%)</span>
-                            <span className="text-sm font-mono font-bold">{fmtUSD(cartIgtf())}</span>
-                        </div>
-                    )}
-
-                    {cartDescuento > 0 && (
-                        <div className="flex justify-between items-center text-emerald-400 mb-2 relative z-10 border-t border-slate-700/50 pt-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Descuento ({descuentoReason})</span>
-                            <span className="text-sm font-mono font-bold">-{fmtUSD(cartDescuento)}</span>
-                        </div>
-                    )}
-
-                    <div className="pt-5 border-t border-slate-700/50 relative z-10">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Total a Pagar</span>
-                            <button
-                                onClick={() => setShowDescuentoModal(true)}
-                                className="text-[10px] font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-1.5 cursor-pointer transition-all px-3 py-1.5 rounded-lg shadow-md hover:scale-105 active:scale-95"
-                            >
-                                <span className="material-icons-round text-[13px]">local_offer</span>
-                                Aplicar Descuento
-                            </button>
-                        </div>
-                        <div className="flex justify-between items-end">
-                            <div className="text-[40px] leading-none font-black text-white tracking-tighter">
-                                <span className="text-2xl mr-1 text-slate-300">$</span>
-                                {cartTotal()?.toFixed(2)}
-                            </div>
-                            <div className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest pb-1">
-                                {fmtBS(cartTotal(), tasa)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {/* El cuadro de totales ha sido movido al Header Global para ahorrar espacio */}
 
                 {/* INTERFAZ CONDICIONAL */}
                 {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
@@ -110,12 +51,20 @@ export default function PanelPago({
                                 <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest mt-1">
                                     Pagos Realizados
                                 </span>
+                                {/* Oculto en desktop porque ya estará el teclado fijo a la derecha */}
                                 <button 
                                     onClick={() => setShowPaymentModal(true)} 
-                                    className="bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center transition-all shadow-sm active:scale-95 cursor-pointer"
+                                    className="lg:hidden bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-500 hover:text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center transition-all shadow-sm active:scale-95 cursor-pointer"
                                 >
                                     <span className="material-icons-round text-[12px] mr-1">add_circle</span> 
                                     Añadir Pago
+                                </button>
+                                <button
+                                    onClick={() => setShowDescuentoModal(true)}
+                                    className="text-[9px] font-black uppercase tracking-widest bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-1.5 cursor-pointer transition-all px-3 py-1.5 rounded-lg shadow-md hover:scale-105 active:scale-95"
+                                >
+                                    <span className="material-icons-round text-[13px]">local_offer</span>
+                                    Descuento
                                 </button>
                             </div>
 
@@ -188,7 +137,7 @@ export default function PanelPago({
                                 ].map(t => (
                                     <button key={t.id} onClick={() => setTipoPago(t.id)}
                                         className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-lg transition-all
-                            ${tipoPago === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                                ${tipoPago === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                                         {t.label}
                                     </button>
                                 ))}
@@ -255,9 +204,9 @@ export default function PanelPago({
                                                 value={frecuenciaCuotas}
                                                 onChange={e => setFrecuenciaCuotas(e.target.value)}
                                             >
-                                                <option value="SEMANAL">SEMANAL</option>
-                                                <option value="QUINCENAL">QUINCENAL</option>
-                                                <option value="MENSUAL">MENSUAL</option>
+                                                <option value="SEMANAL">Semanal</option>
+                                                <option value="QUINCENAL">Quincenal</option>
+                                                <option value="MENSUAL">Mensual</option>
                                             </select>
                                         </div>
                                     </div>
@@ -283,7 +232,7 @@ export default function PanelPago({
                                     <button
                                         disabled={loading}
                                         className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-[12px] tracking-widest transition-all shadow-md active:scale-[0.98]
-                            ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' : 'bg-[#009c85] hover:bg-[#007b69] text-white'}`}
+                                ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' : 'bg-[#009c85] hover:bg-[#007b69] text-white'}`}
                                         onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}>
                                         <span className={`material-icons-round text-[20px] ${loading ? 'animate-spin' : ''}`}>
                                             {loading ? 'sync' : 'save'}

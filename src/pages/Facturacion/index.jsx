@@ -15,6 +15,7 @@ import Fuse from 'fuse.js'
 import Catalogo from './Catalogo'
 import ItemsAgregados from './ItemsAgregados'
 import PanelPago from './PanelPago'
+import PanelPagoKeypad from './PanelPagoKeypad'
 import RutaVendedorModal from './RutaVendedorModal'
 import ClienteSelector from '../../components/UI/ClienteSelector'
 import { useNavigate } from 'react-router-dom'
@@ -79,6 +80,77 @@ export default function Facturacion() {
   const [deuda, setDeuda] = useState(0)
   const [limiteCredito, setLimiteCredito] = useState(0)
 
+  // --- ESTADOS ELEVADOS PARA CREDITO_CUOTAS ---
+  const [inicialCuotas, setInicialCuotas] = useState(0)
+  const [metodoInicial, setMetodoInicial] = useState('EFECTIVO_USD')
+  const [numCuotas, setNumCuotas] = useState(2)
+  const [frecuenciaCuotas, setFrecuenciaCuotas] = useState('QUINCENAL')
+
+  const updatePayAmount = useCallback((val, fromUSD = true) => {
+    const n = parseFloat(val) || 0
+    if (fromUSD) {
+      setPayForm(prev => ({
+        ...prev,
+        montoUSD: val,
+        montoBS: val === '' ? '' : (n * tasa).toFixed(2)
+      }))
+    } else {
+      setPayForm(prev => ({
+        ...prev,
+        montoBS: val,
+        montoUSD: val === '' ? '' : (n / tasa).toFixed(2)
+      }))
+    }
+  }, [tasa])
+
+  const handleKeypad = useCallback((val) => {
+    setKeypadBuffer(prev => {
+      let newBuffer = prev
+      if (val === 'DEL') {
+        newBuffer = newBuffer.slice(0, -1)
+      } else if (val === '.') {
+        if (!newBuffer.includes('.')) newBuffer += '.'
+      } else {
+        newBuffer += val
+      }
+
+      // Update payForm inside functional state update depends on buffer
+      if (activeCurrency === 'USD') {
+        updatePayAmount(newBuffer, true)
+      } else {
+        updatePayAmount(newBuffer, false)
+      }
+
+      return newBuffer
+    })
+  }, [activeCurrency, updatePayAmount])
+
+  const handleAddPay = useCallback((stayOpen = true) => {
+    const usd = parseFloat(payForm.montoUSD)
+    if (!usd || usd <= 0) {
+      toast('Ingrese un monto válido', 'warn')
+      return
+    }
+    const bs = parseFloat(payForm.montoBS) || (usd * tasa)
+    addPayment(payForm.metodo, usd, tasa, bs)
+
+    const remaining = Math.max(0, cartTotal() - (paymentsTotal() + usd))
+    const nextUSD = remaining > 0 ? remaining.toFixed(2) : ''
+    const nextBS = remaining > 0 ? (remaining * tasa).toFixed(2) : ''
+
+    setPayForm({
+      ...payForm,
+      montoUSD: nextUSD,
+      montoBS: nextBS
+    })
+
+    // Pre-llenar el buffer con el resto para agilizar
+    setKeypadBuffer(activeCurrency === 'USD' ? nextUSD : nextBS)
+
+    toast(`✅ Pago añadido`, 'ok')
+    if (!stayOpen) setShowPaymentModal(false)
+  }, [payForm, tasa, addPayment, cartTotal, paymentsTotal, activeCurrency, setShowPaymentModal, toast])
+
   useEffect(() => {
     if (!clienteFact || clienteFact.length < 2) { setDeuda(0); setLimiteCredito(0); return }
     const calcDeuda = async () => {
@@ -102,9 +174,9 @@ export default function Facturacion() {
   // Resizable columns state
   const [widths, setWidths] = useState(() => {
     try {
-      const saved = localStorage.getItem('fact_col_widths')
-      return saved ? JSON.parse(saved) : { items: 280, pago: 280 }
-    } catch { return { items: 280, pago: 280 } }
+      const saved = localStorage.getItem('fact_col_widths_v2') // Nueva versión para incluir teclado
+      return saved ? JSON.parse(saved) : { catalogo: 400, items: 300, pago: 280, keypad: 260 }
+    } catch { return { catalogo: 400, items: 300, pago: 280, keypad: 260 } }
   })
 
   const resizingRef = useRef({ isResizing: false, type: null, startX: 0, startWidth: 0 })
@@ -125,12 +197,19 @@ export default function Facturacion() {
       if (!resizingRef.current.isResizing) return
       const { type, startX, startWidth } = resizingRef.current
       const deltaX = e.clientX - startX
-      const newWidth = Math.max(180, Math.min(500, startWidth - deltaX))
       
-      if (type === 'items') {
+      if (type === 'catalogo') {
+        const newWidth = Math.max(250, Math.min(1000, startWidth + deltaX))
+        setWidths(prev => ({ ...prev, catalogo: newWidth }))
+      } else if (type === 'items') {
+        const newWidth = Math.max(160, Math.min(500, startWidth - deltaX))
         setWidths(prev => ({ ...prev, items: newWidth }))
-      } else {
+      } else if (type === 'pago') {
+        const newWidth = Math.max(160, Math.min(500, startWidth - deltaX))
         setWidths(prev => ({ ...prev, pago: newWidth }))
+      } else if (type === 'keypad') {
+        const newWidth = Math.max(160, Math.min(500, startWidth - deltaX))
+        setWidths(prev => ({ ...prev, keypad: newWidth }))
       }
     }
 
@@ -331,8 +410,28 @@ export default function Facturacion() {
           return // Frenamos la propagación de este Enter ninja
         }
         scannerBuffer.current = '' // reset estándar
+
+        // --- NUEVO: Confirmar pago con ENTER si no hay input enfocado ---
+        const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA'
+        if (!isInput && keypadBuffer && parseFloat(keypadBuffer) > 0) {
+           e.preventDefault()
+           handleAddPay(true)
+           return
+        }
       }
       // ------ FIN NINJA SCANNER ------
+
+      // --- NUEVO: Entrada numérica global ---
+      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA'
+      if (!isInput && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if ((e.key >= '0' && e.key <= '9')) {
+             handleKeypad(e.key)
+        } else if (e.key === '.' || e.key === ',') {
+             handleKeypad('.')
+        } else if (e.key === 'Backspace') {
+             handleKeypad('DEL')
+        }
+      }
 
       if (e.key === 'F2') {
         e.preventDefault()
@@ -375,7 +474,7 @@ export default function Facturacion() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [cart, setShowPaymentModal, clearCart, setStep, removeFromCart, toast, showPaymentModal, showNotasModal, showPrintModal, editingItem, addToCart])
+  }, [cart, setShowPaymentModal, clearCart, setStep, removeFromCart, toast, showPaymentModal, showNotasModal, showPrintModal, editingItem, addToCart, currentUser?.rol, handleAddPay, handleKeypad, keypadBuffer])
 
   const handlePrint = useReactToPrint({
     contentRef: ticketRef,
@@ -774,67 +873,6 @@ export default function Facturacion() {
     setLoading(false)
   }
 
-  const handleAddPay = (stayOpen = true) => {
-    const usd = parseFloat(payForm.montoUSD)
-    if (!usd || usd <= 0) {
-      toast('Ingrese un monto válido', 'warn')
-      return
-    }
-    const bs = parseFloat(payForm.montoBS) || (usd * tasa)
-    addPayment(payForm.metodo, usd, tasa, bs)
-
-    const remaining = Math.max(0, cartTotal() - (paymentsTotal() + usd))
-    const nextUSD = remaining > 0 ? remaining.toFixed(2) : ''
-    const nextBS = remaining > 0 ? (remaining * tasa).toFixed(2) : ''
-
-    setPayForm({
-      ...payForm,
-      montoUSD: nextUSD,
-      montoBS: nextBS
-    })
-
-    // Pre-llenar el buffer con el resto para agilizar
-    setKeypadBuffer(activeCurrency === 'USD' ? nextUSD : nextBS)
-
-    toast(`✅ Pago añadido`, 'ok')
-    if (!stayOpen) setShowPaymentModal(false)
-  }
-
-  const handleKeypad = (val) => {
-    let newBuffer = keypadBuffer
-    if (val === 'DEL') {
-      newBuffer = newBuffer.slice(0, -1)
-    } else if (val === '.') {
-      if (!newBuffer.includes('.')) newBuffer += '.'
-    } else {
-      newBuffer += val
-    }
-    setKeypadBuffer(newBuffer)
-
-    // Update payForm based on buffer
-    if (activeCurrency === 'USD') {
-      updatePayAmount(newBuffer, true)
-    } else {
-      updatePayAmount(newBuffer, false)
-    }
-  }
-
-  const updatePayAmount = (val, fromUSD = true) => {
-    const n = parseFloat(val) || 0
-    if (fromUSD) {
-      setPayForm(prev => ({
-        ...prev,
-        montoUSD: val,
-        montoBS: val === '' ? '' : (n * tasa).toFixed(2)
-      }))
-    } else {
-      setPayForm(prev => ({
-        ...prev,
-        montoBS: val,
-        montoUSD: val === '' ? '' : (n / tasa).toFixed(2)
-      }))
-    }
-  }
 
   const addGeneric = async () => {
     const art = await db.articulos.where('codigo').equals('000').first()
@@ -890,30 +928,105 @@ export default function Facturacion() {
           )}
         </div>
 
-        {/* Indicadores Financieros a la derecha */}
-        <div className="flex items-center gap-6">
-          {deuda > 0.01 && (
-            <div className="flex flex-col items-end border-r border-slate-800 pr-6">
-              <span className="text-[9px] font-black text-red-500/70 uppercase tracking-tighter mb-0.5">Saldo Deudor</span>
-              <span className="text-lg font-mono font-black text-red-500 leading-none">{fmtUSD(deuda)}</span>
+        {/* Resumen de Venta en el Header (Opcional: Reemplaza Indicadores Financieros) */}
+        <div className="flex items-center gap-4 ml-auto">
+          
+          {/* SECCIÓN DE DEUDA Y CRÉDITO DEL CLIENTE (INDICADORES DE RIESGO) */}
+          {(deuda > 0.01 || limiteCredito > 0) && (
+            <div className="hidden lg:flex items-center gap-6 pl-6 border-l border-slate-800/50 ml-2 py-1">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${deuda > 0 ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>
+                <span className="material-icons-round text-[24px]">{deuda > 0 ? 'warning' : 'account_balance_wallet'}</span>
+              </div>
+              
+              <div className="flex gap-6">
+                <div className="flex flex-col leading-none text-right">
+                  <div className="flex items-center gap-2 justify-end mb-1">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saldo Deudor</span>
+                    {deuda > 0 && <span className="text-[8px] bg-red-600 text-white px-1.5 py-0.5 rounded-md font-black animate-pulse">PENDIENTE</span>}
+                  </div>
+                  <span className={`text-[18px] font-mono font-black ${deuda > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                    {fmtUSD(deuda)}
+                  </span>
+                </div>
+
+                <div className="flex flex-col leading-none pl-6 border-l border-slate-800/30 text-right">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Límite Crédito</span>
+                  <span className="text-[18px] font-mono font-black text-emerald-500">
+                    {fmtUSD(limiteCredito)}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
-          {limiteCredito > 0 && (
-            <div className="flex flex-col items-end border-r border-slate-800 pr-6">
-              <span className="text-[9px] font-black text-emerald-500/70 uppercase tracking-tighter mb-0.5">Crédito Máx</span>
-              <span className="text-lg font-mono font-black text-emerald-400 leading-none">{fmtUSD(limiteCredito)}</span>
+          {/* CUADRO DE TOTALES — Enfocado en la venta actual */}
+          <div className="flex items-center gap-6 px-6 bg-[#1e293b]/60 rounded-2xl py-2 border border-slate-700/50 shadow-inner">
+            {/* SUB-TOTAL */}
+            <div className="flex flex-col items-end">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Subtotal</span>
+              <span className="text-[14px] font-mono font-bold text-slate-200">{fmtUSD(cartSubtotal())}</span>
             </div>
-          )}
 
-          <div className="flex items-center gap-3 pl-2">
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-slate-400 block leading-none">{currentUser?.nombre || currentUser?.name || 'Vendedor'}</span>
-              <span className="text-[8px] font-medium text-slate-600 uppercase tracking-widest mt-1">Terminal Activa</span>
+            {/* IVA */}
+            <div className="flex flex-col items-center border-l border-slate-700/50 pl-6">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">IVA (16%)</span>
+                <input 
+                  type="checkbox" 
+                  checked={ivaEnabled} 
+                  onChange={e => setIvaEnabled(e.target.checked)} 
+                  className="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 accent-emerald-500 cursor-pointer" 
+                />
+              </div>
+              <span className="text-[14px] font-mono font-bold text-slate-200">{fmtUSD(cartIva())}</span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
-              <span className="material-icons-round text-lg">admin_panel_settings</span>
+
+            {/* TOTAL A PAGAR */}
+            <div className="flex flex-col items-end border-l border-slate-700/50 pl-6 min-w-[140px]">
+              <span className="text-[11px] font-black text-emerald-400 uppercase tracking-[0.1em] mb-0.5">Total a Pagar</span>
+              <div className="flex flex-col items-end leading-none">
+                <div className="text-[28px] font-black text-white hover:text-emerald-400 transition-colors leading-none tracking-tighter">
+                  <span className="text-sm font-bold text-slate-500 mr-1">$</span>
+                  {cartTotal()?.toFixed(2)}
+                </div>
+                <div className="text-[11px] font-mono font-bold text-slate-500 text-right leading-none uppercase tracking-widest mt-1.5 opacity-80">
+                  {fmtBS(cartTotal(), tasa)}
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* BOTÓN DE ACCIÓN PRINCIPAL (DINÁMICO SEGÚN ROL) */}
+          <div className="flex items-center ml-2 pl-4 border-l border-slate-800/50">
+            {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
+              <button
+                onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}
+                disabled={loading || cart.length === 0}
+                className={`group px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black uppercase text-[12px] tracking-[0.15em] shadow-xl shadow-emerald-900/30 flex items-center gap-3 transition-all active:scale-95 ${loading || cart.length === 0 ? 'opacity-20 grayscale cursor-not-allowed' : 'hover:ring-4 hover:ring-emerald-500/20'}`}
+              >
+                <span className={`material-icons-round text-[20px] ${!loading && cart.length > 0 ? 'group-hover:translate-x-1' : ''} transition-transform`}>check_circle</span>
+                <span>{loading ? 'PROCESANDO...' : 'FACTURAR'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={enviarCajaCentral}
+                disabled={loading || cart.length === 0}
+                className={`group px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black uppercase text-[12px] tracking-[0.15em] shadow-xl shadow-blue-900/30 flex items-center gap-3 transition-all active:scale-95 ${loading || cart.length === 0 ? 'opacity-20 grayscale cursor-not-allowed' : 'hover:ring-4 hover:ring-blue-500/20'}`}
+              >
+                <span className={`material-icons-round text-[20px] ${!loading && cart.length > 0 ? 'group-hover:translate-x-1' : ''} transition-transform`}>send</span>
+                <span>{loading ? 'ENVIANDO...' : 'ENVIAR A CAJA'}</span>
+              </button>
+            )}
+
+            {/* BOTÓN DE LIMPIAR — Reservado al final */}
+            <button 
+              onClick={clearCart}
+              title="Vaciar Carrito"
+              disabled={cart.length === 0}
+              className="ml-4 w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20 disabled:opacity-10"
+            >
+              <span className="material-icons-round text-[22px]">delete_sweep</span>
+            </button>
           </div>
         </div>
       </div>
@@ -975,18 +1088,27 @@ export default function Facturacion() {
                 handleEditPay={handleEditPay}
                 tasa={tasa} vencFact={vencFact} setVencFact={setVencFact}
                 procesarCotizacion={procesarCotizacion} clearCart={clearCart}
-                procesarNota={procesarNota} clienteFact={clienteFact} setClienteFact={setClienteFact}
-                currentUser={currentUser} enviarCajaCentral={enviarCajaCentral}
-                setShowNotasModal={setShowNotasModal} notasPendientes={notasPendientes} fetchNotasVendedores={fetchNotasVendedores}
-                loading={loading}
-              />
+                procesarNota={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)} 
+               clienteFact={clienteFact} setClienteFact={setClienteFact}
+               currentUser={currentUser} enviarCajaCentral={enviarCajaCentral}
+               setShowNotasModal={setShowNotasModal} notasPendientes={notasPendientes} fetchNotasVendedores={fetchNotasVendedores}
+               loading={loading}
+               // Pasamos los setters para que PanelPago los maneje
+               inicialCuotas={inicialCuotas} setInicialCuotas={setInicialCuotas}
+               metodoInicial={metodoInicial} setMetodoInicial={setMetodoInicial}
+               numCuotas={numCuotas} setNumCuotas={setNumCuotas}
+               frecuenciaCuotas={frecuenciaCuotas} setFrecuenciaCuotas={setFrecuenciaCuotas}
+            />
             )}
 
           </div>
 
           {/* DESKTOP VIEW (HIDDEN ON MOBILE) */}
-          {/* COLUMNA 1: CATALOGO — se expande en modo POS */}
-          <div className={`hidden lg:flex h-full min-w-0 ${viewMode === 'pos' ? 'flex-[3]' : 'flex-[1.5]'}`}>
+          {/* COLUMNA 1: CATALOGO */}
+          <div 
+            className="hidden lg:flex h-full min-w-0"
+            style={{ width: viewMode === 'pos' ? '100%' : widths.catalogo + 'px' }}
+          >
             <Catalogo
               busq={busq} setBusq={setBusq}
               showDrop={showDrop} setShowDrop={setShowDrop}
@@ -1002,19 +1124,21 @@ export default function Facturacion() {
             />
           </div>
 
-          {/* DIVISOR RESIZABLE 1 — oculto en modo POS */}
+          {/* DIVISOR RESIZABLE 1 (CATALOGO) — oculto en modo POS */}
           {viewMode !== 'pos' && (
             <div 
-              onMouseDown={(e) => startResizing('items', e)}
-              className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-orange-400 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
-            ></div>
+              onMouseDown={(e) => startResizing('catalogo', e)}
+              className="hidden lg:flex w-2.5 bg-orange-500/30 hover:bg-orange-600 cursor-col-resize transition-all h-full z-20 shrink-0 border-x border-orange-500/20 items-center justify-center group"
+              title="Estirar Catálogo"
+            >
+              <div className="w-1 h-8 bg-orange-500 rounded-full opacity-40 group-hover:opacity-100 transition-opacity shadow-[0_0_8px_rgba(249,115,22,0.5)]"></div>
+            </div>
           )}
 
           {/* COLUMNA 2: ITEMS — oculta en modo POS (está integrado dentro del Catalogo) */}
           {viewMode !== 'pos' && (
             <div 
-              className="hidden lg:flex h-full shrink-0"
-              style={{ width: widths.items + 'px' }}
+              className="hidden lg:flex h-full flex-1"
             >
               <ItemsAgregados
                 cart={cart} updateQty={updateQty}
@@ -1023,13 +1147,16 @@ export default function Facturacion() {
             </div>
           )}
 
-          {/* DIVISOR RESIZABLE 2 */}
+          {/* DIVISOR RESIZABLE 2 (PAGO) */}
           <div 
             onMouseDown={(e) => startResizing('pago', e)}
-            className="hidden lg:block w-1.5 hover:w-2 bg-slate-100 hover:bg-orange-400 cursor-col-resize transition-all h-full z-10 shrink-0 border-x border-slate-200/50"
-          ></div>
+            className="hidden lg:flex w-2.5 bg-orange-500/30 hover:bg-orange-600 cursor-col-resize transition-all h-full z-20 shrink-0 border-x border-orange-500/20 items-center justify-center group"
+            title="Arrastrar para ajustar totales"
+          >
+            <div className="w-1 h-8 bg-orange-500 rounded-full opacity-40 group-hover:opacity-100 transition-opacity"></div>
+          </div>
 
-          {/* COLUMNA 3: PAGO */}
+          {/* COLUMNA 3: PAGO (Totales) */}
           <div 
             className="hidden lg:flex h-full shrink-0"
             style={{ width: widths.pago + 'px' }}
@@ -1051,227 +1178,52 @@ export default function Facturacion() {
             />
           </div>
 
+          {/* DIVISOR RESIZABLE 3 (KEYPAD) */}
+          <div 
+            onMouseDown={(e) => startResizing('keypad', e)}
+            className="hidden lg:flex w-2.5 bg-orange-500/30 hover:bg-orange-600 cursor-col-resize transition-all h-full z-20 shrink-0 border-x border-orange-500/20 items-center justify-center group"
+            title="Ajustar teclado"
+          >
+            <div className="w-1 h-8 bg-orange-500 rounded-full opacity-40 group-hover:opacity-100 transition-opacity"></div>
+          </div>
+
+          {/* COLUMNA 4: TECLADO Y MÉTODOS (KEYPAD) */}
+          <div 
+            className="hidden lg:flex h-full shrink-0"
+            style={{ width: widths.keypad + 'px' }}
+          >
+            <PanelPagoKeypad
+              payForm={payForm} setPayForm={setPayForm}
+              keypadBuffer={keypadBuffer} setKeypadBuffer={setKeypadBuffer}
+              activeCurrency={activeCurrency} setActiveCurrency={setActiveCurrency}
+              handleAddPay={handleAddPay} handleKeypad={handleKeypad}
+              cartTotal={cartTotal} paymentsTotal={paymentsTotal}
+              payments={payments} handleEditPay={handleEditPay} removePayment={removePayment}
+              tasa={tasa}
+            />
+          </div>
+
         </div>
       </div>
 
       {/* MODALS */}
       <Modal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} title="" noPadding hideHeader>
-        {(() => {
-          const totalVenta = cartTotal()
-          const yaPagado = paymentsTotal()
-          const saldo = Math.max(0, totalVenta - yaPagado)
-
-          return (
-            <div className="flex flex-col bg-[#F4F6F8] rounded-3xl overflow-hidden max-w-[440px] mx-auto shadow-2xl scale-[0.98]">
-              {/* HEADER PERSONALIZADO */}
-              <div className="flex items-center justify-between p-4 bg-white border-b border-slate-100">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center">
-                    <span className="material-icons-round text-[#F36E25]">payments</span>
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-[#131E2E] leading-tight">Registro de Pagos</h2>
-                    <p className="text-sm font-bold text-[#131E2E] opacity-90">Múltiples</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowPaymentModal(false)} className="w-10 h-10 rounded-full hover:bg-slate-50 flex items-center justify-center text-slate-400 transition-colors">
-                  <span className="material-icons-round">close</span>
-                </button>
-              </div>
-
-              {/* DASHBOARD DE SALDOS */}
-              <div className="p-4 bg-orange-50/30">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">TOTAL VENTA</p>
-                    <p className="text-base font-black text-[#131E2E]">
-                      {activeCurrency === 'USD' ? fmtUSD(totalVenta) : fmtBS(totalVenta * tasa)}
-                    </p>
-                  </div>
-                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">ABONADO</p>
-                    <p className="text-base font-black text-[var(--green-var)]">
-                      {activeCurrency === 'USD' ? fmtUSD(yaPagado) : fmtBS(yaPagado * tasa)}
-                    </p>
-                    {payments.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[var(--green-var)] text-white text-[8px] font-black w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">{payments.length}</span>
-                    )}
-                  </div>
-                  <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">FALTA POR PAGAR</p>
-                    <p className="text-base font-black text-[#F36E25]">
-                      {activeCurrency === 'USD' ? fmtUSD(saldo) : fmtBS(saldo * tasa)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* CONTENIDO PRINCIPAL DIVIDIDO */}
-              <div className="flex flex-1 min-h-[380px]">
-                {/* COLUMNA IZQUIERDA: MÉTODOS Y LISTA */}
-                <div className="flex-1 p-4 space-y-4 border-r border-slate-200/60">
-                  {/* SWITCHER MONEDA */}
-                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                      <button
-                        onClick={() => {
-                          if (activeCurrency === 'BS' && keypadBuffer) {
-                            const converted = (parseFloat(keypadBuffer) / tasa).toFixed(2)
-                            setKeypadBuffer(converted === '0.00' ? '' : converted)
-                          }
-                          setActiveCurrency('USD')
-                        }}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'USD' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
-                        USD
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (activeCurrency === 'USD' && keypadBuffer) {
-                            const converted = (parseFloat(keypadBuffer) * tasa).toFixed(2)
-                            setKeypadBuffer(converted === '0.00' ? '' : converted)
-                          }
-                          setActiveCurrency('BS')
-                        }}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition-all ${activeCurrency === 'BS' ? 'bg-white text-[#F36E25] shadow-sm' : 'text-slate-400'}`}>
-                        BS
-                      </button>
-                    </div>
-
-                  <div className="space-y-4">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">MÉTODO DE PAGO</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'EFECTIVO_USD', label: 'Efectivo $', icon: 'payments', currency: 'USD' },
-                        { id: 'EFECTIVO_BS', label: 'Efectivo Bs', icon: 'money', currency: 'BS' },
-                        { id: 'PUNTO_VENTA', label: 'Tarjeta', icon: 'credit_card', currency: 'BS' },
-                        { id: 'ZELLE', label: 'Zelle', icon: 'bolt', currency: 'USD' },
-                        { id: 'PAGO_MOVIL', label: 'Pago Móvil', icon: 'smartphone', currency: 'BS' },
-                        { id: 'TRANSFERENCIA_BS', label: 'Transf. Bs', icon: 'account_balance', currency: 'BS' },
-                        { id: 'CUPON', label: 'Cupón', icon: 'confirmation_number', currency: 'ANY' },
-                        { id: 'OTRO', label: 'Otro', icon: 'more_horiz', currency: 'ANY' },
-                      ]
-                        .filter(m => m.currency === 'ANY' || m.currency === activeCurrency)
-                        .map(m => (
-                          <button
-                            key={m.id}
-                            onClick={() => {
-                              setPayForm({ ...payForm, metodo: m.id });
-                              if (m.currency !== 'ANY' && m.currency !== activeCurrency) {
-                                // Convertir el monto al cambiar de método/moneda
-                                if (keypadBuffer) {
-                                  const n = parseFloat(keypadBuffer) || 0
-                                  const converted = m.currency === 'BS' ? (n * tasa).toFixed(2) : (n / tasa).toFixed(2)
-                                  setKeypadBuffer(converted === '0.00' ? '' : converted)
-                                }
-                                setActiveCurrency(m.currency);
-                              }
-                            }}
-                            className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all aspect-square
-                              ${payForm.metodo === m.id ? 'border-[#F36E25] bg-white shadow-md scale-105' : 'border-transparent bg-white/50 opacity-60'}`}
-                          >
-                            <span className={`material-icons-round text-lg ${payForm.metodo === m.id ? 'text-[#F36E25]' : 'text-slate-400'}`}>{m.icon}</span>
-                            <span className={`text-[9px] font-black mt-1 ${payForm.metodo === m.id ? 'text-[#131E2E]' : 'text-slate-400'}`}>{m.label}</span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* PAGOS APLICADOS */}
-                  <div className="space-y-2 pt-3 border-t border-slate-100">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">PAGOS APLICADOS</p>
-                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                      {payments.length === 0 ? (
-                        <p className="text-[10px] font-bold text-slate-300 text-center py-4 italic">No hay pagos registrados</p>
-                      ) : (
-                        payments.map(p => (
-                          <div
-                            key={p.id}
-                            onClick={() => handleEditPay(p)}
-                            className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-100 shadow-sm hover:border-[#F36E25] cursor-pointer group transition-all"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="material-icons-round text-[var(--green-var)] text-sm group-hover:text-[#F36E25]">check_circle</span>
-                              <span className="text-[10px] font-black text-[#131E2E] uppercase tracking-tight">{p.metodo.replace(/_/g, ' ')}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs font-black text-[#131E2E]">{fmtUSD(p.monto)}</span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); removePayment(p.id) }}
-                                className="text-slate-300 hover:text-red-500 transition-colors"
-                              >
-                                <span className="material-icons-round text-sm">delete</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* COLUMNA DERECHA: KEYPAD */}
-                <div className="w-[170px] p-4 bg-white/40 flex flex-col">
-                  <div className="mb-6">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">MONTO A INGRESA</p>
-                    <div className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center bg-white shadow-sm
-                      ${keypadBuffer ? 'border-[#F36E25]' : 'border-slate-100'}`}>
-                      <div className="flex items-center">
-                        <span className="text-xs font-black text-slate-400 mr-1">{activeCurrency === 'USD' ? '$' : 'Bs'}</span>
-                        <span className="text-xl font-mono font-black text-[#131E2E]">{keypadBuffer || '0.00'}</span>
-                      </div>
-                      {keypadBuffer && parseFloat(keypadBuffer) > 0 && (
-                        <div className="text-[10px] font-mono font-bold text-slate-400 leading-none mt-1">
-                          {activeCurrency === 'USD' 
-                            ? `Bs ${(parseFloat(keypadBuffer) * tasa).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : `$ ${(parseFloat(keypadBuffer) / tasa).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          }
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* KEYPAD NUMÉRICO */}
-                  <div className="grid grid-cols-3 gap-2 flex-1 mb-4">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, '.', 0, 'DEL'].map(val => (
-                      <button
-                        key={val}
-                        onClick={() => handleKeypad(val)}
-                        className={`w-full aspect-square rounded-2xl font-black text-lg transition-all flex items-center justify-center
-                          ${val === 'DEL' ? 'bg-slate-50 text-slate-500' : 'bg-white text-[#131E2E] shadow-sm hover:scale-110 active:scale-95 border border-slate-100'}`}
-                      >
-                        {val === 'DEL' ? <span className="material-icons-round">backspace</span> : val}
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => handleAddPay(true)}
-                    disabled={!keypadBuffer || parseFloat(keypadBuffer) <= 0}
-                    className="w-full py-4 bg-[#F36E25] hover:bg-[#e05d1a] disabled:opacity-30 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-200 transition-all flex items-center justify-center gap-2">
-                    Añadir Pago
-                  </button>
-                </div>
-              </div>
-
-              {/* FOOTER */}
-              <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
-                <button
-                  onClick={() => setShowPaymentModal(false)}
-                  className="flex-1 py-4 border-2 border-slate-100 rounded-2xl font-black text-xs text-[#131E2E] uppercase tracking-widest hover:bg-slate-50 transition-all">
-                  Volver
-                </button>
-                <button
-                  onClick={() => {
-                    if (payForm.montoUSD > 0 && keypadBuffer) handleAddPay(false)
-                    else setShowPaymentModal(false)
-                  }}
-                  className="flex-[1.5] py-4 bg-[#131E2E] text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-black transition-all shadow-xl shadow-slate-200">
-                  Confirmar Pagos
-                  <span className="material-icons-round text-base">verified_user</span>
-                </button>
-              </div>
-            </div>
-          )
-        })()}
+        <div className="max-w-[400px] mx-auto overflow-hidden rounded-3xl shadow-2xl h-[90vh]">
+          <PanelPagoKeypad
+              payForm={payForm} setPayForm={setPayForm}
+              keypadBuffer={keypadBuffer} setKeypadBuffer={setKeypadBuffer}
+              activeCurrency={activeCurrency} setActiveCurrency={setActiveCurrency}
+              handleAddPay={handleAddPay} handleKeypad={handleKeypad}
+              cartTotal={cartTotal} paymentsTotal={paymentsTotal}
+              payments={payments} handleEditPay={handleEditPay} removePayment={removePayment}
+              tasa={tasa}
+              onConfirm={() => setShowPaymentModal(false)}
+            />
+            {/* Botón flotante para cerrar en mobile */}
+            <button onClick={() => setShowPaymentModal(false)} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center text-white backdrop-blur-md z-50">
+                <span className="material-icons-round">close</span>
+            </button>
+        </div>
       </Modal>
 
       <Modal open={showPrintModal && !!lastVenta} onClose={() => setShowPrintModal(false)} title="Venta Exitosa">
