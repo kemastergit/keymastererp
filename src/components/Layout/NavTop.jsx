@@ -48,7 +48,7 @@ function NavDropdown({ item, isOpen, onToggle }) {
             ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none'
           }`}
-        style={{ borderTop: isOpen ? '3px solid var(--primary)' : 'none' }}
+        style={{ borderTop: isOpen ? '3px solid var(--secondary)' : 'none' }}
       >
         <div className="py-1">
           {item.sub.map((s, idx) => (
@@ -59,9 +59,9 @@ function NavDropdown({ item, isOpen, onToggle }) {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-3 text-[11px] font-bold tracking-wide transition-colors border-l-4
                 ${isActive
-                  ? 'bg-amber-50 text-primary border-primary'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-primary border-transparent'
-                }`
+                  ? 'bg-slate-50 text-[var(--secondary)] border-[var(--secondary)]'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-[var(--secondary)] border-transparent'
+                } font-black`
               }
             >
               <span className="material-icons-round text-lg">{s.ico}</span>
@@ -190,18 +190,18 @@ export default function NavTop() {
           }
         }
         .nav-item:hover {
-          color: var(--teal);
-          background-color: var(--teal4);
+          color: var(--secondary);
+          background-color: var(--surface2);
         }
         .nav-item--active {
-          border-bottom-color: var(--teal) !important;
-          color: var(--teal) !important;
-          background-color: var(--teal4) !important;
+          border-bottom-color: var(--secondary) !important;
+          color: var(--secondary) !important;
+          background-color: var(--surface2) !important;
         }
         .nav-item--open {
-          color: var(--teal) !important;
-          background-color: var(--teal4) !important;
-          border-bottom-color: var(--teal) !important;
+          color: var(--secondary) !important;
+          background-color: var(--surface2) !important;
+          border-bottom-color: var(--secondary) !important;
         }
         .nav-item-icon {
           color: var(--text2);
@@ -209,7 +209,7 @@ export default function NavTop() {
         }
         .nav-item--active .nav-item-icon,
         .nav-item--open .nav-item-icon {
-          color: var(--teal) !important;
+          color: var(--secondary) !important;
         }
         .nav-item-label {
           display: flex;

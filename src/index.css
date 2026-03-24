@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,210 +8,111 @@
   font-family: 'Bebas Neue', cursive;
 }
 
-.font-inter {
-  font-family: 'Inter', sans-serif;
+.font-dm {
+  font-family: 'DM Sans', sans-serif;
 }
 
 :root {
-  /* ── Paleta Principal ── */
-  --primary: #0D1B2A;
-  --primary-dark: #060E18;
-  --bg: #EAEDF2;
-  --surface: #FFFFFF;
-  --surface2: #F0F3F7;
-  --border-var: #C2CAD5;
-  --border2: #D8DEE6;
-  --text-main: #111827;
-  --text2: #4B5563;
-  --text3: #9CA3AF;
-
-  /* ── Acento Azul-Pizarra (cabeceras, botones primarios) ── */
-  --teal: #1B2B45;
-  --teal2: #253A59;
-  --teal3: #C8D8F0;
-  --teal4: #EEF3FA;
-  --tealDark: #0D1B2A;
+  /* ── Paleta KEMASTER LIGHT ── */
+  --bg: #F8F9FB;         /* Fondo gris muy claro */
+  --surface: #FFFFFF;     /* Papel / Superficie */
+  --surface2: #F1F5F9;    /* Superficie secundaria */
+  
+  --primary: #F97316;     /* Naranja Keymaster */
+  --primary-dark: #EA580C;
+  --secondary: #0F172A;   /* Negro/Azul profundo para texto */
+  
+  --teal: #14B8A6;        /* Acento Teal */
+  --teal2: #0D9488;
+  
+  /* ── Texto y Bordes ── */
+  --text-main: #0F172A;   /* Texto principal */
+  --text2: #64748B;       /* Texto secundario (Slate) */
+  --text3: #94A3B8;       /* Texto deshabilitado */
+  
+  --border-var: #E2E8F0;  /* Bordes suaves */
+  --border2: #F1F5F9;     /* Bordes ultra-light */
 
   /* ── Estados ── */
-  --red-var: #B91C1C;
-  --redLight: #FEE2E2;
-  --green-var: #166534;
-  --greenLight: #DCFCE7;
-  --orange-var: #C2410C;
-  --orangeLight: #FFEDD5;
-  --yellow-var: #92400E;
+  --red-var: #EF4444;
+  --green-var: #10B981;
+  --orange-var: #F97316;
 
-  /* ── Sombras con más profundidad ── */
-  --shadow: 2px 2px 0px rgba(0, 0, 0, 0.10), 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow2: 3px 3px 0px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.10);
-  --win-shadow: 4px 4px 0px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
+  /* ── Sombras SaaS (Suaves) ── */
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --win-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
 }
 
 @layer base {
-
-  html,
-  body {
+  html, body {
     height: 100%;
     overflow: hidden;
     margin: 0;
     padding: 0;
   }
 
-  * {
-    box-sizing: border-box;
-  }
-
   body {
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  #root {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  body {
-    @apply font-sans antialiased;
-    -webkit-tap-highlight-color: transparent;
+    font-family: 'IBM Plex Mono', monospace;
     color: var(--text-main);
     background-color: var(--bg);
-    background-image: none !important;
     min-height: 100vh;
   }
-}
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.05);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--orange-var);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--teal2);
+  h1, h2, h3, .title-bebas {
+    font-family: 'Bebas Neue', cursive;
+    letter-spacing: 0.1em; /* Mucho más aireado */
+  }
 }
 
 @layer components {
   .panel {
     @apply p-6 transition-all;
-    background: #ffffff;
-    border: 1px solid var(--border2);
-    border-radius: 1.5rem;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    background: var(--surface);
+    border: 1px solid var(--border-var);
+    border-radius: 8px; /* Un poco más cuadrado pero moderno */
+    box-shadow: var(--win-shadow);
   }
 
   .panel-title {
-    @apply font-bold text-[11px] uppercase tracking-widest mb-4 px-1 flex items-center justify-between;
-    color: var(--teal);
-  }
-
-  .field {
-    @apply mb-4;
-  }
-
-  .field label {
-    @apply block text-[10px] font-bold uppercase tracking-widest mb-1 ml-1;
-    font-family: 'Inter', sans-serif;
-    color: #64748b;
-  }
-
-  .inp {
-    @apply w-full py-3 px-4 text-sm outline-none transition-all font-medium rounded-xl;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    color: #0f172a;
-    font-family: 'Inter', sans-serif;
-  }
-
-  .inp:focus {
-    border-color: #3b82f6 !important;
-    background: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-    outline: none !important;
+    @apply font-bebas text-lg uppercase tracking-wider mb-4 px-1 flex items-center justify-between;
+    color: var(--secondary);
   }
 
   .btn {
-    @apply font-bold text-xs uppercase tracking-wider py-3 px-6 flex items-center justify-center gap-2 rounded-xl transition-all shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100;
-    border: 1px solid transparent;
+    @apply font-bold text-[11px] uppercase tracking-[0.15em] py-3 px-6 flex items-center justify-center gap-2 rounded-[4px] transition-all active:scale-[0.98] disabled:opacity-50;
+    font-family: 'IBM Plex Mono', monospace;
   }
 
-  .btn-r {
-    @apply text-white bg-blue-600 shadow-md shadow-blue-500/20;
-  }
-
-  .btn-r:hover:not(:disabled) {
-    @apply bg-blue-700 shadow-lg shadow-blue-500/30;
-  }
-
-  .btn-g {
-    @apply text-white bg-emerald-600 shadow-md shadow-emerald-500/20;
-  }
-
-  .btn-g:hover:not(:disabled) {
-    @apply bg-emerald-700 shadow-lg shadow-emerald-500/30;
-  }
-
-  .btn-b {
-    @apply bg-slate-100 text-slate-700 border-slate-200;
-  }
-
-  .btn-b:hover:not(:disabled) {
-    @apply bg-slate-200 text-slate-800 border-slate-300;
-  }
-
-  .btn-y {
-    @apply text-white;
-    background: var(--orange-var);
-    border-color: var(--orange-var);
-  }
-
-  .btn-gr {
-    background: transparent;
+  .field label {
+    @apply block text-[10px] font-extrabold uppercase tracking-[0.1em] mb-1.5 ml-0.5;
     color: var(--text2);
-    border-color: var(--border2);
   }
 
-  .btn-gr:hover:not(:disabled) {
-    background: var(--teal4);
-    color: var(--teal);
+  .inp {
+    @apply w-full py-3 px-4 text-sm outline-none transition-all font-normal rounded-[4px];
+    background: #FFFFFF;
+    border: 1px solid var(--border-var);
+    color: var(--text-main);
   }
 
-  .btn-sm {
-    @apply py-2 px-3 text-[10px];
-  }
-
-  .btn-full {
-    @apply w-full;
+  .inp:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
+    outline: none !important;
   }
 
   .badge {
-    @apply px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border whitespace-nowrap;
+    @apply px-2 py-0.5 rounded-[4px] text-[10px] font-black uppercase border whitespace-nowrap;
   }
 
   .badge-g {
-    @apply bg-green-50 text-green-600 border-green-100;
+    @apply bg-emerald-50 text-emerald-600 border-emerald-100;
   }
 
   .badge-y {
-    @apply bg-amber-50 text-amber-600 border-amber-100;
+    @apply bg-orange-50 text-orange-600 border-orange-100;
   }
 
   .badge-r {
@@ -222,6 +123,7 @@
     @apply overflow-x-auto;
     background: var(--surface);
     border: 1px solid var(--border-var);
+    border-radius: 8px;
   }
 
   .tabla-scroll {
@@ -234,47 +136,34 @@
 
   thead {
     background: var(--surface2);
-    border-bottom: 1px solid var(--border-var);
+    border-bottom: 2px solid var(--border-var);
   }
 
   th {
-    @apply px-4 py-3 text-[10px] uppercase font-bold;
-    letter-spacing: 0.8px;
-    color: var(--text3);
+    @apply px-4 py-4 text-[11px] uppercase font-black;
+    letter-spacing: 1px;
+    color: var(--text2);
     position: sticky;
     top: 0;
     z-index: 10;
   }
 
   td {
-    @apply px-4 py-3 text-sm;
+    @apply px-4 py-4 text-sm border-b border-gray-50;
     color: var(--text-main);
-    border-bottom: 1px solid var(--border2);
-  }
-
-  tr:last-child td {
-    @apply border-b-0;
-  }
-
-  tr:nth-child(even) {
-    background: var(--surface);
-  }
-
-  tr:nth-child(odd) {
-    background: #F5F7FA;
   }
 
   tr:hover {
-    background: var(--teal4) !important;
+    @apply bg-gray-50/50;
     transition: none !important;
   }
 
   tr.selected td {
-    background: var(--teal3) !important;
+    background: #FFF7ED !important; /* Light Orange */
   }
 
   tr.selected td:first-child {
-    border-left: 3px solid var(--teal) !important;
+    border-left: 4px solid var(--primary) !important;
   }
 
   .sticky-col {

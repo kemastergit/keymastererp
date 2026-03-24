@@ -48,7 +48,7 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
       <style>{`
         :root { --hdr-bg: #0f172a; }
         .hdr-root {
-          background: var(--primary, #0f172a);
+          background: var(--secondary, #0f172a);
           border-bottom: 1px solid rgba(255,255,255,0.08);
         }
         .hw {
@@ -87,8 +87,8 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
       `}</style>
 
       <header className="hdr-root sticky top-0 z-50 text-white">
-        {/* Top red accent line */}
-        <div style={{ height: 2, background: 'linear-gradient(to right, transparent, #dc2626, transparent)' }} />
+        {/* Top blue accent line (band-top original) */}
+        <div className="band-top" style={{ height: 3 }} />
 
         <div style={{ padding: '8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 1600, margin: '0 auto' }}>
 
