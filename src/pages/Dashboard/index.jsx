@@ -109,12 +109,37 @@ export default function Dashboard() {
             }
         })
 
-        // 2. Composición de Ingresos
-        const radialData = [
-            { name: 'CONTADO', value: normalizedVentas.filter(v => v.tipo_pago === 'CONTADO').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryLight },
-            { name: 'CRÉDITO', value: normalizedVentas.filter(v => v.tipo_pago === 'CREDITO').reduce((s, v) => s + v.total, 0), fill: COLORS.primary },
-            { name: 'TRANSF.', value: normalizedVentas.filter(v => v.tipo_pago === 'TRANSF.').reduce((s, v) => s + v.total, 0), fill: COLORS.primaryDark }
-        ].filter(d => d.value > 0).sort((a, b) => b.value - a.value)
+        // 2. Composición de Ingresos (Desglose Real por Método)
+        const paymentMap = {}
+        const methodColors = {
+            'EFECTIVO_USD': '#f59e0b', // naranja
+            'PAGO_MOVIL': '#14b8a6',   // teal
+            'ZELLE': '#8b5cf6',        // violeta
+            'PUNTO_VENTA': '#3b82f6',  // azul
+            'EFECTIVO_BS': '#fbbf24',   // amarillo
+            'CREDITO': '#f97316'       // orange-deep (extra)
+        }
+
+        normalizedVentas.filter(v => v.estado !== 'ANULADA').forEach(v => {
+            const pagos = v.pagos || []
+            if (pagos.length > 0) {
+                pagos.forEach(p => {
+                    const m = p.metodo || 'OTRO'
+                    paymentMap[m] = (paymentMap[m] || 0) + (p.monto || 0)
+                })
+            } else {
+                const metodos = [...new Set((v.tipo_pago || 'OTRO').split(',').map(x => x.trim()).filter(Boolean))]
+                metodos.forEach(m => {
+                    paymentMap[m] = (paymentMap[m] || 0) + (v.total / (metodos.length || 1))
+                })
+            }
+        })
+
+        const radialData = Object.entries(paymentMap).map(([name, value]) => ({
+            name,
+            value,
+            fill: methodColors[name] || '#94a3b8' // gris para otros
+        })).sort((a, b) => b.value - a.value).slice(0, 6)
 
         // 3. Top Marcas
         const marcasMap = {}

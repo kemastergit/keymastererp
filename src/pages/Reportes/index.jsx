@@ -382,10 +382,32 @@ export default function Reportes() {
   }, 0)
 
   const porTipo = useMemo(() => {
-    return allVentasFiltradas.filter(v => v.estado !== 'ANULADA').reduce((acc, v) => {
-      acc[v.tipo_pago] = (acc[v.tipo_pago] || 0) + v.total
-      return acc
-    }, {})
+    const acc = {}
+    allVentasFiltradas
+      .filter(v => v.estado !== 'ANULADA')
+      .forEach(v => {
+        // 1. Si tiene el desglose detallado (pagos_json), lo usamos para precisión total
+        if (v.pagos && v.pagos.length > 0) {
+          v.pagos.forEach(p => {
+            const metodo = p.metodo || 'OTRO'
+            acc[metodo] = (acc[metodo] || 0) + (p.monto || 0)
+          })
+        } else {
+          // 2. Fallback: Normalizar el string tipo_pago
+          const metodosUnicos = [...new Set(
+            (v.tipo_pago || 'OTRO')
+              .split(',')
+              .map(m => m.trim())
+              .filter(Boolean)
+          )]
+          
+          metodosUnicos.forEach(m => {
+            const montoProporcional = v.total / (metodosUnicos.length || 1)
+            acc[m] = (acc[m] || 0) + montoProporcional
+          })
+        }
+      })
+    return acc
   }, [allVentasFiltradas])
 
   const agotados = articulos.filter(a => (a.stock || 0) === 0)
