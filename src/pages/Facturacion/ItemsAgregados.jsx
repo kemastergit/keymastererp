@@ -49,7 +49,7 @@ export default function ItemsAgregados({
                                     onClick={() => openEditItem(item)}
                                 >
                                     <div className="text-[9px] font-mono font-bold text-[var(--teal)] truncate leading-none">{item.codigo}</div>
-                                    <div className="text-[10px] font-bold text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--teal)] transition-colors">
+                                    <div className="text-[14px] font-bold text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--teal)] transition-colors">
                                         {item.descripcion}
                                     </div>
                                 </div>
@@ -57,8 +57,8 @@ export default function ItemsAgregados({
                                 {/* PRECIO + BORRAR */}
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     <div className="text-right">
-                                        <div className="text-[8px] text-[var(--text2)] font-medium leading-none">{fmtUSD(item.precio)}/u</div>
-                                        <div className="font-mono text-[11px] font-black text-[var(--text-main)] leading-tight">{fmtUSD(item.precio * item.qty)}</div>
+                                        <div className="text-[11px] text-[var(--text2)] font-medium leading-none">{fmtUSD(item.precio)}/u</div>
+                                        <div className="font-mono text-[15px] font-black text-[var(--text-main)] leading-tight">{fmtUSD(item.precio * item.qty)}</div>
                                     </div>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); removeFromCart(item.id) }}

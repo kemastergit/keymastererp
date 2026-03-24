@@ -171,15 +171,15 @@ export default function Catalogo({
                                             {a.marca && <div className="text-[8px] bg-[var(--surface)] border border-[var(--border-var)] px-1.5 py-0.5 rounded text-[var(--text2)] font-black uppercase tracking-wider truncate max-w-[50px]">{a.marca}</div>}
                                         </div>
                                         <div className="p-3 flex-1 flex flex-col justify-start">
-                                            <div className="font-bold text-[var(--text-main)] text-[11px] h-9 overflow-hidden text-ellipsis leading-tight">{a.descripcion}</div>
+                                            <div className="font-bold text-[var(--text-main)] text-[14px] h-10 overflow-hidden text-ellipsis leading-tight">{a.descripcion}</div>
                                             <div className="mt-auto flex justify-between items-end">
                                                 <div className="flex flex-col">
                                                     <span className="text-[7.5px] text-[var(--text2)] font-black uppercase tracking-widest mb-0.5">Stock</span>
                                                     <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-black text-white inline-block text-center w-fit ${hasStock ? 'bg-[var(--green-var)] shadow-sm' : 'bg-[var(--red-var)]'}`}>{a.stock ?? 0}</span>
                                                 </div>
                                                 <div className="flex flex-col items-end">
-                                                    <span className="text-[7.5px] text-[var(--text2)] font-black uppercase tracking-widest mb-0.5">Precio</span>
-                                                    <span className="font-mono text-[13px] font-black text-[var(--text-main)]">{fmtUSD(a.precio)}</span>
+                                                    <span className="text-[10px] text-[var(--text2)] font-black uppercase tracking-widest mb-0.5">Precio</span>
+                                                    <span className="font-mono text-[18px] font-black text-[var(--text-main)]">{fmtUSD(a.precio)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -211,7 +211,7 @@ export default function Catalogo({
                                     </div>
 
                                     <div className="flex-1 min-w-0">
-                                        <div className="font-black text-[var(--text-main)] text-[12px] uppercase leading-tight truncate">
+                                        <div className="font-black text-[var(--text-main)] text-[14px] uppercase leading-tight truncate">
                                             {a.descripcion}
                                         </div>
                                         <div className="flex items-center gap-2 mt-0.5">

@@ -91,7 +91,7 @@ export default function PanelPago({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <div className="font-mono text-sm font-black text-slate-800">{fmtUSD(p.monto)}</div>
+                                                <div className="font-mono text-[16px] font-black text-slate-800">{fmtUSD(p.monto)}</div>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); removePayment(p.id) }}
                                                     className="text-slate-300 hover:text-red-500 transition-colors flex justify-center items-center"
@@ -107,8 +107,8 @@ export default function PanelPago({
                             {paymentsTotal() > 0 && paymentsTotal() < cartTotal() - 0.01 && (
                                 <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 mt-3 shrink-0">
                                     <div className="flex justify-between items-center text-orange-600">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Falta:</span>
-                                        <span className="font-mono text-sm font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
+                                        <span className="text-[12px] font-bold uppercase tracking-widest">Falta:</span>
+                                        <span className="font-mono text-[18px] font-black">{fmtUSD(cartTotal() - paymentsTotal())}</span>
                                     </div>
                                 </div>
                             )}
@@ -116,8 +116,8 @@ export default function PanelPago({
                             {paymentsTotal() > cartTotal() + 0.01 && (
                                 <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 mt-3 shrink-0">
                                     <div className="flex justify-between items-center text-emerald-800 pb-1.5 border-b border-emerald-200/50">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Vuelto $:</span>
-                                        <span className="font-mono text-sm font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
+                                        <span className="text-[12px] font-bold uppercase tracking-widest">Vuelto $:</span>
+                                        <span className="font-mono text-[18px] font-black">{fmtUSD(paymentsTotal() - cartTotal())}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-emerald-600 pt-1.5">
                                         <span className="text-[10px] font-bold uppercase tracking-widest">Vuelto Bs:</span>
@@ -212,8 +212,8 @@ export default function PanelPago({
                                     </div>
 
                                     <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100 flex justify-between items-center text-emerald-800">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest block">A pagar por cuota:</span>
-                                        <span className="text-[15px] font-mono font-black text-emerald-600">{fmtUSD(Math.max(0, (cartTotal() - inicialCuotas) / numCuotas))}</span>
+                                        <span className="text-[12px] font-bold uppercase tracking-widest block">A pagar por cuota:</span>
+                                        <span className="text-[19px] font-mono font-black text-emerald-600">{fmtUSD(Math.max(0, (cartTotal() - inicialCuotas) / numCuotas))}</span>
                                     </div>
                                 </div>
                             )}
@@ -231,10 +231,10 @@ export default function PanelPago({
                                     </button>
                                     <button
                                         disabled={loading}
-                                        className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-[12px] tracking-widest transition-all shadow-md active:scale-[0.98]
+                                        className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-[15px] tracking-widest transition-all shadow-md active:scale-[0.98]
                                 ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' : 'bg-[#009c85] hover:bg-[#007b69] text-white'}`}
                                         onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}>
-                                        <span className={`material-icons-round text-[20px] ${loading ? 'animate-spin' : ''}`}>
+                                        <span className={`material-icons-round text-[24px] ${loading ? 'animate-spin' : ''}`}>
                                             {loading ? 'sync' : 'save'}
                                         </span>
                                         <span>{loading ? 'Procesando...' : 'Finalizar Venta'}</span>
