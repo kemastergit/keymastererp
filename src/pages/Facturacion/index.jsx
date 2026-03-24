@@ -1175,6 +1175,10 @@ export default function Facturacion() {
               currentUser={currentUser} enviarCajaCentral={enviarCajaCentral}
               setShowNotasModal={setShowNotasModal} notasPendientes={notasPendientes} fetchNotasVendedores={fetchNotasVendedores}
               loading={loading}
+              inicialCuotas={inicialCuotas} setInicialCuotas={setInicialCuotas}
+              metodoInicial={metodoInicial} setMetodoInicial={setMetodoInicial}
+              numCuotas={numCuotas} setNumCuotas={setNumCuotas}
+              frecuenciaCuotas={frecuenciaCuotas} setFrecuenciaCuotas={setFrecuenciaCuotas}
             />
           </div>
 

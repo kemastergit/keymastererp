@@ -142,7 +142,6 @@ export default function PanelPago({
                                     </button>
                                 ))}
                             </div>
-
                             {tipoPago === 'CREDITO' && (
                                 <div className="animate-in slide-in-from-top-2">
                                     <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-widest px-1">Vencimiento Crédito</label>
@@ -151,21 +150,28 @@ export default function PanelPago({
                             )}
 
                             {tipoPago === 'CREDITO_CUOTAS' && (
-                                <div className="animate-in slide-in-from-top-2 space-y-3 bg-slate-50 rounded-xl p-3 border border-slate-200">
-                                    <div className="flex gap-3">
+                                <div className="animate-in slide-in-from-top-2 space-y-4 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                    {/* MOTO INICIAL Y METODO */}
+                                    <div className="flex gap-4">
                                         <div className="flex-1">
-                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Inicial ($)</label>
-                                            <input type="number"
+                                            <label className="text-[11px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Inicial ($)</label>
+                                            <input type="text"
+                                                inputMode="decimal"
                                                 className="inp !py-2 !px-3 font-mono text-right text-slate-800 font-bold bg-white"
                                                 value={inicialCuotas || ''}
-                                                onChange={e => setInicialCuotas(Number(e.target.value))}
-                                                min="0"
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(',', '.');
+                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                        setInicialCuotas(val);
+                                                    }
+                                                }}
+                                                placeholder="0.00"
                                             />
                                         </div>
                                         <div className="flex-1">
-                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Método</label>
+                                            <label className="text-[11px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Método</label>
                                             <select
-                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                className="inp !py-2 !px-2 !text-[12px] bg-white font-bold text-slate-700 h-[42px]"
                                                 value={metodoInicial}
                                                 onChange={e => setMetodoInicial(e.target.value)}
                                             >
@@ -178,16 +184,22 @@ export default function PanelPago({
                                         </div>
                                     </div>
 
-                                    <div className="flex justify-between items-center bg-white rounded-lg p-2.5 border border-slate-200 shadow-sm">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Saldo a Diferir:</span>
-                                        <span className="text-[13px] font-mono font-black text-red-500">{fmtUSD(Math.max(0, cartTotal() - inicialCuotas))}</span>
+                                    {/* SALDO A DIFERIR */}
+                                    <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-sm">
+                                        <label className="text-[11px] font-bold text-slate-400 mb-1.5 block uppercase tracking-widest text-center">Saldo a Diferir</label>
+                                        <div className="text-center">
+                                            <span className={`text-[20px] font-mono font-black ${ (cartTotal() - paymentsTotal()) > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                {fmtUSD(Math.max(0, cartTotal() - paymentsTotal()))}
+                                            </span>
+                                        </div>
                                     </div>
 
-                                    <div className="flex gap-3">
+                                    {/* CUOTAS Y FRECUENCIA */}
+                                    <div className="flex gap-4">
                                         <div className="flex-1">
-                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Dividir</label>
+                                            <label className="text-[11px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Dividir</label>
                                             <select
-                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                className="inp !py-2 !px-2 !text-[12px] bg-white font-bold text-slate-700 h-[42px]"
                                                 value={numCuotas}
                                                 onChange={e => setNumCuotas(Number(e.target.value))}
                                             >
@@ -195,12 +207,15 @@ export default function PanelPago({
                                                 <option value="2">2 Cuotas</option>
                                                 <option value="3">3 Cuotas</option>
                                                 <option value="4">4 Cuotas</option>
+                                                <option value="6">6 Cuotas</option>
+                                                <option value="8">8 Cuotas</option>
+                                                <option value="12">12 Cuotas</option>
                                             </select>
                                         </div>
                                         <div className="flex-1">
-                                            <label className="text-[9px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Frecuencia</label>
+                                            <label className="text-[11px] font-bold text-slate-500 mb-1 block uppercase tracking-widest">Frecuencia</label>
                                             <select
-                                                className="inp !py-2 !px-2 !text-[10px] bg-white font-bold text-slate-700"
+                                                className="inp !py-2 !px-2 !text-[12px] bg-white font-bold text-slate-700 h-[42px]"
                                                 value={frecuenciaCuotas}
                                                 onChange={e => setFrecuenciaCuotas(e.target.value)}
                                             >
@@ -213,7 +228,9 @@ export default function PanelPago({
 
                                     <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100 flex justify-between items-center text-emerald-800">
                                         <span className="text-[12px] font-bold uppercase tracking-widest block">A pagar por cuota:</span>
-                                        <span className="text-[19px] font-mono font-black text-emerald-600">{fmtUSD(Math.max(0, (cartTotal() - inicialCuotas) / numCuotas))}</span>
+                                        <span className="text-[22px] font-mono font-black text-emerald-600">
+                                            {fmtUSD(Math.max(0, (cartTotal() - paymentsTotal()) / numCuotas))}
+                                        </span>
                                     </div>
                                 </div>
                             )}
