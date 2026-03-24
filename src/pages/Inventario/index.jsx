@@ -226,7 +226,7 @@ export default function Inventario() {
         <div className="px-4 py-2.5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
           <div>
             <div className="text-sm font-black text-[var(--text-main)] uppercase tracking-tight">MAESTRO DE INVENTARIO Y ALMACÉN</div>
-            <p className="text-[9px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS</p>
+            <p className="text-[11px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS</p>
           </div>
           <div className="flex items-center gap-2">
 
@@ -249,7 +249,7 @@ export default function Inventario() {
 
         <div className="px-4 py-2 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
           <div className="field !m-0">
-            <input className="inp !py-2 !px-4 !bg-[var(--surfaceDark)] text-[11px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
+            <input className="inp !py-2 !px-4 !bg-[var(--surfaceDark)] text-[13px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
               placeholder="🔍 BUSCAR POR CÓDIGO, DESCRIPCIÓN, MARCA O CATEGORÍA..."
               value={busq} onChange={e => setBusq(e.target.value.toUpperCase())} />
           </div>
@@ -263,7 +263,7 @@ export default function Inventario() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
                     <span className="bg-[var(--text-main)] text-[var(--surface)] font-mono font-black px-3 py-1 rounded-none text-[10px] shrink-0 border border-black/10">#{a.codigo}</span>
-                    <span className={`px-2 py-1 font-mono font-black text-[9px] uppercase tracking-widest shadow-sm ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)] text-white' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)] text-white' : 'bg-[var(--green-var)] text-white'}`}>
+                    <span className={`px-2 py-1 font-mono font-black text-[11px] uppercase tracking-widest shadow-sm ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)] text-white' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)] text-white' : 'bg-[var(--green-var)] text-white'}`}>
                       STOCK: {a.stock ?? 0}
                     </span>
                   </div>
@@ -691,6 +691,6 @@ export default function Inventario() {
           </div>
         </div>
       </Modal>
-    </div >
+    </div>
   )
 }

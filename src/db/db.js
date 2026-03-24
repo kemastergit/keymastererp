@@ -53,6 +53,10 @@ db.version(18).stores({
   proveedores: '++id, rif, nombre, proveedor_uuid, estado, motivo_inactivacion, fecha_inactivacion, inactivado_por'
 })
 
+db.version(19).stores({
+  articulos: '++id, codigo, referencia, descripcion, marca, departamento, sub_depto, stock, precio, costo, proveedor, unidad'
+})
+
 // Seed config por defecto
 db.on('ready', async () => {
   // Inicializar Admin si no hay usuarios
