@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { usePermiso } from '../../hooks/usePermiso'
 import { menu } from './menu'
 import useStore from '../../store/useStore'
+import { logAction } from '../../utils/audit'
 
 function NavDropdown({ item, isOpen, onToggle }) {
   const loc = useLocation()
@@ -77,8 +78,15 @@ function NavItem({ item }) {
 
 export default function Sidebar({ isOpen = true }) {
   const { check } = usePermiso()
-  const { configEmpresa } = useStore()
+  const { configEmpresa, currentUser, logout } = useStore()
   const [openIndex, setOpenIndex] = useState(null)
+
+  const handleLogout = () => {
+    if (confirm('¿Cerrar sesión de KEYMASTER?')) {
+      logAction(currentUser, 'LOGOUT')
+      logout()
+    }
+  }
 
   const filteredMenu = menu.map(item => {
     const hasParentPerm = !item.perm || check(item.perm)
@@ -106,7 +114,16 @@ export default function Sidebar({ isOpen = true }) {
       className={`hidden md:flex flex-col bg-white h-full overflow-y-auto no-scrollbar py-5 shrink-0 shadow-sm z-[100] border-slate-200 transition-all duration-300 ease-in-out select-none
         ${isOpen ? 'w-[260px] px-3 border-r opacity-100 translate-x-0' : 'w-0 px-0 border-r-0 opacity-0 -translate-x-full overflow-hidden'}`}
     >
-      <div className="w-[236px]"> {/* Contenedor de ancho fijo para evitar que se aprieten las letras al colapsar */}
+      <div className="w-[236px] flex flex-col h-full">
+
+        {/* Brand Header directly in Sidebar */}
+        <div className="flex items-center gap-3 px-4 mb-8 pt-2">
+          <div className="w-12 h-10 bg-[#0f172a] rounded-[8px] flex items-center justify-center shrink-0 shadow-md">
+            <span className="text-white font-black text-xl leading-none font-bebas tracking-tighter">KM</span>
+          </div>
+          <h1 className="text-[22px] font-black text-slate-900 uppercase tracking-[0.1em] font-bebas leading-none">KEYMASTER</h1>
+        </div>
+
         {/* Etiqueta decorativa arriba */}
         <div className="mb-6 px-4 whitespace-nowrap">
           <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] relative inline-block">
@@ -129,12 +146,26 @@ export default function Sidebar({ isOpen = true }) {
           )}
         </div>
 
-        {/* Marca de agua abajo */}
-        <div className="mt-10 px-4 pb-4 whitespace-nowrap">
-          <div className="h-[1px] bg-slate-100 w-full mb-4"></div>
-          <p className="text-[8px] text-slate-300 font-black uppercase tracking-widest text-center">
-              Keymaster OS v2.0
-          </p>
+        {/* Spacer to push user profile to bottom */}
+        <div className="flex-1"></div>
+
+        {/* User Profile Card */}
+        <div className="mt-8 px-2 pb-2">
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center justify-between gap-2 shadow-sm">
+             <div className="flex items-center gap-3 overflow-hidden">
+               <div className="flex-none w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
+                 <span className="text-slate-600 font-bold text-[10px]">{(currentUser?.nombre || 'AD').substring(0,2).toUpperCase()}</span>
+               </div>
+               <div className="flex flex-col min-w-0">
+                 <span className="text-slate-700 font-bold text-[10px] truncate uppercase tracking-wider">{currentUser?.rol || 'ADMINISTRADOR'}</span>
+                 <span className="text-slate-400 font-medium text-[8px] truncate uppercase">{currentUser?.nombre || 'USUARIO'}</span>
+               </div>
+             </div>
+             
+             <button onClick={handleLogout} className="flex-none text-red-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors" title="Cerrar Sesión">
+               <span className="material-icons-round text-[16px]">logout</span>
+             </button>
+          </div>
         </div>
       </div>
     </aside>

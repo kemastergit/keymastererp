@@ -30,7 +30,7 @@ export default function MdiWindow({ children, title, icon }) {
                 >
                                     {/* Titlebar */}
                     <div 
-                        className="flex items-center justify-between px-4 min-h-[42px] bg-orange-500 text-white select-none shrink-0 border-b border-orange-600 cursor-default shadow-sm"
+                        className="flex items-center justify-between px-4 min-h-[42px] bg-slate-900 text-white select-none shrink-0 border-b border-slate-800 cursor-default shadow-sm"
                         onDoubleClick={() => setIsMaximized(!isMaximized)}
                     >
                         <div className="flex items-center gap-3">

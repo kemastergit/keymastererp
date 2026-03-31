@@ -7,7 +7,7 @@ import MobileSidebar from './MobileSidebar'
 import { usePWA } from '../../hooks/usePWA'
 import SyncModal from '../UI/SyncModal'
 
-export default function Header({ hideTasa = false, hideUser = false, onOpenWebOrders, onToggleSidebar }) {
+export default function Header({ hideTasa = false, onOpenWebOrders, onToggleSidebar }) {
   const { tasa, setTasa, loadTasa, askAdmin, activeSession, loadSession, currentUser, logout, pedidosWeb, fetchPedidosWeb, pendingSyncCount, syncErrorCount } = useStore()
   const { check } = usePermiso()
   const { canInstall, install, isInstalled } = usePWA()
@@ -26,12 +26,7 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
     return () => clearInterval(int)
   }, [hideTasa])
 
-  const handleLogout = () => {
-    if (confirm('¿Cerrar sesión de KEYMASTER?')) {
-      logAction(currentUser, 'LOGOUT')
-      logout()
-    }
-  }
+
 
   const filteredMenu = menu.map(item => {
     if (item.perm && !check(item.perm)) return null
@@ -69,9 +64,8 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
               </svg>
             </button>
 
-            {/* Brand — compact inline */}
+            {/* Session Indicator only, Brand moved to Sidebar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: '#fff', fontWeight: 900, fontSize: 15, letterSpacing: '0.15em', textTransform: 'uppercase', fontFamily: 'IBM Plex Mono, monospace' }}>Keymaster</span>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: activeSession ? '#10b981' : '#ef4444', display: 'inline-block', flexShrink: 0, boxShadow: activeSession ? '0 0 8px #10b981' : 'none' }} title={activeSession ? 'Caja Activa' : 'Caja Cerrada'} />
             </div>
           </div>
@@ -146,31 +140,7 @@ export default function Header({ hideTasa = false, hideUser = false, onOpenWebOr
             )}
           </div>
 
-          {/* ── RIGHT: User ── */}
-          {!hideUser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="hidden sm:flex" style={{ alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {currentUser?.nombre || 'Admin'}
-                </span>
-                <span style={{ fontSize: 8, fontWeight: 700, color: currentUser?.rol === 'ADMIN' ? '#fb923c' : '#38bdf8', textTransform: 'uppercase' }}>
-                  {currentUser?.rol === 'ADMIN' ? '★' : currentUser?.rol}
-                </span>
-              </div>
-
-              <button
-                onClick={handleLogout}
-                title="Cerrar Sesión"
-                style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', transition: 'all 0.25s ease' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)' }}
-              >
-                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-                </svg>
-              </button>
-            </div>
-          )}
+          {/* ── RIGHT: User moved to Sidebar ── */}
         </div>
 
         {/* Bottom line */}
