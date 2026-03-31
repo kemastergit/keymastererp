@@ -12,24 +12,30 @@ export default function MdiWindow({ children, title, icon }) {
     const windowIcon = icon || '📟';
 
     const setHideNav = useStore(s => s.setHideNav)
+    
+    // Estado para saber si la ventana está maximizada o no
+    const [isMaximized, setIsMaximized] = React.useState(false);
 
     return (
         <div className="flex flex-col w-full h-full bg-[var(--bg)]">
             {/* Desktop/Tablet MDI Wrapper */}
-            <div className="flex-1 w-full md:p-4 flex flex-col items-center justify-start overflow-hidden">
+            <div className={`flex-1 w-full flex flex-col items-center justify-start overflow-hidden transition-all duration-300 ${isMaximized ? 'p-0' : 'md:p-4'}`}>
 
                 {/* The Window Frame */}
                 <div
-                    className="flex flex-col w-full h-full bg-[var(--surface)] shadow-2xl overflow-hidden rounded-[1.5rem] border border-slate-200 transition-all"
+                    className={`flex flex-col w-full h-full bg-[var(--surface)] shadow-2xl overflow-hidden border-slate-200 transition-all duration-300 ${isMaximized ? 'rounded-none border-0' : 'rounded-[1.5rem] border'}`}
                     style={{
                         maxWidth: '100%',
                     }}
                 >
-                    {/* Titlebar (32px) */}
-                    <div className="flex items-center justify-between px-4 min-h-[42px] bg-slate-900 text-white select-none shrink-0 border-b border-white/5">
+                                    {/* Titlebar */}
+                    <div 
+                        className="flex items-center justify-between px-4 min-h-[42px] bg-orange-500 text-white select-none shrink-0 border-b border-orange-600 cursor-default shadow-sm"
+                        onDoubleClick={() => setIsMaximized(!isMaximized)}
+                    >
                         <div className="flex items-center gap-3">
-                            <span className="text-[16px] filter grayscale opacity-80">{windowIcon}</span>
-                            <span className="font-['Outfit'] font-black text-[12px] uppercase tracking-[0.2em] opacity-90">
+                            <span className="text-[16px] filter grayscale opacity-80" style={{ cursor: 'pointer' }} onClick={() => setIsMaximized(!isMaximized)}>{windowIcon}</span>
+                            <span className="font-['Outfit'] font-black text-[12px] uppercase tracking-[0.2em] opacity-90" style={{ cursor: 'pointer' }} onClick={() => setIsMaximized(!isMaximized)}>
                                 {windowTitle}
                             </span>
                         </div>
@@ -37,12 +43,20 @@ export default function MdiWindow({ children, title, icon }) {
                         {/* Window Controls */}
                         <div className="flex items-center gap-3">
                             <div className="flex gap-2">
-                                <div className="w-3 h-3 rounded-full bg-slate-700"></div>
-                                <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                                <button 
+                                    onClick={() => setIsMaximized(false)}
+                                    className="w-3 h-3 rounded-full bg-slate-700 hover:bg-yellow-500 transition-colors focus:outline-none"
+                                    title="Restaurar Tamaño"
+                                />
+                                <button 
+                                    onClick={() => setIsMaximized(true)}
+                                    className="w-3 h-3 rounded-full bg-slate-700 hover:bg-green-500 transition-colors focus:outline-none"
+                                    title="Maximizar Ventana"
+                                />
                             </div>
                             <button
                                 onClick={() => navigate('/')}
-                                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-600 transition-all active:scale-90 group"
+                                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-600 transition-all active:scale-90 group focus:outline-none"
                                 title="Cerrar"
                             >
                                 <span className="material-icons-round text-lg text-slate-500 group-hover:text-white">close</span>
