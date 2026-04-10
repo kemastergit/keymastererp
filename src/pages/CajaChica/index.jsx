@@ -31,6 +31,7 @@ export default function CajaChica() {
 
   const save = async () => {
     if (!form.concepto.trim() || !form.monto) { toast('Completa todos los campos', 'warn'); return }
+    if (form.fecha > today()) { toast('❌ No puede registrar movimientos con fecha futura', 'error'); return }
     if (form.tipo === 'EGRESO' && form.categoria === 'OTRO' && !form.categoria_otro.trim()) {
       toast('Especifica la categoría personalizada', 'warn'); return
     }
@@ -67,7 +68,7 @@ export default function CajaChica() {
           <div className="panel-title">REGISTRAR MOVIMIENTO</div>
           <div className="field">
             <label>Fecha</label>
-            <input type="date" className="inp" value={form.fecha} onChange={e => f('fecha', e.target.value)} />
+            <input type="date" className="inp" max={today()} value={form.fecha} onChange={e => { if (e.target.value > today()) { toast('⚠️ No se permite fecha futura', 'warn'); return } f('fecha', e.target.value) }} />
           </div>
           <div className="field">
             <label>Tipo</label>

@@ -96,10 +96,17 @@ export async function processSyncQueue() {
       } else if (item.table === 'articulos' && item.operation === 'UPDATE_STOCK') {
         const updatePayload = { stock: item.data.stock }
         if (item.data.costo !== undefined) updatePayload.costo = item.data.costo
-        const { error: err } = await supabase.from('articulos')
+        const { data: affectedRows, error: err } = await supabase.from('articulos')
           .update(updatePayload)
           .eq('codigo', item.data.codigo)
-        error = err
+          .select('codigo')
+        if (!err && (!affectedRows || affectedRows.length === 0)) {
+          // El artículo no existe aún en Supabase — reintentar después del INSERT
+          console.warn(`⚠️ UPDATE_STOCK ${item.data.codigo}: 0 filas afectadas (artículo no existe en nube aún)`)
+          error = { message: 'Artículo no encontrado en Supabase — reintentando', code: 'NO_ROWS_AFFECTED' }
+        } else {
+          error = err
+        }
       } else if (item.table === 'articulos' && item.operation === 'INSERT') {
         // Producto nuevo creado "sobre la marcha" en compras — sincronizar por codigo
         const { error: err } = await supabase.from('articulos')
@@ -395,19 +402,48 @@ export async function syncArticulosFromSupabase(isInitial = false) {
       isInitialSync: isInitial
     })
 
+    // 🛡️ Proteger artículos con sync pendiente — no sobreescribir stock/costo local
+    const pendingSync = await db.sync_queue
+      .where('status').equals('PENDING')
+      .filter(s => s.table === 'articulos')
+      .toArray()
+    const pendingCodigos = new Set(pendingSync.map(s => s.data?.codigo).filter(Boolean))
+
     await db.transaction('rw', db.articulos, async () => {
-      await db.articulos.clear()
-      await db.articulos.bulkAdd(
-        allData.map(a => {
-          const { id, ...rest } = a
-          return {
-            ...rest,
-            stock: Number(a.stock) || 0,
-            precio: Number(a.precio) || 0,
-            costo: Number(a.costo) || 0,
+      const localArticles = await db.articulos.toArray()
+      const localByCode = new Map(localArticles.filter(a => a.codigo).map(a => [a.codigo, a]))
+      const cloudCodigos = new Set()
+
+      for (const a of allData) {
+        const { id, ...rest } = a
+        const normalized = {
+          ...rest,
+          stock: Number(a.stock) || 0,
+          precio: Number(a.precio) || 0,
+          costo: Number(a.costo) || 0,
+        }
+        cloudCodigos.add(a.codigo)
+
+        const local = localByCode.get(a.codigo)
+        if (local) {
+          // Si tiene sync pendiente, preservar stock y costo locales
+          if (pendingCodigos.has(a.codigo)) {
+            const { stock, costo, ...safeFields } = normalized
+            await db.articulos.update(local.id, safeFields)
+          } else {
+            await db.articulos.update(local.id, normalized)
           }
-        })
-      )
+        } else {
+          await db.articulos.add(normalized)
+        }
+      }
+
+      // Eliminar artículos locales que ya NO existen en la nube Y no tienen sync pendiente
+      for (const [codigo, local] of localByCode) {
+        if (!cloudCodigos.has(codigo) && !pendingCodigos.has(codigo)) {
+          await db.articulos.delete(local.id)
+        }
+      }
     })
 
     setSyncStatus({
@@ -491,6 +527,129 @@ export function subscribeClientesRealtime() {
         } else {
           await db.clientes.update(existe.id, dataToSave)
           console.log(`📝 Cliente actualizado vía Realtime: ${cliente.nombre}`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a borrados en cuentas_por_cobrar
+export function subscribeCtasCobrarDeleteRealtime() {
+  const channel = supabase
+    .channel('realtime-ctas-cobrar-delete')
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'cuentas_por_cobrar' },
+      async (payload) => {
+        const deleted = payload.old
+        if (!deleted?.id) return
+        // Buscar y eliminar el registro local que tenga este supabase_id
+        const local = await db.ctas_cobrar.filter(c => c.supabase_id === deleted.id).first()
+        if (local) {
+          // También eliminar abonos asociados a esta cuenta
+          const abonosLocales = await db.abonos.where('cuenta_id').equals(local.id).toArray()
+          for (const a of abonosLocales) {
+            await db.abonos.delete(a.id)
+          }
+          await db.ctas_cobrar.delete(local.id)
+          console.log(`🗑️ Cuenta por Cobrar eliminada vía Realtime (supabase_id: ${deleted.id})`)
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'cuentas_por_cobrar' },
+      async (payload) => {
+        const updated = payload.new
+        if (!updated?.id) return
+        const local = await db.ctas_cobrar.filter(c => c.supabase_id === updated.id).first()
+        if (local) {
+          await db.ctas_cobrar.update(local.id, {
+            estado: updated.estado || local.estado,
+            monto_cobrado: updated.monto_cobrado ?? local.monto_cobrado,
+          })
+          console.log(`📝 Cuenta por Cobrar actualizada vía Realtime (supabase_id: ${updated.id})`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a borrados en abonos
+export function subscribeAbonosDeleteRealtime() {
+  const channel = supabase
+    .channel('realtime-abonos-delete')
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'abonos' },
+      async (payload) => {
+        const deleted = payload.old
+        if (!deleted?.id) return
+        const local = await db.abonos.filter(a => a.supabase_id === deleted.id).first()
+        if (local) {
+          await db.abonos.delete(local.id)
+          console.log(`🗑️ Abono eliminado vía Realtime (supabase_id: ${deleted.id})`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a borrados en facturas
+export function subscribeFacturasDeleteRealtime() {
+  const channel = supabase
+    .channel('realtime-facturas-delete')
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'facturas' },
+      async (payload) => {
+        const deleted = payload.old
+        if (!deleted?.id) return
+        // Buscar la venta local por número de factura
+        const local = await db.ventas.filter(v => 
+          v.supabase_id === deleted.id || v.nro === deleted.numero
+        ).first()
+        if (local) {
+          // Eliminar ítems asociados
+          await db.venta_items.where('venta_id').equals(local.id).delete()
+          await db.ventas.delete(local.id)
+          console.log(`🗑️ Factura eliminada vía Realtime (id: ${deleted.id}, nro: ${deleted.numero})`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a borrados en cuentas_por_pagar
+export function subscribeCtasPagarDeleteRealtime() {
+  const channel = supabase
+    .channel('realtime-ctas-pagar-delete')
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'cuentas_por_pagar' },
+      async (payload) => {
+        const deleted = payload.old
+        if (!deleted?.id) return
+        const local = await db.ctas_pagar.filter(c => c.supabase_id === deleted.id).first()
+        if (local) {
+          await db.ctas_pagar.delete(local.id)
+          console.log(`🗑️ Cuenta por Pagar eliminada vía Realtime (supabase_id: ${deleted.id})`)
         }
       }
     )
@@ -846,6 +1005,19 @@ export async function syncCtasCobrarFromSupabase() {
     }
 
     console.log(`✅ Cuentas por Cobrar: ${ctas.length} traídas, ${insertados} nuevas locales.`)
+
+    // 🩹 RECONCILIACIÓN: Limpiar registros locales borrados en nube (últimos 30 días)
+    const cloudIds = new Set(ctas.map(c => c.id))
+    const localesRecientes = await db.ctas_cobrar.filter(r => r.fecha >= fechaISO).toArray()
+    let borrados = 0
+    for (const loc of localesRecientes) {
+      if (loc.supabase_id && !cloudIds.has(loc.supabase_id)) {
+        await db.ctas_cobrar.delete(loc.id)
+        borrados++
+      }
+    }
+    if (borrados > 0) console.log(`🩹 [Reconciliación] Limpiadas ${borrados} cuentas por cobrar huérfanas.`)
+
   } catch (e) {
     console.warn('syncCtasCobrar offline:', e.message)
   }
@@ -895,6 +1067,19 @@ export async function syncAbonosFromSupabase() {
     }
 
     console.log(`✅ Abonos: ${abonos.length} traídos, ${insertados} nuevos locales.`)
+
+    // 🩹 RECONCILIACIÓN: Limpiar abonos borrados en nube (últimos 30 días)
+    const cloudIds = new Set(abonos.map(a => a.id))
+    const localesRecientes = await db.abonos.filter(r => r.fecha >= fechaISO).toArray()
+    let borrados = 0
+    for (const loc of localesRecientes) {
+      if (loc.supabase_id && !cloudIds.has(loc.supabase_id)) {
+        await db.abonos.delete(loc.id)
+        borrados++
+      }
+    }
+    if (borrados > 0) console.log(`🩹 [Reconciliación] Limpiados ${borrados} abonos huérfanos.`)
+
   } catch (e) {
     console.warn('syncAbonos offline:', e.message)
   }
@@ -979,6 +1164,10 @@ export async function initInventorySync() {
   toast('🚀 SINCRONIZACIÓN INICIAL COMPLETADA', 'success')
   subscribeArticulosRealtime()
   subscribeClientesRealtime()
+  subscribeCtasCobrarDeleteRealtime()
+  subscribeAbonosDeleteRealtime()
+  subscribeFacturasDeleteRealtime()
+  subscribeCtasPagarDeleteRealtime()
 
   // Sincronizaciones en Segundo Plano (No bloqueantes)
   setTimeout(async () => {

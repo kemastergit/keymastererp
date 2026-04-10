@@ -78,6 +78,7 @@ export default function CierreDia() {
   }
 
   const cerrarDia = async () => {
+    if (fecha > today()) { toast('❌ No puede cerrar un día que aún no ha llegado', 'error'); return }
     if (!confirm('¿CONFIRMAR CIERRE? El arqueo será registrado y auditado como inmutable.')) return
 
     await db.cierre_dia.add({
@@ -134,7 +135,8 @@ export default function CierreDia() {
             <div className="flex items-center gap-2 bg-slate-100 p-1 px-2 border border-slate-200">
               <span className="material-icons-round text-sm text-slate-400">calendar_today</span>
               <input type="date" className="bg-transparent border-none text-[11px] font-black focus:ring-0 p-1 uppercase"
-                value={fecha} onChange={e => setFecha(e.target.value)} />
+                max={today()}
+                value={fecha} onChange={e => { if (e.target.value > today()) { toast('⚠️ No se permite fecha futura', 'warn'); return } setFecha(e.target.value) }} />
             </div>
             <button className="bg-[#0d9488] text-white px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-[#0b7a6f] transition-all flex items-center gap-2 shadow-sm"
               onClick={imprimirCierre}>

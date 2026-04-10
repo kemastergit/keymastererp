@@ -23,7 +23,7 @@ export default function CuentasPagar() {
   const tasaRaw = useLiveQuery(() => db.config.get('tasa_bcv'), [], { valor: 1 })
   const tasa = parseFloat(tasaRaw?.valor) || 1
 
-  const cuentasRaw = useLiveQuery(() => db.ctas_pagar.orderBy('vencimiento').toArray(), [], [])
+  const cuentasRaw = useLiveQuery(() => db.ctas_pagar.toArray(), [], [])
   const abonos = useLiveQuery(() => db.abonos.where('tipo_cuenta').equals('PAGAR').toArray(), [], [])
   const proveedores = useLiveQuery(() => db.proveedores.toArray(), [], [])
 

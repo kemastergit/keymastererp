@@ -247,14 +247,16 @@ export default function PanelPago({
                                         <span className="material-icons-round text-[20px]">delete_sweep</span>
                                     </button>
                                     <button
-                                        disabled={loading}
                                         className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-[15px] tracking-widest transition-all shadow-md active:scale-[0.98]
-                                ${loading ? 'bg-slate-400 cursor-wait' : (tipoPago === 'CONTADO' && paymentsTotal() < cartTotal() - 0.01) ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none' : 'bg-[#009c85] hover:bg-[#007b69] text-white'}`}
-                                        onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}>
+                                ${loading ? 'bg-slate-400 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'}`}
+                                        onClick={() => {
+                                            console.log("🟢 Click en Finalizar Venta (PanelPago)");
+                                            procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas);
+                                        }}>
                                         <span className={`material-icons-round text-[24px] ${loading ? 'animate-spin' : ''}`}>
-                                            {loading ? 'sync' : 'save'}
+                                            {loading ? 'sync' : 'check_circle'}
                                         </span>
-                                        <span>{loading ? 'Procesando...' : 'Finalizar Venta'}</span>
+                                        <span>{loading ? 'Procesando...' : 'Facturar Nota'}</span>
                                     </button>
                                 </div>
                             </div>

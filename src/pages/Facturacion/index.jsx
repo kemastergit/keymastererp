@@ -579,6 +579,8 @@ export default function Facturacion() {
     let ventaId = null
     let ventaCalculada = null
 
+    console.log("📝 Iniciando procesarNota...", { tipo_pago: tipoPago, client: clienteFact, total: cartTotal() });
+
     try {
       // 🔍 VALIDACIÓN DE PRECIOS (P4): detectar si algún precio cambió mientras el carrito estaba abierto
       const cambiosPrecio = []
@@ -732,7 +734,7 @@ export default function Facturacion() {
           throw new Error(rpcResult?.error || rpcError?.message || 'FALLO_RPC')
         }
 
-        console.log("✅ Venta sincronizada en la nube con éxito.")
+        console.log("✅ Venta sincronizada en la nube con éxito (RPC).");
         toast('☁️ Venta procesada en la nube (Stock + CXC + Kardex)', 'ok')
 
       } catch (errSync) {
@@ -805,12 +807,12 @@ export default function Facturacion() {
 
     } catch (err) {
       setLoading(false)
+      console.error("💥 ERROR CRÍTICO en procesarNota:", err);
       if (err.message.startsWith('STOCK_INSUFICIENTE')) {
         const [_, desc, stock] = err.message.split(':')
         toast(`🚫 Stock insuficiente: ${desc} (${stock})`, 'error')
       } else {
-        toast('❌ Error al procesar la venta', 'error')
-        console.error(err)
+        toast('❌ Error al procesar la venta: ' + (err.message || 'Error desconocido'), 'error')
       }
     }
   }
@@ -1000,12 +1002,15 @@ export default function Facturacion() {
           <div className="flex items-center ml-2 pl-4 border-l border-slate-800/50">
             {['CAJERO', 'ADMIN', 'SUPERVISOR'].includes(currentUser?.rol) ? (
               <button
-                onClick={() => procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas)}
+                onClick={() => {
+                  console.log("🚀 Click en FACTURAR (TopBar)");
+                  procesarNota(inicialCuotas, metodoInicial, numCuotas, frecuenciaCuotas);
+                }}
                 disabled={loading || cart.length === 0}
                 className={`group px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black uppercase text-[12px] tracking-[0.15em] shadow-xl shadow-emerald-900/30 flex items-center gap-3 transition-all active:scale-95 ${loading || cart.length === 0 ? 'opacity-20 grayscale cursor-not-allowed' : 'hover:ring-4 hover:ring-emerald-500/20'}`}
               >
                 <span className={`material-icons-round text-[20px] ${!loading && cart.length > 0 ? 'group-hover:translate-x-1' : ''} transition-transform`}>check_circle</span>
-                <span>{loading ? 'PROCESANDO...' : 'FACTURAR'}</span>
+                <span>{loading ? 'PROCESANDO...' : 'FACTURAR NOTA'}</span>
               </button>
             ) : (
               <button

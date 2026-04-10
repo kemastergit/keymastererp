@@ -68,6 +68,7 @@ export default function Compras() {
         if (!header.proveedor_id) return toast('Seleccione un proveedor', 'error')
         if (!header.nro_factura) return toast('Ingrese número de factura', 'error')
         if (items.length === 0) return toast('No hay productos en la factura', 'error')
+        if (header.fecha > today()) return toast('❌ No puede registrar compras con fecha futura', 'error')
 
         // Anti-duplicado
         const facturaExiste = await db.compras
@@ -346,9 +347,14 @@ export default function Compras() {
                             <label className="text-[10px] font-black uppercase text-[var(--text2)]">Fecha</label>
                             <input
                                 type="date"
+                                max={today()}
                                 className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none"
                                 value={header.fecha}
-                                onChange={e => setHeader({ ...header, fecha: e.target.value })}
+                                onChange={e => {
+                                    const val = e.target.value
+                                    if (val > today()) { toast('⚠️ No se permite fecha futura', 'warn'); return }
+                                    setHeader({ ...header, fecha: val })
+                                }}
                             />
                         </div>
                         <div className="field">

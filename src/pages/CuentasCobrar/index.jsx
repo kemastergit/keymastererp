@@ -20,9 +20,16 @@ export default function CuentasCobrar() {
   const cuotasAll = useLiveQuery(() => db.cuotas_credito.toArray(), [], [])
 
   const cuentas = useLiveQuery(
-    () => filtro === 'TODOS'
-      ? db.ctas_cobrar.orderBy('vencimiento').toArray()
-      : db.ctas_cobrar.where('estado').equals(filtro).toArray(),
+    async () => {
+      let data = []
+      if (filtro === 'TODOS') {
+        data = await db.ctas_cobrar.toArray()
+      } else {
+        data = await db.ctas_cobrar.where('estado').equals(filtro).toArray()
+      }
+      // Ordenar manualmente por fecha (descendente) para que lo más nuevo salga arriba
+      return data.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+    },
     [filtro], []
   )
 
