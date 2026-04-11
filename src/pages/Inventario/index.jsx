@@ -223,7 +223,7 @@ export default function Inventario() {
   return (
     <div className="flex flex-col min-h-0 pb-2 relative">
       <div className="panel p-0 flex flex-col min-h-0 flex-1 relative overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+        <div className="px-4 py-1.5 border-b border-[var(--border-var)] bg-[var(--surface2)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
           <div>
             <div className="text-sm font-black text-[var(--text-main)] uppercase tracking-tight">MAESTRO DE INVENTARIO Y ALMACÉN</div>
             <p className="text-[11px] text-[var(--text2)] font-black uppercase tracking-widest">{articulos.length} SKU(s) REGISTRADOS</p>
@@ -247,18 +247,18 @@ export default function Inventario() {
           </div>
         </div>
 
-        <div className="px-4 py-2 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
+        <div className="px-4 py-1.5 bg-[var(--surface)] border-b border-[var(--border-var)] shrink-0 shadow-inner">
           <div className="field !m-0">
-            <input className="inp !py-2 !px-4 !bg-[var(--surfaceDark)] text-[13px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
+            <input className="inp !py-1.5 !px-4 !bg-[var(--surfaceDark)] text-[13px] font-black uppercase tracking-widest transition-all focus:border-[var(--teal)] shadow-inner"
               placeholder="🔍 BUSCAR POR CÓDIGO, DESCRIPCIÓN, MARCA O CATEGORÍA..."
               value={busq} onChange={e => setBusq(e.target.value.toUpperCase())} />
           </div>
         </div>
 
         {/* ─── MOBILE: Card View ─── */}
-        <div className="block md:hidden divide-y-2 divide-[var(--border-var)] flex-1 min-h-0">
+        <div className="block md:hidden divide-y divide-[var(--border-var)] flex-1 min-h-0">
           {articulos.map(a => (
-            <div key={a.id} className="p-5 hover:bg-[var(--surfaceDark)] transition-all hover:scale-[1.02] border-b border-[var(--border-var)] bg-white mb-2 rounded-2xl shadow-sm cursor-pointer" onClick={() => openEdit(a)}>
+            <div key={a.id} className="p-3 hover:bg-[var(--surfaceDark)] transition-all hover:scale-[1.01] border-b border-[var(--border-var)] bg-white mb-1 rounded-lg shadow-sm cursor-pointer" onClick={() => openEdit(a)}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2">
@@ -308,25 +308,25 @@ export default function Inventario() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 z-20">
               <tr className="bg-slate-900 text-white">
-                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Cód Articulo</th>
-                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700 min-w-[280px]">Descripción Detallada</th>
-                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
-                <th className="px-3 py-2 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Categoría</th>
-                <th className="px-3 py-2 text-center text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Costo $</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Precio $</th>
-                <th className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest">Gestionar</th>
+                <th className="px-3 py-1 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Cód Articulo</th>
+                <th className="px-3 py-1 text-[9px] font-black uppercase tracking-widest border-r border-slate-700 min-w-[280px]">Descripción Detallada</th>
+                <th className="px-3 py-1 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Marca</th>
+                <th className="px-3 py-1 text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Categoría</th>
+                <th className="px-3 py-1 text-center text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Stock</th>
+                <th className="px-3 py-1 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Costo $</th>
+                <th className="px-3 py-1 text-right text-[9px] font-black uppercase tracking-widest border-r border-slate-700">Precio $</th>
+                <th className="px-3 py-1 text-right text-[9px] font-black uppercase tracking-widest">Gestionar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {articulos.map(a => (
                 <tr key={a.id} className="hover:bg-[var(--teal)]/5 cursor-pointer group" onClick={() => openEdit(a)}>
-                  <td className="py-1.5 px-3 sticky-col !bg-[var(--surface)] border-b border-black/5">
+                  <td className="py-0.5 px-3 sticky-col !bg-[var(--surface)] border-b border-black/5">
                     <div className="font-mono text-[var(--teal)] font-black text-[11px] uppercase tracking-tighter">
                       #{a.codigo}
                     </div>
                   </td>
-                  <td className="py-1.5 px-3 sticky-col-2 !bg-[var(--surface)] border-b border-black/5">
+                  <td className="py-0.5 px-3 sticky-col-2 !bg-[var(--surface)] border-b border-black/5">
                       <div className="font-black text-[var(--text-main)] whitespace-normal leading-tight uppercase text-[11px]">{a.descripcion}</div>
                       {a.referencia && (
                         <div className="text-[9px] font-black text-[var(--text2)] opacity-60 tracking-widest uppercase truncate max-w-[250px]">
@@ -334,16 +334,16 @@ export default function Inventario() {
                         </div>
                       )}
                   </td>
-                  <td className="py-1.5 px-3 text-[10px] font-black text-[var(--text2)] uppercase tracking-widest">{val(a.marca)}</td>
-                  <td className="py-1.5 px-3 text-[10px] text-[var(--text2)] font-black uppercase tracking-widest opacity-60">{val(a.departamento)}</td>
-                  <td className="py-1.5 px-3 text-center">
+                  <td className="py-0.5 px-3 text-[10px] font-black text-[var(--text2)] uppercase tracking-widest">{val(a.marca)}</td>
+                  <td className="py-0.5 px-3 text-[10px] text-[var(--text2)] font-black uppercase tracking-widest opacity-60">{val(a.departamento)}</td>
+                  <td className="py-0.5 px-3 text-center">
                     <span className={`px-2 py-0.5 font-mono font-black text-[10px] ${(a.stock ?? 0) === 0 ? 'bg-[var(--red-var)]/10 text-[var(--red-var)] border border-[var(--red-var)]/20' : (a.stock ?? 0) <= 3 ? 'bg-[var(--orange-var)]/10 text-[var(--orange-var)] border border-[var(--orange-var)]/20' : 'bg-[var(--green-var)]/10 text-[var(--green-var)] border border-[var(--green-var)]/20'}`}>
                       {a.stock ?? 0}
                     </span>
                   </td>
-                  <td className="py-1.5 px-3 font-mono text-[var(--text2)] text-right text-[11px] font-black italic">{fmtUSD(a.costo)}</td>
-                  <td className="py-1.5 px-3 font-mono text-[var(--teal)] text-right font-black text-xs">{fmtUSD(a.precio)}</td>
-                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                  <td className="py-0.5 px-3 font-mono text-[var(--text2)] text-right text-[11px] font-black italic">{fmtUSD(a.costo)}</td>
+                  <td className="py-0.5 px-3 font-mono text-[var(--teal)] text-right font-black text-xs">{fmtUSD(a.precio)}</td>
+                  <td className="py-0.5 px-3 text-right whitespace-nowrap">
                     {currentUser?.rol === 'ADMIN' && (
                       <div className="flex gap-1.5 justify-end">
                         <button className="w-7 h-7 rounded bg-[var(--surfaceDark)] text-[var(--text-main)] hover:bg-[var(--teal)] hover:text-white transition-none flex items-center justify-center cursor-pointer border border-black/5"

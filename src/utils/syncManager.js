@@ -537,20 +537,72 @@ export function subscribeClientesRealtime() {
   }
 }
 
-// 🔹 Suscripción realtime a borrados en cuentas_por_cobrar
-export function subscribeCtasCobrarDeleteRealtime() {
+// 🔹 Suscripción realtime a cambios en proveedores (INSERT / UPDATE)
+export function subscribeProveedoresRealtime() {
   const channel = supabase
-    .channel('realtime-ctas-cobrar-delete')
+    .channel('realtime-proveedores')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'proveedores' },
+      async (payload) => {
+        if (payload.eventType === 'DELETE') return
+        const prov = payload.new
+        if (!prov?.rif) return
+
+        const existe = await db.proveedores.where('rif').equals(prov.rif).first()
+        if (!existe) {
+          await db.proveedores.add(prov)
+          console.log(`✨ Nuevo proveedor detectado vía Realtime: ${prov.nombre}`)
+        } else {
+          await db.proveedores.update(existe.id, prov)
+          console.log(`📝 Proveedor actualizado vía Realtime: ${prov.nombre}`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a cambios en cuentas_por_cobrar (Heredado: Delete/Update + INSERT)
+export function subscribeCtasCobrarRealtime() {
+  const channel = supabase
+    .channel('realtime-ctas-cobrar')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'cuentas_por_cobrar' },
+      async (payload) => {
+        const nuevo = payload.new
+        if (!nuevo?.id) return
+        
+        // Verificar si existe por supabase_id o por factura_id
+        const existe = await db.ctas_cobrar.filter(c => c.supabase_id === nuevo.id || (c.venta_id === nuevo.factura_id && c.cliente === nuevo.cliente)).first()
+        
+        if (!existe) {
+          const { id: sid, factura_id, fecha_emision, ...rest } = nuevo
+          await db.ctas_cobrar.add({
+            ...rest,
+            supabase_id: sid,
+            venta_id: factura_id,
+            fecha: fecha_emision,
+            monto: Number(nuevo.monto) || 0,
+            monto_cobrado: Number(nuevo.monto_cobrado) || 0,
+            id: undefined // Dexie auto-id
+          })
+          console.log(`✨ Nueva Cuenta por Cobrar vía Realtime: ${nuevo.cliente} (Factura: ${factura_id})`)
+        }
+      }
+    )
     .on(
       'postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'cuentas_por_cobrar' },
       async (payload) => {
         const deleted = payload.old
         if (!deleted?.id) return
-        // Buscar y eliminar el registro local que tenga este supabase_id
         const local = await db.ctas_cobrar.filter(c => c.supabase_id === deleted.id).first()
         if (local) {
-          // También eliminar abonos asociados a esta cuenta
           const abonosLocales = await db.abonos.where('cuenta_id').equals(local.id).toArray()
           for (const a of abonosLocales) {
             await db.abonos.delete(a.id)
@@ -570,7 +622,7 @@ export function subscribeCtasCobrarDeleteRealtime() {
         if (local) {
           await db.ctas_cobrar.update(local.id, {
             estado: updated.estado || local.estado,
-            monto_cobrado: updated.monto_cobrado ?? local.monto_cobrado,
+            monto_cobrado: Number(updated.monto_cobrado) ?? local.monto_cobrado,
           })
           console.log(`📝 Cuenta por Cobrar actualizada vía Realtime (supabase_id: ${updated.id})`)
         }
@@ -583,10 +635,85 @@ export function subscribeCtasCobrarDeleteRealtime() {
   }
 }
 
-// 🔹 Suscripción realtime a borrados en abonos
-export function subscribeAbonosDeleteRealtime() {
+// 🔹 Suscripción realtime a cambios en cuotas_credito (INSERT / UPDATE / DELETE)
+export function subscribeCuotasRealtime() {
   const channel = supabase
-    .channel('realtime-abonos-delete')
+    .channel('realtime-cuotas')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'cuotas_credito' },
+      async (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const nuevo = payload.new
+          const existe = await db.cuotas_credito.get(nuevo.id)
+          if (!existe) await db.cuotas_credito.add({ ...nuevo })
+          console.log(`✨ Nueva Cuota detectada vía Realtime: #${nuevo.numero_cuota} (Venta: ${nuevo.venta_id})`)
+        } else if (payload.eventType === 'UPDATE') {
+          const modificado = payload.new
+          const existe = await db.cuotas_credito.get(modificado.id)
+          if (existe) {
+            await db.cuotas_credito.update(modificado.id, modificado)
+            console.log(`📝 Cuota actualizada vía Realtime: #${modificado.numero_cuota} -> ${modificado.estado}`)
+          }
+        } else if (payload.eventType === 'DELETE') {
+          const borrado = payload.old
+          if (borrado?.id) {
+            await db.cuotas_credito.delete(borrado.id)
+            console.log(`🗑️ Cuota eliminada vía Realtime: ${borrado.id}`)
+          }
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a cambios en abonos (INSERT / DELETE)
+export function subscribeAbonosRealtime() {
+  const channel = supabase
+    .channel('realtime-abonos')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'abonos' },
+      async (payload) => {
+        const nuevo = payload.new
+        if (!nuevo?.id) return
+        
+        // El abono necesita vincularse al ID LOCAL de la cuenta
+        const ctaSupabaseId = nuevo.cuenta_id
+        const ctaLocal = await db.ctas_cobrar.filter(c => c.supabase_id === ctaSupabaseId).first()
+        
+        if (ctaLocal) {
+          // 🔎 Buscar si ya existe un abono local idéntico que aún no ha sido marcado con supabase_id
+          // Esto evita que el dispositivo que CREÓ el abono lo duplique al recibir su propio eco de Realtime
+          const duplicadoLocal = await db.abonos
+            .where('cuenta_id').equals(ctaLocal.id)
+            .and(a => a.monto === Number(nuevo.monto) && !a.supabase_id)
+            .first()
+
+          if (duplicadoLocal) {
+            await db.abonos.update(duplicadoLocal.id, { supabase_id: nuevo.id })
+            console.log(`🔗 Abono local vinculado con ID de nube: ${nuevo.id}`)
+          } else {
+            const existePorSid = await db.abonos.filter(a => a.supabase_id === nuevo.id).first()
+            if (!existePorSid) {
+              const { id: sid, ...rest } = nuevo
+              await db.abonos.add({
+                ...rest,
+                supabase_id: sid,
+                cuenta_id: Number(ctaLocal.id), // Asegurar que sea número para el join en UI
+                monto: Number(nuevo.monto) || 0,
+                id: undefined
+              })
+              console.log(`✨ Nuevo Abono vía Realtime: ${nuevo.monto} para cuenta #${ctaLocal.venta_id}`)
+            }
+          }
+        }
+      }
+    )
     .on(
       'postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'abonos' },
@@ -607,22 +734,75 @@ export function subscribeAbonosDeleteRealtime() {
   }
 }
 
-// 🔹 Suscripción realtime a borrados en facturas
-export function subscribeFacturasDeleteRealtime() {
+// 🔹 Suscripción realtime a cambios en facturas (ventas)
+export function subscribeFacturasRealtime() {
   const channel = supabase
-    .channel('realtime-facturas-delete')
+    .channel('realtime-facturas')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'facturas' },
+      async (payload) => {
+        const nuevo = payload.new
+        if (!nuevo?.id) return
+        
+        const existe = await db.ventas.where('nro').equals(nuevo.numero).first()
+        if (!existe) {
+          const localId = await db.ventas.add({
+            nro: nuevo.numero,
+            fecha: new Date(nuevo.created_at || nuevo.fecha),
+            cliente: nuevo.cliente_nombre || nuevo.cliente || 'CLIENTE GENERICO',
+            total: Number(nuevo.total_usd) || 0,
+            tipo_pago: nuevo.tipo_pago || nuevo.metodo_pago || 'CONTADO',
+            estado: nuevo.estado || 'ACTIVA',
+            vendedor: nuevo.vendedor,
+            usuario_id: nuevo.usuario_id,
+            supabase_id: nuevo.id
+          })
+          
+          // Si la factura trae items en el JSON (caso RPC)
+          if (Array.isArray(nuevo.items) && nuevo.items.length > 0) {
+            const items = nuevo.items.map(it => ({
+              venta_id: localId,
+              articulo_id: it.articulo_id || null,
+              codigo: it.codigo,
+              descripcion: it.descripcion,
+              cantidad: Number(it.cantidad) || 0,
+              precio_unitario: Number(it.precio_unitario || it.precio || 0),
+              total: Number(it.total || (it.cantidad * (it.precio_unitario || it.precio || 0)))
+            }))
+            await db.venta_items.bulkAdd(items)
+          } else {
+            // Fallback: intentar traer items desde la tabla venta_items en nube tras 1 segundo
+            setTimeout(async () => {
+               const { data: itNube } = await supabase.from('venta_items').select('*').eq('factura_id', nuevo.id)
+               if (itNube && itNube.length > 0) {
+                 const items = itNube.map(it => ({
+                    venta_id: localId,
+                    articulo_id: it.articulo_id || null,
+                    codigo: it.codigo,
+                    descripcion: it.descripcion,
+                    cantidad: Number(it.cantidad) || 0,
+                    precio_unitario: Number(it.precio_unitario || it.precio || 0),
+                    total: Number(it.total || (it.cantidad * (it.precio_unitario || it.precio || 0)))
+                 }))
+                 await db.venta_items.bulkAdd(items)
+               }
+            }, 1500)
+          }
+          console.log(`✨ Nueva Factura detectada vía Realtime: #${nuevo.numero}`)
+        }
+      }
+    )
     .on(
       'postgres_changes',
       { event: 'DELETE', schema: 'public', table: 'facturas' },
       async (payload) => {
         const deleted = payload.old
         if (!deleted?.id) return
-        // Buscar la venta local por número de factura
         const local = await db.ventas.filter(v => 
           v.supabase_id === deleted.id || v.nro === deleted.numero
         ).first()
         if (local) {
-          // Eliminar ítems asociados
           await db.venta_items.where('venta_id').equals(local.id).delete()
           await db.ventas.delete(local.id)
           console.log(`🗑️ Factura eliminada vía Realtime (id: ${deleted.id}, nro: ${deleted.numero})`)
@@ -650,6 +830,51 @@ export function subscribeCtasPagarDeleteRealtime() {
         if (local) {
           await db.ctas_pagar.delete(local.id)
           console.log(`🗑️ Cuenta por Pagar eliminada vía Realtime (supabase_id: ${deleted.id})`)
+        }
+      }
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// 🔹 Suscripción realtime a cambios en compras (INSERT / DELETE)
+export function subscribeComprasRealtime() {
+  const channel = supabase
+    .channel('realtime-compras')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'compras' },
+      async (payload) => {
+        const nuevo = payload.new
+        if (!nuevo?.id) return
+        
+        const existe = await db.compras.where('nro_factura').equals(nuevo.nro_factura).first()
+        if (!existe) {
+          const { id: sid, ...rest } = nuevo
+          await db.compras.add({
+            ...rest,
+            supabase_id: sid,
+            fecha: new Date(nuevo.fecha),
+            id: undefined
+          })
+          console.log(`✨ Nueva Compra detectada vía Realtime: #${nuevo.nro_factura}`)
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'compras' },
+      async (payload) => {
+        const deleted = payload.old
+        if (!deleted?.id) return
+        const local = await db.compras.filter(c => c.supabase_id === deleted.id).first()
+        if (local) {
+          await db.compra_items.where('compra_id').equals(local.id).delete()
+          await db.compras.delete(local.id)
+          console.log(`🗑️ Compra eliminada vía Realtime (id: ${deleted.id})`)
         }
       }
     )
@@ -1164,9 +1389,12 @@ export async function initInventorySync() {
   toast('🚀 SINCRONIZACIÓN INICIAL COMPLETADA', 'success')
   subscribeArticulosRealtime()
   subscribeClientesRealtime()
-  subscribeCtasCobrarDeleteRealtime()
-  subscribeAbonosDeleteRealtime()
-  subscribeFacturasDeleteRealtime()
+  subscribeProveedoresRealtime()
+  subscribeCtasCobrarRealtime()
+  subscribeAbonosRealtime()
+  subscribeFacturasRealtime()
+  subscribeComprasRealtime()
+  subscribeCuotasRealtime()
   subscribeCtasPagarDeleteRealtime()
 
   // Sincronizaciones en Segundo Plano (No bloqueantes)
@@ -1178,7 +1406,29 @@ export async function initInventorySync() {
     
     // 🩹 Auto-rescate de registros que se quedaron atrapados localmente por errores previos
     await autoRescueOrphans()
+    await cleanupAbonosOrphans()
   }, 3000)
+}
+
+/**
+ * Limpia los abonos que se duplicaron o quedaron sin vinculación (S/C)
+ */
+async function cleanupAbonosOrphans() {
+  try {
+    const abonos = await db.abonos.toArray()
+    for (const a of abonos) {
+      const c = await db.ctas_cobrar.get(Number(a.cuenta_id))
+      if (!c) {
+        console.warn(`🧹 Borrando abono huérfano/inválido: ${a.id}`)
+        await db.abonos.delete(a.id)
+      } else if (typeof a.cuenta_id === 'string') {
+        // Corregir tipo de dato si es string
+        await db.abonos.update(a.id, { cuenta_id: Number(a.cuenta_id) })
+      }
+    }
+  } catch (e) {
+    console.error('Error cleanup abonos:', e)
+  }
 }
 
 /**
