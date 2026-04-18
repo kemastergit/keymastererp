@@ -6,39 +6,80 @@ import { logAction } from '../../utils/audit'
 import { printEtiquetas } from '../../utils/print'
 import Modal from '../../components/UI/Modal'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { addToSyncQueue, processSyncQueue } from '../../utils/syncManager'
+import { addToSyncQueue, processSyncQueue, syncArticulosFromSupabase } from '../../utils/syncManager'
 
 export default function Compras() {
     const { toast, currentUser, tasa } = useStore()
-    const [header, setHeader] = useState({
-        proveedor_id: '',
-        nro_factura: '',
-        fecha: today(),
-        moneda: 'USD',
-        tasa: tasa || 0,
-        tipo_tasa: 'BCV',
-        condicion: 'CREDITO',
-        metodo_pago: 'EFECTIVO_USD'
+    const [header, setHeader] = useState(() => {
+        try {
+            const saved = localStorage.getItem('borrador_compras_header')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                return { ...parsed, tasa: tasa || parsed.tasa }
+            }
+        } catch (e) {}
+        return {
+            proveedor_id: '',
+            nro_factura: '',
+            fecha: today(),
+            moneda: 'USD',
+            tasa: tasa || 0,
+            tipo_tasa: 'BCV',
+            condicion: 'CREDITO',
+            metodo_pago: 'EFECTIVO_USD'
+        }
     })
 
-    const [items, setItems] = useState([])
+    const [items, setItems] = useState(() => {
+        try {
+            const saved = localStorage.getItem('borrador_compras_items')
+            if (saved) return JSON.parse(saved)
+        } catch (e) {}
+        return []
+    })
+
     const [busq, setBusq] = useState('')
     const [showProductModal, setShowProductModal] = useState(false)
-    const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
+    const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', marca: '', referencia: '', departamento: '', precio: 0, costo: 0, stock_min: 0 })
     const [showPrintModal, setShowPrintModal] = useState(false)
     const [printItems, setPrintItems] = useState([])
+
+    // Autoguardar cuando cambian items o header
+    useEffect(() => {
+        localStorage.setItem('borrador_compras_header', JSON.stringify(header))
+    }, [header])
+
+    useEffect(() => {
+        localStorage.setItem('borrador_compras_items', JSON.stringify(items))
+    }, [items])
 
     const proveedores = useLiveQuery(() => db.proveedores.orderBy('nombre').toArray(), [], [])
     const articulos = useLiveQuery(() =>
         busq.trim().length > 0
-            ? db.articulos.filter(a =>
-                a.descripcion.toLowerCase().includes(busq.toLowerCase()) ||
-                a.codigo.toLowerCase().includes(busq.toLowerCase()) ||
-                a.referencia?.toLowerCase().includes(busq.toLowerCase())
-            ).limit(10).toArray()
+            ? db.articulos
+                .filter(a =>
+                    a.descripcion?.toLowerCase().includes(busq.toLowerCase()) ||
+                    a.codigo?.toLowerCase().includes(busq.toLowerCase()) ||
+                    a.referencia?.toLowerCase().includes(busq.toLowerCase())
+                )
+                .toArray()
+                .then(results =>
+                    results
+                        .sort((a, b) => a.descripcion.localeCompare(b.descripcion))
+                        .slice(0, 100)
+                )
             : [],
         [busq], []
     )
+
+    // Sincronizar artículos desde Supabase si la DB local está vacía (primera carga)
+    useEffect(() => {
+        db.articulos.count().then(count => {
+            if (count === 0) {
+                syncArticulosFromSupabase()
+            }
+        })
+    }, [])
 
     const addItem = (art) => {
         const exists = items.find(i => i.id === art.id)
@@ -240,6 +281,8 @@ export default function Compras() {
             // Resetear formulario después de capturar datos para sync
             setItems([])
             setHeader({ ...header, nro_factura: '', condicion: 'CREDITO', metodo_pago: 'EFECTIVO_USD' })
+            localStorage.removeItem('borrador_compras_header')
+            localStorage.removeItem('borrador_compras_items')
             processSyncQueue()
         } catch (err) {
             console.error(err)
@@ -257,7 +300,9 @@ export default function Compras() {
         // Se identifica por 'codigo' (único global), no por el id local de Dexie
         await addToSyncQueue('articulos', 'INSERT', {
             codigo: newProduct.codigo,
+            referencia: newProduct.referencia || '',
             descripcion: newProduct.descripcion,
+            departamento: newProduct.departamento || 'VARIOS',
             marca: newProduct.marca || '',
             precio: parseFloat(newProduct.precio) || 0,
             costo: parseFloat(newProduct.costo) || 0,
@@ -268,7 +313,7 @@ export default function Compras() {
 
         addItem(art)
         setShowProductModal(false)
-        setNewProduct({ codigo: '', descripcion: '', marca: '', precio: 0, costo: 0, stock_min: 0 })
+        setNewProduct({ codigo: '', descripcion: '', marca: '', referencia: '', departamento: '', precio: 0, costo: 0, stock_min: 0 })
         toast('Producto creado y agregado a la factura')
     }
 
@@ -404,7 +449,7 @@ export default function Compras() {
                             <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text2)]">search</span>
 
                             {busq && (
-                                <div className="absolute top-full left-0 right-0 bg-[var(--surface)] border border-[var(--border-var)] shadow-2xl z-[50] mt-1">
+                                <div className="absolute top-full left-0 right-0 bg-[var(--surface)] border border-[var(--border-var)] shadow-2xl z-[50] mt-1 max-h-[400px] overflow-y-auto">
                                     {articulos?.map(a => (
                                         <div
                                             key={a.id}
@@ -554,13 +599,33 @@ export default function Compras() {
                             />
                         </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="field">
+                            <label className="text-[10px] font-black uppercase text-[var(--text2)]">Marca / Fabricante (Opcional)</label>
+                            <input
+                                className="inp !py-3 rounded-none focus:border-[var(--teal)] uppercase"
+                                value={newProduct.marca}
+                                onChange={e => setNewProduct({ ...newProduct, marca: e.target.value.toUpperCase() })}
+                                placeholder="EJ. DENSO, TOYOTA, BOSCH"
+                            />
+                        </div>
+                        <div className="field">
+                            <label className="text-[10px] font-black uppercase text-[var(--text2)]">Ubicación / Referencia</label>
+                            <input
+                                className="inp !py-3 rounded-none focus:border-[var(--teal)] uppercase"
+                                value={newProduct.referencia}
+                                onChange={e => setNewProduct({ ...newProduct, referencia: e.target.value.toUpperCase() })}
+                                placeholder="EJ. ESTANTE 4"
+                            />
+                        </div>
+                    </div>
                     <div className="field">
-                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Marca / Fabricante (Opcional)</label>
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Categoría / Departamento</label>
                         <input
                             className="inp !py-3 rounded-none focus:border-[var(--teal)] uppercase"
-                            value={newProduct.marca}
-                            onChange={e => setNewProduct({ ...newProduct, marca: e.target.value.toUpperCase() })}
-                            placeholder="EJ. DENSO, TOYOTA, BOSCH"
+                            value={newProduct.departamento}
+                            onChange={e => setNewProduct({ ...newProduct, departamento: e.target.value.toUpperCase() })}
+                            placeholder="EJ. MOTOR, SUSPENSIÓN, VARIOS"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
