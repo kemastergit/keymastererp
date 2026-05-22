@@ -89,21 +89,26 @@ export default function Compras() {
         }
         setItems([...items, {
             ...art,
-            qty: 1,
-            costo_unit: art.costo || 0,
+            qty: "1",
+            costo_unit: art.costo !== undefined ? String(art.costo) : "0",
             costo_anterior: art.costo || 0,
+            precio_venta: art.precio !== undefined ? String(art.precio) : "0",
             stock_actual: art.stock || 0
         }])
         setBusq('')
     }
 
     const updateItem = (id, field, val) => {
-        setItems(items.map(i => i.id === id ? { ...i, [field]: parseFloat(val) || 0 } : i))
+        setItems(items.map(i => i.id === id ? { ...i, [field]: val } : i))
     }
 
     const removeItem = (id) => setItems(items.filter(i => i.id !== id))
 
-    const totalUSD = items.reduce((s, i) => s + (i.qty * i.costo_unit), 0)
+    const totalUSD = items.reduce((s, i) => {
+        const q = parseFloat(i.qty) || 0
+        const c = parseFloat(i.costo_unit) || 0
+        return s + (q * c)
+    }, 0)
 
     const handleProcess = async () => {
         if (!header.proveedor_id) return toast('Seleccione un proveedor', 'error')
