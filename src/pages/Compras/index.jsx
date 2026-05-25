@@ -151,35 +151,39 @@ export default function Compras() {
                 })
 
                 for (const item of items) {
+                    const cantNueva = parseFloat(item.qty) || 0
+                    const costoNuevo = parseFloat(item.costo_unit) || 0
+                    const costoAnterior = parseFloat(item.costo_anterior) || 0
+
                     await db.compra_items.add({
                         compra_id: compraId,
                         articulo_id: item.id,
                         codigo: item.codigo,
                         descripcion: item.descripcion,
-                        qty: item.qty,
-                        costo_unit: item.costo_unit,
-                        costo_anterior: item.costo_anterior
+                        qty: cantNueva,
+                        costo_unit: costoNuevo,
+                        costo_anterior: costoAnterior
                     })
 
 
                     // Recalcular AVCO (Costo Promedio Ponderado)
-                    const stockActual = item.stock_actual
-                    const costoActual = item.costo_anterior
-                    const cantNueva = item.qty
-                    const costoNuevo = item.costo_unit
-
-                    const nuevoCosto = ((stockActual * costoActual) + (cantNueva * costoNuevo)) / (stockActual + cantNueva)
+                    const stockActual = parseFloat(item.stock_actual) || 0
+                    const nuevoCosto = (stockActual + cantNueva) > 0 
+                        ? ((stockActual * costoAnterior) + (cantNueva * costoNuevo)) / (stockActual + cantNueva)
+                        : costoNuevo
 
                     await db.articulos.update(item.id, {
                         stock: stockActual + cantNueva,
-                        costo: parseFloat(nuevoCosto.toFixed(4))
+                        costo: parseFloat(nuevoCosto.toFixed(4)),
+                        precio: parseFloat(item.precio_venta) || 0
                     })
 
                     // 🔄 SYNC STOCK — Avisar a la nube del nuevo stock usando codigo (único global)
                     await addToSyncQueue('articulos', 'UPDATE_STOCK', {
                         codigo: item.codigo,
                         stock: stockActual + cantNueva,
-                        costo: parseFloat(nuevoCosto.toFixed(4))
+                        costo: parseFloat(nuevoCosto.toFixed(4)),
+                        precio: parseFloat(item.precio_venta) || 0
                     })
                 }
 
@@ -251,9 +255,9 @@ export default function Compras() {
                     articulo_id: item.id,
                     codigo: item.codigo,
                     descripcion: item.descripcion,
-                    qty: item.qty, 
-                    costo_unit: item.costo_unit, 
-                    costo_anterior: item.costo_anterior
+                    qty: parseFloat(item.qty) || 0, 
+                    costo_unit: parseFloat(item.costo_unit) || 0, 
+                    costo_anterior: parseFloat(item.costo_anterior) || 0
                 })
             }
             
@@ -323,7 +327,7 @@ export default function Compras() {
     }
 
     return (
-        <div className="space-y-6 max-w-6xl mx-auto pb-10">
+        <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 pb-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter">Entrada de Compras</h1>
@@ -496,10 +500,11 @@ export default function Compras() {
                                 <thead>
                                     <tr className="text-[10px] uppercase text-[var(--text2)] font-black border-b border-[var(--border-var)] bg-[var(--surface2)]">
                                         <th className="py-3 px-4">Producto</th>
-                                        <th className="py-3 px-4 w-24 text-center">Cant.</th>
-                                        <th className="py-3 px-4 w-32 text-right">Costo Unit.</th>
-                                        <th className="py-3 px-4 w-32 text-right">Costo Ant.</th>
-                                        <th className="py-3 px-4 w-32 text-right">Subtotal</th>
+                                        <th className="py-3 px-4 w-28 text-center">Cant.</th>
+                                        <th className="py-3 px-4 w-44 text-right">Costo Unit.</th>
+                                        <th className="py-3 px-4 w-36 text-right">Costo Ant.</th>
+                                        <th className="py-3 px-4 w-44 text-right">Precio Venta</th>
+                                        <th className="py-3 px-4 w-36 text-right">Subtotal</th>
                                         <th className="py-3 px-4 w-12"></th>
                                     </tr>
                                 </thead>
@@ -531,12 +536,23 @@ export default function Compras() {
                                             </td>
                                             <td className="py-3 px-4 text-right">
                                                 <div className="text-[var(--text2)] font-mono">{fmtUSD(i.costo_anterior)}</div>
-                                                <div className="text-[8px] font-black uppercase {i.costo_unit > i.costo_anterior ? 'text-[var(--red-var)]' : 'text-[var(--teal)]'} line-clamp-1">
-                                                    {i.costo_unit > i.costo_anterior ? '↑ Subió' : i.costo_unit < i.costo_anterior ? '↓ Bajó' : '= Igual'}
+                                                <div className={`text-[8px] font-black uppercase ${(parseFloat(i.costo_unit) || 0) > (parseFloat(i.costo_anterior) || 0) ? 'text-[var(--red-var)]' : (parseFloat(i.costo_unit) || 0) < (parseFloat(i.costo_anterior) || 0) ? 'text-[var(--teal)]' : 'text-slate-500'} line-clamp-1`}>
+                                                    {(parseFloat(i.costo_unit) || 0) > (parseFloat(i.costo_anterior) || 0) ? '↑ Subió' : (parseFloat(i.costo_unit) || 0) < (parseFloat(i.costo_anterior) || 0) ? '↓ Bajó' : '= Igual'}
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        className="inp !py-2 !pl-6 text-right font-mono font-bold rounded-none focus:border-[var(--teal)]"
+                                                        value={i.precio_venta}
+                                                        onChange={e => updateItem(i.id, 'precio_venta', e.target.value)}
+                                                    />
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text2)]">$</span>
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4 text-right font-mono font-black text-[var(--text-main)]">
-                                                {fmtUSD(i.qty * i.costo_unit)}
+                                                {fmtUSD((parseFloat(i.qty) || 0) * (parseFloat(i.costo_unit) || 0))}
                                             </td>
                                             <td className="py-3 px-4">
                                                 <button
@@ -550,7 +566,7 @@ export default function Compras() {
                                     ))}
                                     {items.length === 0 && (
                                         <tr>
-                                            <td colSpan="6" className="py-20 text-center text-[var(--text2)]">
+                                            <td colSpan="7" className="py-20 text-center text-[var(--text2)]">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <span className="material-icons-round text-6xl mb-4">local_shipping</span>
                                                     <span className="text-[10px] font-black uppercase tracking-widest">Agregue productos a la factura de compra</span>

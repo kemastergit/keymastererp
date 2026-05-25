@@ -103,6 +103,17 @@
     outline: none !important;
   }
 
+  /* Ocultar flechas en inputs numéricos de tipo number */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   .badge {
     @apply px-2 py-0.5 rounded-[4px] text-[10px] font-black uppercase border whitespace-nowrap;
   }

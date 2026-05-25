@@ -96,6 +96,7 @@ export async function processSyncQueue() {
       } else if (item.table === 'articulos' && item.operation === 'UPDATE_STOCK') {
         const updatePayload = { stock: item.data.stock }
         if (item.data.costo !== undefined) updatePayload.costo = item.data.costo
+        if (item.data.precio !== undefined) updatePayload.precio = item.data.precio
         const { data: affectedRows, error: err } = await supabase.from('articulos')
           .update(updatePayload)
           .eq('codigo', item.data.codigo)
