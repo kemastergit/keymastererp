@@ -41,10 +41,14 @@ export default function Compras() {
     const [busq, setBusq] = useState('')
     const [showProductModal, setShowProductModal] = useState(false)
     const [newProduct, setNewProduct] = useState({ codigo: '', descripcion: '', marca: '', referencia: '', departamento: '', precio: 0, costo: 0, stock_min: 0 })
-    const [showPrintModal, setShowPrintModal] = useState(false)
     const [printItems, setPrintItems] = useState([])
+    const [showPrintModal, setShowPrintModal] = useState(false)
+    const [showGeminiModal, setShowGeminiModal] = useState(false)
+    const [showGemsInstructions, setShowGemsInstructions] = useState(false)
+    const [showConfirmClear, setShowConfirmClear] = useState(false)
+    const [jsonInput, setJsonInput] = useState('')
 
-    // Autoguardar cuando cambian items o header
+    // Evitar que el lector de barras escriba en otros lados
     useEffect(() => {
         localStorage.setItem('borrador_compras_header', JSON.stringify(header))
     }, [header])
@@ -110,6 +114,130 @@ export default function Compras() {
         return s + (q * c)
     }, 0)
 
+    const processGeminiJSON = async () => {
+        try {
+            if (!jsonInput.trim()) return toast('Pegue el JSON primero', 'warn')
+            const parsed = JSON.parse(jsonInput)
+            
+            // Determinar si es el formato nuevo { cabecera, items } o el viejo []
+            let itemsToProcess = []
+            let headerData = null
+            
+            if (Array.isArray(parsed)) {
+                itemsToProcess = parsed
+            } else if (parsed.items && Array.isArray(parsed.items)) {
+                itemsToProcess = parsed.items
+                headerData = parsed.cabecera
+            } else {
+                throw new Error("Formato JSON no válido")
+            }
+
+            let agregados = 0
+            let creados = 0
+            let nuevosItems = [...items]
+
+            const artsDB = await db.articulos.toArray()
+
+            for (const p of itemsToProcess) {
+                // Buscar por codigo o descripcion
+                let match = null
+                if (p.codigo) {
+                    match = artsDB.find(a => String(a.codigo).toUpperCase() === String(p.codigo).toUpperCase())
+                }
+                if (!match && p.descripcion) {
+                    // busqueda por coincidencia parcial o exacta
+                    match = artsDB.find(a => 
+                        String(a.descripcion).toUpperCase() === String(p.descripcion).toUpperCase() ||
+                        String(a.descripcion).toUpperCase().includes(String(p.descripcion).toUpperCase()) ||
+                        String(p.descripcion).toUpperCase().includes(String(a.descripcion).toUpperCase())
+                    )
+                }
+
+                if (match) {
+                    // Evitar duplicados en la lista de compra
+                    if (!nuevosItems.find(i => i.id === match.id)) {
+                        nuevosItems.push({
+                            ...match,
+                            qty: String(p.qty || 1),
+                            costo_unit: String(p.costo_unit || match.costo || 0),
+                            costo_anterior: match.costo || 0,
+                            precio_venta: match.precio !== undefined ? String(match.precio) : "0",
+                            stock_actual: match.stock || 0
+                        })
+                        agregados++
+                    }
+                } else {
+                    // NO EXISTE -> CREARLO AUTOMÁTICAMENTE
+                    const newCodigo = p.codigo || `IA-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
+                    const artToSave = {
+                        codigo: newCodigo.toUpperCase(),
+                        descripcion: String(p.descripcion || 'PRODUCTO DESCONOCIDO').toUpperCase(),
+                        marca: '',
+                        referencia: '',
+                        departamento: 'VARIOS',
+                        precio: 0, // El precio de venta se decidirá en la tabla
+                        costo: parseFloat(p.costo_unit) || 0,
+                        stock: 0,
+                        activo: true
+                    }
+                    
+                    const id = await db.articulos.add(artToSave)
+                    const newArt = await db.articulos.get(id)
+                    
+                    // Sincronizar nuevo artículo
+                    const { id: localId, ...artToSync } = artToSave
+                    await addToSyncQueue('articulos', 'INSERT', {
+                        ...artToSync,
+                        mostrar_en_web: true
+                    })
+
+                    nuevosItems.push({
+                        ...newArt,
+                        qty: String(p.qty || 1),
+                        costo_unit: String(p.costo_unit || newArt.costo || 0),
+                        costo_anterior: 0,
+                        precio_venta: "0",
+                        stock_actual: 0
+                    })
+                    creados++
+                }
+            }
+
+            // Aplicar cabecera si vino en el JSON
+            if (headerData) {
+                let foundProvId = header.proveedor_id
+                if (headerData.proveedor) {
+                    // Intentar buscar el proveedor por nombre
+                    const provMatch = proveedores?.find(pr => 
+                        pr.nombre.toUpperCase().includes(headerData.proveedor.toUpperCase()) ||
+                        headerData.proveedor.toUpperCase().includes(pr.nombre.toUpperCase())
+                    )
+                    if (provMatch) foundProvId = provMatch.id
+                }
+
+                setHeader(prev => ({
+                    ...prev,
+                    nro_factura: headerData.nro_factura || prev.nro_factura,
+                    fecha: headerData.fecha || prev.fecha,
+                    moneda: headerData.moneda || prev.moneda,
+                    tasa: headerData.tasa_cambio > 0 ? headerData.tasa_cambio : prev.tasa,
+                    proveedor_id: foundProvId
+                }))
+            }
+
+            setItems(nuevosItems)
+            setShowGeminiModal(false)
+            setJsonInput('')
+
+            if (agregados > 0 || creados > 0) {
+                toast(`✅ Vinculados: ${agregados} | Creados Nuevos: ${creados}`)
+            }
+
+        } catch (e) {
+            toast('❌ Error leyendo JSON: ' + e.message, 'error')
+        }
+    }
+
     const handleProcess = async () => {
         if (!header.proveedor_id) return toast('Seleccione un proveedor', 'error')
         if (!header.nro_factura) return toast('Ingrese número de factura', 'error')
@@ -134,6 +262,7 @@ export default function Compras() {
             let compraId = null;
             let ctaPagarId = null;
             let abonoId = null;
+            let articulosParaSync = [];
 
             // Calculamos el total fuera para asegurar que sea un número válido
             const finalTotal = parseFloat(totalUSD.toFixed(2)) || 0;
@@ -178,8 +307,7 @@ export default function Compras() {
                         precio: parseFloat(item.precio_venta) || 0
                     })
 
-                    // 🔄 SYNC STOCK — Avisar a la nube del nuevo stock usando codigo (único global)
-                    await addToSyncQueue('articulos', 'UPDATE_STOCK', {
+                    articulosParaSync.push({
                         codigo: item.codigo,
                         stock: stockActual + cantNueva,
                         costo: parseFloat(nuevoCosto.toFixed(4)),
@@ -245,23 +373,7 @@ export default function Compras() {
                 created_at: new Date().toISOString() 
             }
             
-            await addToSyncQueue('compras', 'INSERT', compraData)
-            
-            for (const item of items) {
-                const syncItemId = `item-${syncCompraId}-${item.id}`
-                await addToSyncQueue('compra_items', 'INSERT', {
-                    id: syncItemId,
-                    compra_id: syncCompraId, 
-                    articulo_id: item.id,
-                    codigo: item.codigo,
-                    descripcion: item.descripcion,
-                    qty: parseFloat(item.qty) || 0, 
-                    costo_unit: parseFloat(item.costo_unit) || 0, 
-                    costo_anterior: parseFloat(item.costo_anterior) || 0
-                })
-            }
-            
-            await addToSyncQueue('cuentas_por_pagar', 'INSERT', {
+            const ctaPagarData = {
                 id: syncCtaPagarId,
                 proveedor_id: parseInt(syncHeader.proveedor_id),
                 proveedor: provObj?.nombre || 'PROVEEDOR DESCONOCIDO',
@@ -272,20 +384,39 @@ export default function Compras() {
                 fecha: syncHeader.fecha,
                 estado: syncHeader.condicion === 'CONTADO' ? 'PAGADA' : 'PENDIENTE',
                 vencimiento: syncHeader.fecha
-            })
+            }
             
+            let abonoData = null
             if (syncHeader.condicion === 'CONTADO') {
-                const syncAbonoId = `abono-compra-${syncCtaPagarId}-${Date.now()}`
-                await addToSyncQueue('abonos', 'INSERT', {
-                    id: syncAbonoId, 
+                abonoData = {
+                    id: `abono-compra-${syncCtaPagarId}-${Date.now()}`, 
                     cuenta_id: syncCtaPagarId, 
                     tipo_cuenta: 'PAGAR',
                     fecha: syncHeader.fecha + 'T' + new Date().toTimeString().split(' ')[0], 
                     monto: finalTotal, 
                     metodo: syncHeader.metodo_pago, 
                     usuario_id: currentUser.id
-                })
+                }
             }
+
+            const itemsData = items.map(item => ({
+                id: `item-${syncCompraId}-${item.id}`,
+                compra_id: syncCompraId, 
+                articulo_id: item.id,
+                codigo: item.codigo,
+                descripcion: item.descripcion,
+                qty: parseFloat(item.qty) || 0, 
+                costo_unit: parseFloat(item.costo_unit) || 0, 
+                costo_anterior: parseFloat(item.costo_anterior) || 0
+            }))
+
+            await addToSyncQueue('compras_bulk', 'INSERT', {
+                compra: compraData,
+                items: itemsData,
+                articulos: articulosParaSync,
+                cta_pagar: ctaPagarData,
+                abono: abonoData
+            })
 
             // Resetear formulario después de capturar datos para sync
             setItems([])
@@ -327,7 +458,7 @@ export default function Compras() {
     }
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-8 pb-10">
+        <div className="space-y-6 w-full max-w-[1600px] mx-auto px-4 md:px-8 pb-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-[var(--text-main)] uppercase tracking-tighter">Entrada de Compras</h1>
@@ -366,12 +497,12 @@ export default function Compras() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* CABECERA */}
-                <div className="panel lg:col-span-1 space-y-4 h-fit lg:sticky lg:top-4 transition-none">
-                    <div className="panel-title mb-4">Datos de Cabecera</div>
 
-                    <div className="field">
+            {/* ── CABECERA HORIZONTAL ── */}
+            <div className="panel transition-none">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+                    {/* Proveedor */}
+                    <div className="field lg:col-span-2">
                         <label className="text-[10px] font-black uppercase text-[var(--text2)]">Proveedor *</label>
                         <select
                             className="inp !py-3 rounded-none focus:border-[var(--teal)]"
@@ -385,8 +516,9 @@ export default function Compras() {
                         </select>
                     </div>
 
+                    {/* Nº Factura */}
                     <div className="field">
-                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Nº Factura de Proveedor *</label>
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Nº Factura *</label>
                         <input
                             type="text"
                             className="inp !py-3 font-mono font-bold uppercase rounded-none focus:border-[var(--teal)] transition-none"
@@ -396,36 +528,38 @@ export default function Compras() {
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="field">
-                            <label className="text-[10px] font-black uppercase text-[var(--text2)]">Fecha</label>
-                            <input
-                                type="date"
-                                max={today()}
-                                className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none"
-                                value={header.fecha}
-                                onChange={e => {
-                                    const val = e.target.value
-                                    if (val > today()) { toast('⚠️ No se permite fecha futura', 'warn'); return }
-                                    setHeader({ ...header, fecha: val })
-                                }}
-                            />
-                        </div>
-                        <div className="field">
-                            <label className="text-[10px] font-black uppercase text-[var(--text2)]">Moneda</label>
-                            <select
-                                className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none"
-                                value={header.moneda}
-                                onChange={e => setHeader({ ...header, moneda: e.target.value })}
-                            >
-                                <option value="USD">DÓLARES ($)</option>
-                                <option value="VES">BOLÍVARES (BS)</option>
-                            </select>
-                        </div>
+                    {/* Fecha */}
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Fecha</label>
+                        <input
+                            type="date"
+                            max={today()}
+                            className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none"
+                            value={header.fecha}
+                            onChange={e => {
+                                const val = e.target.value
+                                if (val > today()) { toast('⚠️ No se permite fecha futura', 'warn'); return }
+                                setHeader({ ...header, fecha: val })
+                            }}
+                        />
                     </div>
 
+                    {/* Moneda */}
                     <div className="field">
-                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Tasa Fiscal Confimada (BS/$)</label>
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Moneda</label>
+                        <select
+                            className="inp !py-3 rounded-none focus:border-[var(--teal)] transition-none"
+                            value={header.moneda}
+                            onChange={e => setHeader({ ...header, moneda: e.target.value })}
+                        >
+                            <option value="USD">DÓLARES ($)</option>
+                            <option value="VES">BOLÍVARES (BS)</option>
+                        </select>
+                    </div>
+
+                    {/* Tasa */}
+                    <div className="field">
+                        <label className="text-[10px] font-black uppercase text-[var(--text2)]">Tasa (BS/$)</label>
                         <input
                             type="number"
                             className="inp !py-3 font-mono text-lg font-black text-[var(--teal)] rounded-none focus:border-[var(--teal)] transition-none"
@@ -434,18 +568,36 @@ export default function Compras() {
                         />
                     </div>
                 </div>
+            </div>
 
-                {/* DETALLE */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="panel transition-none">
-                        <div className="flex justify-between items-center mb-4">
+            {/* ── DETALLE (ancho completo) ── */}
+            <div className="space-y-6">
+                <div className="panel transition-none">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                             <h3 className="panel-title !m-0">Búsqueda de Productos</h3>
-                            <button
-                                className="btn btn-sm bg-[var(--surfaceDark)] text-[var(--teal)] border border-[var(--teal)] !px-4 hover:bg-[var(--teal)] hover:text-white transition-none"
-                                onClick={() => setShowProductModal(true)}
-                            >
-                                + NUEVO PRODUCTO
-                            </button>
+                            <div className="flex gap-2 w-full sm:w-auto">
+                                <button
+                                    className="btn btn-sm bg-[#e8f0fe] text-[#1967d2] border border-[#1967d2] !px-4 hover:bg-[#1967d2] hover:text-white transition-none flex items-center gap-2 flex-1 sm:flex-none justify-center"
+                                    onClick={() => setShowGeminiModal(true)}
+                                    title="Pegar JSON de Gemini"
+                                >
+                                    <span className="material-icons-round text-[16px]">smart_toy</span>
+                                    CARGA IA (JSON)
+                                </button>
+                                <button
+                                    className="btn btn-sm bg-white text-[#1967d2] border border-slate-200 hover:bg-slate-50 transition-none flex items-center justify-center"
+                                    onClick={() => setShowGemsInstructions(true)}
+                                    title="Instrucciones para Gemini"
+                                >
+                                    <span className="material-icons-round text-[16px]">help_outline</span>
+                                </button>
+                                <button
+                                    className="btn btn-sm bg-[var(--surfaceDark)] text-[var(--teal)] border border-[var(--teal)] !px-4 hover:bg-[var(--teal)] hover:text-white transition-none flex-1 sm:flex-none justify-center"
+                                    onClick={() => setShowProductModal(true)}
+                                >
+                                    + NUEVO
+                                </button>
+                            </div>
                         </div>
                         <div className="relative">
                             <input
@@ -494,7 +646,18 @@ export default function Compras() {
                     </div>
 
                     <div className="panel transition-none">
-                        <h3 className="panel-title mb-4">Líneas de la Factura</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="panel-title !m-0">Líneas de la Factura</h3>
+                            {items.length > 0 && (
+                                <button
+                                    className="btn btn-sm bg-red-50 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white transition-colors flex items-center gap-2"
+                                    onClick={() => setShowConfirmClear(true)}
+                                >
+                                    <span className="material-icons-round text-[16px]">delete_sweep</span>
+                                    VACIAR TODO
+                                </button>
+                            )}
+                        </div>
                         <div className="overflow-x-auto min-h-[300px]">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -595,7 +758,6 @@ export default function Compras() {
                         </div>
                     </div>
                 </div>
-            </div>
 
             {/* MODAL PRODUCTO NUEVO (SOBRE EL FLUJO ACTUAL) */}
             <Modal open={showProductModal} onClose={() => setShowProductModal(false)} title="CREAR PRODUCTO SOBRE LA MARCHA">
@@ -736,6 +898,175 @@ export default function Compras() {
                     </div>
                 </div>
             </Modal>
+            {/* MODAL GEMINI IA */}
+            {showGeminiModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                    <div className="bg-[var(--surface)] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col border border-[var(--border-var)] overflow-hidden">
+                        <div className="p-6 border-b border-[var(--border-var)] flex justify-between items-center bg-[#f8fafd]">
+                            <div className="flex items-center gap-3">
+                                <span className="material-icons-round text-3xl text-[#1967d2]">smart_toy</span>
+                                <div>
+                                    <h2 className="text-xl font-black text-[#1967d2] uppercase tracking-tight">Carga Inteligente con Gemini</h2>
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Pegue el JSON generado por la IA</p>
+                                </div>
+                            </div>
+                            <button className="material-icons-round text-slate-400 hover:text-red-500 transition-colors" onClick={() => setShowGeminiModal(false)}>close</button>
+                        </div>
+                        <div className="p-6 bg-slate-50">
+                            <textarea
+                                className="w-full h-64 inp !p-4 font-mono text-sm bg-white border-slate-300 focus:border-[#1967d2] text-slate-800 shadow-inner resize-none"
+                                placeholder='{\n  "cabecera": {\n    "nro_factura": "1234",\n    "fecha": "2026-05-27",\n    "proveedor": "MARCA",\n    "moneda": "USD",\n    "tasa_cambio": 0\n  },\n  "items": [\n    {\n      "codigo": "REF-123",\n      "descripcion": "TUERCA",\n      "qty": 10,\n      "costo_unit": 0.50\n    }\n  ]\n}'
+                                value={jsonInput}
+                                onChange={e => setJsonInput(e.target.value)}
+                            />
+                            <div className="mt-3 text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                                <span className="material-icons-round text-[14px]">info</span>
+                                Si un producto no existe, se creará automáticamente en el sistema.
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-[var(--border-var)] flex justify-end gap-3 bg-white">
+                            <button className="btn bg-white text-slate-600 border border-slate-300 hover:bg-slate-50" onClick={() => setShowGeminiModal(false)}>
+                                CANCELAR
+                            </button>
+                            <button className="btn bg-[#1967d2] text-white hover:bg-[#1557b0] flex items-center gap-2 shadow-md" onClick={processGeminiJSON}>
+                                <span className="material-icons-round text-[18px]">auto_awesome</span>
+                                VINCULAR FACTURA
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL CONFIRMAR VACIADO */}
+            {showConfirmClear && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                    <div className="bg-[var(--surface)] w-full max-w-sm rounded-2xl shadow-2xl flex flex-col border border-[var(--border-var)] overflow-hidden">
+                        <div className="p-6 flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                                <span className="material-icons-round text-3xl">delete_sweep</span>
+                            </div>
+                            <h2 className="text-xl font-black text-[var(--text-main)] mb-2">¿Vaciar la factura?</h2>
+                            <p className="text-sm text-[var(--text2)]">Se eliminarán todos los productos de la lista actual. Esta acción no se puede deshacer.</p>
+                        </div>
+                        <div className="p-4 border-t border-[var(--border-var)] flex justify-stretch gap-3 bg-[var(--surface2)]">
+                            <button className="btn flex-1 bg-white text-slate-600 border border-slate-300 hover:bg-slate-50" onClick={() => setShowConfirmClear(false)}>
+                                CANCELAR
+                            </button>
+                            <button 
+                                className="btn flex-1 bg-red-600 text-white hover:bg-red-700 shadow-md" 
+                                onClick={() => {
+                                    setItems([])
+                                    setShowConfirmClear(false)
+                                }}
+                            >
+                                SÍ, VACIAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL INSTRUCCIONES GEMS */}
+            {showGemsInstructions && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+                    <div className="bg-[var(--surface)] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col border border-[var(--border-var)] overflow-hidden">
+                        <div className="p-6 border-b border-[var(--border-var)] flex justify-between items-center bg-[#f8fafd]">
+                            <div className="flex items-center gap-3">
+                                <span className="material-icons-round text-3xl text-[#1967d2]">integration_instructions</span>
+                                <div>
+                                    <h2 className="text-xl font-black text-[#1967d2] uppercase tracking-tight">Instrucciones para Crear Gem</h2>
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Configura la IA de Gemini para leer facturas</p>
+                                </div>
+                            </div>
+                            <button className="material-icons-round text-slate-400 hover:text-red-500 transition-colors" onClick={() => setShowGemsInstructions(true)}>close</button>
+                        </div>
+                        <div className="p-6 bg-slate-50 overflow-y-auto max-h-[60vh] text-sm text-slate-700 space-y-4">
+                            <p><strong>1.</strong> Ve a <strong>Google Gemini</strong> y crea un nuevo <strong>"Gem"</strong>.</p>
+                            <p><strong>2.</strong> Asígnale un nombre (ej. <em>Lector de Facturas</em>) y copia el siguiente texto exacto en la caja de <strong>Instrucciones</strong>:</p>
+                            
+                            <div className="relative group">
+                                <pre className="bg-slate-800 text-green-400 p-4 rounded-lg font-mono text-[11px] overflow-x-auto">
+{`Eres un asistente experto en extracción de datos estructurados para sistemas ERP de repuestos automotrices.
+Tu única tarea es analizar fotos de facturas de proveedores y extraer TODA la información relevante.
+
+REGLAS ESTRICTAS:
+1. No saludes, no des explicaciones, no uses formato Markdown (como \`\`\`json).
+2. Tu respuesta debe ser ÚNICA y EXCLUSIVAMENTE un objeto JSON válido en formato texto plano.
+3. Si un dato no es legible en la foto, coloca null para textos y 0 para números.
+4. Los números decimales deben usar punto (.) en lugar de coma (,).
+5. Las fechas deben estar en formato YYYY-MM-DD.
+6. Para la moneda: usa "USD" para dólares, "VES" para bolívares, "COP" para pesos colombianos.
+
+ESTRUCTURA DEL JSON REQUERIDA:
+{
+  "cabecera": {
+    "nro_factura": "String (número o código de la factura)",
+    "fecha": "YYYY-MM-DD (fecha de emisión de la factura)",
+    "proveedor": "String (nombre de la empresa que emite la factura)",
+    "moneda": "String (USD, VES o COP)",
+    "tasa_cambio": Number (si aparece en la factura, de lo contrario 0)
+  },
+  "items": [
+    {
+      "codigo": "String (código o referencia del producto, vacío si no tiene)",
+      "descripcion": "String (nombre o descripción completa del producto en MAYÚSCULAS)",
+      "qty": Number (cantidad facturada),
+      "costo_unit": Number (precio unitario sin impuestos)
+    }
+  ]
+}
+
+Espera a que te envíe la foto de la factura y responde únicamente con el JSON.`}</pre>
+                                <button 
+                                    className="absolute top-2 right-2 btn btn-sm bg-white/10 text-white hover:bg-white/20 border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`Eres un asistente experto en extracción de datos estructurados para sistemas ERP de repuestos automotrices.
+Tu única tarea es analizar fotos de facturas de proveedores y extraer TODA la información relevante.
+
+REGLAS ESTRICTAS:
+1. No saludes, no des explicaciones, no uses formato Markdown (como \`\`\`json).
+2. Tu respuesta debe ser ÚNICA y EXCLUSIVAMENTE un objeto JSON válido en formato texto plano.
+3. Si un dato no es legible en la foto, coloca null para textos y 0 para números.
+4. Los números decimales deben usar punto (.) en lugar de coma (,).
+5. Las fechas deben estar en formato YYYY-MM-DD.
+6. Para la moneda: usa "USD" para dólares, "VES" para bolívares, "COP" para pesos colombianos.
+
+ESTRUCTURA DEL JSON REQUERIDA:
+{
+  "cabecera": {
+    "nro_factura": "String (número o código de la factura)",
+    "fecha": "YYYY-MM-DD (fecha de emisión de la factura)",
+    "proveedor": "String (nombre de la empresa que emite la factura)",
+    "moneda": "String (USD, VES o COP)",
+    "tasa_cambio": Number (si aparece en la factura, de lo contrario 0)
+  },
+  "items": [
+    {
+      "codigo": "String (código o referencia del producto, vacío si no tiene)",
+      "descripcion": "String (nombre o descripción completa del producto en MAYÚSCULAS)",
+      "qty": Number (cantidad facturada),
+      "costo_unit": Number (precio unitario sin impuestos)
+    }
+  ]
+}
+
+Espera a que te envíe la foto de la factura y responde únicamente con el JSON.`);
+                                        toast('Copiado al portapapeles');
+                                    }}
+                                >
+                                    <span className="material-icons-round text-[16px]">content_copy</span> COPIAR TEXTO
+                                </button>
+                            </div>
+                            <p><strong>3.</strong> ¡Guárdalo y listo! Cada vez que tengas una factura, ábrela en tu teléfono o PC con ese Gem, tómale la foto y pega el resultado aquí.</p>
+                        </div>
+                        <div className="p-4 border-t border-[var(--border-var)] flex justify-end bg-white">
+                            <button className="btn bg-[#1967d2] text-white hover:bg-[#1557b0] shadow-md" onClick={() => setShowGemsInstructions(false)}>
+                                ENTENDIDO
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

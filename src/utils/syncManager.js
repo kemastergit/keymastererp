@@ -138,6 +138,38 @@ export async function processSyncQueue() {
           .delete()
           .match({ nro_factura: item.data.nro_factura, proveedor_id: item.data.proveedor_id })
         error = err
+      } else if (item.table === 'compras_bulk' && item.operation === 'INSERT') {
+        const { compra, items, articulos, cta_pagar, abono } = item.data;
+        
+        // 1. Insert Compra
+        let err = (await supabase.from('compras').upsert([compra], { onConflict: 'id' })).error;
+        if (err) throw err;
+        
+        // 2. Insert Cta Pagar
+        if (cta_pagar) {
+            err = (await supabase.from('cuentas_por_pagar').upsert([cta_pagar], { onConflict: 'id' })).error;
+            if (err) throw err;
+        }
+
+        // 3. Insert Abono (si es de contado)
+        if (abono) {
+            err = (await supabase.from('abonos').upsert([abono], { onConflict: 'id' })).error;
+            if (err) throw err;
+        }
+
+        // 4. Insert Items (bulk array)
+        if (items && items.length > 0) {
+            err = (await supabase.from('compra_items').upsert(items, { onConflict: 'id' })).error;
+            if (err) throw err;
+        }
+
+        // 5. Update Stocks (bulk array)
+        if (articulos && articulos.length > 0) {
+            err = (await supabase.from('articulos').upsert(articulos, { onConflict: 'codigo' })).error;
+            if (err) throw err;
+        }
+
+        error = null; // Si llegamos aquí, todo el bulk fue exitoso
       } else if (item.table === 'compras' && item.operation === 'INSERT') {
         const { error: err } = await supabase.from('compras').upsert([item.data], { onConflict: 'id' })
         error = err
@@ -238,8 +270,8 @@ export async function processSyncQueue() {
         const { getState } = (await import('../store/useStore')).default
         getState().toast(`❌ Error Nube (${item.table}): ${error.message || 'Error desconocido'}`, 'error')
 
-        if (['42P01', '42703', 'PGRST204', '23505'].includes(error.code)) {
-          console.warn(`⚠️ Error conocido o duplicado detectado (${error.code}). Eliminando item de la cola: ${item.table}`)
+        if (['42P01', '42703', 'PGRST204', '23505', '22P02'].includes(error.code)) {
+          console.warn(`⚠️ Error conocido o de sintaxis detectado (${error.code}). Eliminando item de la cola: ${item.table}`)
           await db.sync_queue.delete(item.id)
         }
       }
